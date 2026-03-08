@@ -52,6 +52,85 @@ code {
   opacity: 1;
 }
 
+.first-person-prep {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at center, rgba(94, 169, 255, 0.18), transparent 34%),
+    rgba(3, 8, 17, 0.62);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 220ms ease;
+  z-index: 3;
+}
+
+.first-person-prep.active {
+  opacity: 1;
+}
+
+.first-person-prep-card {
+  width: min(420px, calc(100vw - 48px));
+  padding: 22px 22px 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(210, 233, 255, 0.2);
+  background:
+    linear-gradient(180deg, rgba(17, 33, 58, 0.94), rgba(6, 12, 24, 0.9));
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(18px);
+}
+
+.first-person-prep-label {
+  margin: 0;
+  color: var(--accent);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+}
+
+.first-person-prep-title {
+  display: block;
+  margin-top: 10px;
+  color: #f3f9ff;
+  font-size: clamp(1.2rem, 2vw, 1.5rem);
+}
+
+.first-person-prep-copy {
+  margin: 10px 0 0;
+  color: var(--text-muted);
+  line-height: 1.6;
+  font-size: 0.94rem;
+}
+
+.first-person-prep-bar {
+  margin-top: 18px;
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.first-person-prep-bar-fill {
+  display: block;
+  width: 0%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #86d6ff, #f7d08b);
+  box-shadow: 0 0 20px rgba(134, 214, 255, 0.42);
+  transition: width 120ms linear;
+}
+
+.first-person-prep-progress {
+  margin: 10px 0 0;
+  color: var(--accent-strong);
+  font-size: 0.86rem;
+  font-weight: 700;
+  text-align: right;
+}
+
 .first-person-overlay::before {
   content: "";
   position: absolute;
@@ -59,6 +138,16 @@ code {
   background:
     radial-gradient(circle at center, rgba(155, 222, 255, 0.08), transparent 22%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 24%, transparent 76%, rgba(255, 255, 255, 0.03));
+}
+
+.first-person-overlay::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at center, transparent 0 48%, rgba(4, 8, 15, 0.08) 64%, rgba(3, 7, 13, 0.38) 84%, rgba(2, 5, 10, 0.72) 100%),
+    radial-gradient(ellipse at 50% 112%, rgba(2, 4, 8, 0.5), transparent 18%),
+    linear-gradient(90deg, rgba(2, 5, 10, 0.26), transparent 15%, transparent 85%, rgba(2, 5, 10, 0.26));
 }
 
 .first-person-horizon {

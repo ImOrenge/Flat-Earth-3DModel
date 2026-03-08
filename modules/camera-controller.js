@@ -4,6 +4,7 @@ export function createCameraController({
   camera,
   cameraState,
   walkerState,
+  renderState,
   renderer,
   constants
 }) {
@@ -16,23 +17,33 @@ export function createCameraController({
 
   function updateCamera() {
     const targetFov = walkerState.enabled ? constants.CAMERA_WALKER_FOV : constants.CAMERA_DEFAULT_FOV;
+    const targetNear = walkerState.enabled ? 0.05 : 0.1;
+    const targetFar = walkerState.enabled ? 140 : 100;
+
     if (Math.abs(camera.fov - targetFov) > 0.05) {
       camera.fov += (targetFov - camera.fov) * 0.12;
       camera.updateProjectionMatrix();
     }
 
+    if (Math.abs(camera.near - targetNear) > 0.005 || Math.abs(camera.far - targetFar) > 0.5) {
+      camera.near += (targetNear - camera.near) * 0.2;
+      camera.far += (targetFar - camera.far) * 0.2;
+      camera.updateProjectionMatrix();
+    }
+
     if (walkerState.enabled) {
+      const visualScale = renderState.visualScale;
       camera.position.set(
-        walkerState.position.x,
+        walkerState.position.x * visualScale,
         constants.WALKER_EYE_HEIGHT,
-        walkerState.position.z
+        walkerState.position.z * visualScale
       );
 
       const horizontalDistance = Math.cos(walkerState.pitch) * constants.WALKER_LOOK_DISTANCE;
       tempCameraLookTarget.set(
-        walkerState.position.x + (Math.sin(walkerState.heading) * horizontalDistance),
+        camera.position.x + (Math.sin(walkerState.heading) * horizontalDistance),
         constants.WALKER_EYE_HEIGHT + (Math.sin(walkerState.pitch) * constants.WALKER_LOOK_DISTANCE),
-        walkerState.position.z + (Math.cos(walkerState.heading) * horizontalDistance)
+        camera.position.z + (Math.cos(walkerState.heading) * horizontalDistance)
       );
       camera.lookAt(tempCameraLookTarget);
       return;

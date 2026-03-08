@@ -10,6 +10,7 @@ import {
 export function createWalkerController({
   constants,
   walkerState,
+  renderState,
   movementState,
   ui,
   walker,
@@ -109,15 +110,22 @@ export function createWalkerController({
   }
 
   function syncWalkerUi() {
-    ui.walkerModeEl.checked = walkerState.enabled;
-    ui.walkerSummaryEl.textContent = walkerState.enabled
-      ? "First-person view is active. Use WASD or arrow keys to walk, drag to look around, and follow the center vanishing point."
-      : "Walk on the map with WASD or the arrow keys and judge day or night from the observer position.";
+    ui.walkerModeEl.checked = walkerState.enabled || renderState.preparing;
+    ui.walkerModeEl.disabled = renderState.preparing;
+    ui.walkerSummaryEl.textContent = renderState.preparing
+      ? "Preparing first-person render. The disc is scaling up and the observer camera is being aligned."
+      : walkerState.enabled
+        ? "First-person view is active. Use WASD or arrow keys to walk, drag to look around, and follow the center vanishing point."
+        : "Walk on the map with WASD or the arrow keys and judge day or night from the observer position.";
     updateFirstPersonOverlay();
   }
 
   function updateWalkerAvatar() {
-    walker.position.copy(walkerState.position);
+    walker.position.set(
+      walkerState.position.x * renderState.visualScale,
+      walkerState.position.y,
+      walkerState.position.z * renderState.visualScale
+    );
     walker.rotation.y = walkerState.heading;
     walker.visible = !walkerState.enabled;
   }

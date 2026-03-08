@@ -20,6 +20,19 @@
         <span class="first-person-vp-ring"></span>
       </div>
     </div>
+    <div class="first-person-prep" id="first-person-prep" aria-hidden="true">
+      <div class="first-person-prep-card">
+        <p class="first-person-prep-label">FIRST PERSON</p>
+        <strong class="first-person-prep-title" id="first-person-prep-title">Preparing observer render</strong>
+        <p class="first-person-prep-copy" id="first-person-prep-copy">
+          Scaling the disc and compiling the first-person render path.
+        </p>
+        <div class="first-person-prep-bar" aria-hidden="true">
+          <span class="first-person-prep-bar-fill" id="first-person-prep-bar-fill"></span>
+        </div>
+        <p class="first-person-prep-progress" id="first-person-prep-progress">0%</p>
+      </div>
+    </div>
 
     <div class="panel-layout">
       <aside class="control-panel summary-panel">
@@ -35,7 +48,7 @@
           <button class="button secondary" id="reset-camera" type="button">Reset Camera</button>
         </div>
 
-        <input id="map-upload" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml">
+        <input id="map-upload" type="file" accept="image/svg+xml,.svg">
 
         <section class="season-panel">
           <div class="season-row">
@@ -154,6 +167,7 @@
             <button class="orbit-mode" data-orbit-mode="south" type="button">South Tropic</button>
           </div>
           <p class="orbit-copy" id="orbit-label">Auto mode sweeps the sun between the tropics.</p>
+          <p class="sync-copy subtle">Altitude profile: north tropic highest, equator mid, south tropic lowest.</p>
         </section>
       </aside>
     </div>

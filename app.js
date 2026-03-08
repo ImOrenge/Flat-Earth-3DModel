@@ -3,6 +3,7 @@ import {
   getGeoFromProjectedPosition,
   projectedRadiusFromLatitude
 } from "./modules/geo-utils.js";
+import { getSolarAltitudeFactor } from "./modules/astronomy-utils.js";
 import { createAstronomyController } from "./modules/astronomy-controller.js";
 import { createCameraController } from "./modules/camera-controller.js";
 import { createTextureManager } from "./modules/texture-manager.js";
@@ -24,12 +25,19 @@ const DOME_RADIUS = RIM_INNER_RADIUS - 0.14;
 const DOME_BASE_Y = 0.46;
 const TROPIC_LATITUDE = 23.44;
 const ORBIT_TRACK_HEIGHT = DOME_BASE_Y + 2.01;
-const ORBIT_SUN_HEIGHT = ORBIT_TRACK_HEIGHT + 0.04;
-const ORBIT_SUN_HEIGHT_NORTH = ORBIT_SUN_HEIGHT + 0.18;
-const ORBIT_SUN_HEIGHT_SOUTH = ORBIT_SUN_HEIGHT - 0.2;
+const ORBIT_SUN_HEIGHT = ORBIT_TRACK_HEIGHT + 0.12;
+const ORBIT_SUN_HEIGHT_NORTH = ORBIT_SUN_HEIGHT + 0.52;
+const ORBIT_SUN_HEIGHT_SOUTH = ORBIT_SUN_HEIGHT - 0.56;
 const ORBIT_SUN_SIZE = 0.18;
 const ORBIT_SUN_SPEED = 0.011;
 const ORBIT_SUN_SEASON_SPEED = 0.0026;
+const ORBIT_SUN_HALO_OPACITY = 0.12;
+const ORBIT_SUN_LIGHT_INTENSITY = 22;
+const ORBIT_SUN_BODY_EMISSIVE_INTENSITY = 3.8;
+const ORBIT_TRACK_TUBE_RADIUS = 0.045;
+const ORBIT_HEIGHT_GUIDE_RADIUS = 0.018;
+const ORBIT_HEIGHT_GUIDE_MARKER_SIZE = 0.05;
+const ORBIT_HEIGHT_GUIDE_ANGLES = [-0.82, 1.34, 2.58];
 const ORBIT_MOON_BASE_HEIGHT = ORBIT_TRACK_HEIGHT + 0.28;
 const ORBIT_MOON_HEIGHT_NORTH = ORBIT_MOON_BASE_HEIGHT + 0.16;
 const ORBIT_MOON_HEIGHT_SOUTH = ORBIT_MOON_BASE_HEIGHT - 0.26;
@@ -45,17 +53,27 @@ const REALITY_TRAIL_WINDOW_MS = 12 * 60 * 60 * 1000;
 const REALITY_TRAIL_REFRESH_MS = 60 * 1000;
 const DAY_NIGHT_TEXTURE_SIZE = 512;
 const DAY_NIGHT_UPDATE_EPSILON = 0.18;
+const MAP_TEXTURE_SIZE = 4096;
 const CAMERA_DEFAULT_FOV = 42;
-const CAMERA_WALKER_FOV = 68;
+const CAMERA_WALKER_FOV = 54;
+const FOG_DEFAULT_NEAR = 14;
+const FOG_DEFAULT_FAR = 28;
+const FOG_WALKER_NEAR = 36;
+const FOG_WALKER_FAR = 180;
+const FIRST_PERSON_STAGE_SCALE = 10;
+const FIRST_PERSON_PREP_DURATION_MS = 1250;
+const FIRST_PERSON_RETURN_DURATION_MS = 420;
 const SURFACE_Y = DISC_HEIGHT / 2;
 const WALKER_SURFACE_OFFSET = 0.045;
-const WALKER_EYE_HEIGHT = SURFACE_Y + 0.16;
+const WALKER_EYE_HEIGHT = SURFACE_Y + 0.07;
 const WALKER_BODY_HEIGHT = 0.12;
 const WALKER_BODY_RADIUS = 0.045;
-const WALKER_SPEED = 1.5;
+const WALKER_SPEED = 0.82;
 const WALKER_LOOK_DISTANCE = 0.95;
 const WALKER_START_LATITUDE = 37.57;
 const WALKER_START_LONGITUDE = 126.98;
+const WALKER_PITCH_MAX = 0.72;
+const WALKER_PITCH_MIN = -1.08;
 const WALKER_GUIDE_Y = SURFACE_Y + 0.02;
 const WALKER_GUIDE_HALF_WIDTH = 0.28;
 const WALKER_GUIDE_START = 0.3;
@@ -74,6 +92,11 @@ const ORBIT_MOON_RADIUS_BASE = ORBIT_RADIUS_MID + 0.35;
 const canvas = document.getElementById("scene");
 const firstPersonOverlayEl = document.getElementById("first-person-overlay");
 const firstPersonHorizonEl = document.getElementById("first-person-horizon");
+const firstPersonPrepEl = document.getElementById("first-person-prep");
+const firstPersonPrepTitleEl = document.getElementById("first-person-prep-title");
+const firstPersonPrepCopyEl = document.getElementById("first-person-prep-copy");
+const firstPersonPrepBarFillEl = document.getElementById("first-person-prep-bar-fill");
+const firstPersonPrepProgressEl = document.getElementById("first-person-prep-progress");
 const statusEl = document.getElementById("status");
 const uploadInput = document.getElementById("map-upload");
 const resetButton = document.getElementById("reset-camera");
@@ -100,19 +123,19 @@ const resetWalkerButton = document.getElementById("reset-walker");
 
 const orbitModes = {
   auto: {
-    label: "?�동 모드: ?�양??북회귀?? ?�도, ?�회귀???�이�??�복?�니??"
+    label: "Auto mode: the sun sweeps between the northern tropic, equator, and southern tropic."
   },
   north: {
     radius: TROPIC_CANCER_RADIUS,
-    label: "북회귀??모드: ?�양??북회귀??궤도�??�라 공전?�니??"
+    label: "North tropic mode: the sun follows only the northern tropic ring."
   },
   equator: {
     radius: EQUATOR_RADIUS,
-    label: "?�도 모드: ?�양???�도 궤도�??�라 공전?�니??"
+    label: "Equator mode: the sun follows only the equatorial ring."
   },
   south: {
     radius: TROPIC_CAPRICORN_RADIUS,
-    label: "?�회귀??모드: ?�양???�회귀??궤도�??�라 공전?�니??"
+    label: "South tropic mode: the sun follows only the southern tropic ring."
   }
 };
 
@@ -125,7 +148,7 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0x06101d, 14, 28);
+scene.fog = new THREE.Fog(0x06101d, FOG_DEFAULT_NEAR, FOG_DEFAULT_FAR);
 
 const camera = new THREE.PerspectiveCamera(CAMERA_DEFAULT_FOV, 1, 0.1, 100);
 
@@ -140,6 +163,8 @@ const cameraState = {
 
 const stage = new THREE.Group();
 scene.add(stage);
+const scalableStage = new THREE.Group();
+stage.add(scalableStage);
 
 const topMaterial = new THREE.MeshStandardMaterial({
   color: 0xffffff,
@@ -163,7 +188,7 @@ const disc = new THREE.Mesh(
   new THREE.CylinderGeometry(DISC_RADIUS, DISC_RADIUS, DISC_HEIGHT, 128, 1, false),
   [sideMaterial, topMaterial, bottomMaterial]
 );
-stage.add(disc);
+scalableStage.add(disc);
 
 const transparentSurfaceMaterial = new THREE.MeshBasicMaterial({
   color: 0xffffff,
@@ -196,7 +221,7 @@ const dayNightOverlay = new THREE.Mesh(
 );
 dayNightOverlay.position.y = (DISC_HEIGHT / 2) + 0.03;
 dayNightOverlay.renderOrder = 12;
-stage.add(dayNightOverlay);
+scalableStage.add(dayNightOverlay);
 
 const northSeasonOverlay = new THREE.Mesh(
   new THREE.CircleGeometry(EQUATOR_RADIUS, 128),
@@ -210,7 +235,7 @@ const northSeasonOverlay = new THREE.Mesh(
 northSeasonOverlay.rotation.x = -Math.PI / 2;
 northSeasonOverlay.position.y = (DISC_HEIGHT / 2) + 0.012;
 northSeasonOverlay.renderOrder = 8;
-stage.add(northSeasonOverlay);
+scalableStage.add(northSeasonOverlay);
 
 const southSeasonOverlay = new THREE.Mesh(
   new THREE.RingGeometry(EQUATOR_RADIUS, DISC_RADIUS, 128),
@@ -224,7 +249,7 @@ const southSeasonOverlay = new THREE.Mesh(
 southSeasonOverlay.rotation.x = -Math.PI / 2;
 southSeasonOverlay.position.y = (DISC_HEIGHT / 2) + 0.011;
 southSeasonOverlay.renderOrder = 7;
-stage.add(southSeasonOverlay);
+scalableStage.add(southSeasonOverlay);
 
 const iceOuterMaterial = new THREE.MeshStandardMaterial({
   color: 0xf3f7ff,
@@ -251,14 +276,14 @@ const iceWallOuter = new THREE.Mesh(
   iceOuterMaterial
 );
 iceWallOuter.position.y = RIM_CENTER_Y;
-stage.add(iceWallOuter);
+scalableStage.add(iceWallOuter);
 
 const iceWallInner = new THREE.Mesh(
   new THREE.CylinderGeometry(RIM_INNER_RADIUS, RIM_INNER_RADIUS, RIM_HEIGHT, 128, 1, true),
   iceInnerMaterial
 );
 iceWallInner.position.y = RIM_CENTER_Y;
-stage.add(iceWallInner);
+scalableStage.add(iceWallInner);
 
 const iceTopCap = new THREE.Mesh(
   new THREE.RingGeometry(RIM_INNER_RADIUS, RIM_OUTER_RADIUS, 128),
@@ -266,7 +291,7 @@ const iceTopCap = new THREE.Mesh(
 );
 iceTopCap.rotation.x = -Math.PI / 2;
 iceTopCap.position.y = RIM_TOP_Y;
-stage.add(iceTopCap);
+scalableStage.add(iceTopCap);
 
 const iceBottomCap = new THREE.Mesh(
   new THREE.RingGeometry(RIM_INNER_RADIUS, RIM_OUTER_RADIUS, 128),
@@ -279,7 +304,7 @@ const iceBottomCap = new THREE.Mesh(
 );
 iceBottomCap.rotation.x = -Math.PI / 2;
 iceBottomCap.position.y = RIM_BOTTOM_Y;
-stage.add(iceBottomCap);
+scalableStage.add(iceBottomCap);
 
 const iceCrown = new THREE.Mesh(
   new THREE.TorusGeometry((RIM_OUTER_RADIUS + RIM_INNER_RADIUS) / 2, 0.05, 12, 128),
@@ -293,7 +318,7 @@ const iceCrown = new THREE.Mesh(
 );
 iceCrown.rotation.x = Math.PI / 2;
 iceCrown.position.y = RIM_TOP_Y + 0.01;
-stage.add(iceCrown);
+scalableStage.add(iceCrown);
 
 const dome = new THREE.Mesh(
   new THREE.SphereGeometry(DOME_RADIUS, 96, 48, 0, Math.PI * 2, 0, Math.PI / 2),
@@ -310,7 +335,7 @@ const dome = new THREE.Mesh(
   })
 );
 dome.position.y = DOME_BASE_Y;
-stage.add(dome);
+scalableStage.add(dome);
 
 const domeRing = new THREE.Mesh(
   new THREE.TorusGeometry(DOME_RADIUS, 0.045, 12, 96),
@@ -324,7 +349,7 @@ const domeRing = new THREE.Mesh(
 );
 domeRing.rotation.x = Math.PI / 2;
 domeRing.position.y = DOME_BASE_Y;
-stage.add(domeRing);
+scalableStage.add(domeRing);
 
 const glow = new THREE.Mesh(
   new THREE.CircleGeometry(6.7, 96),
@@ -336,7 +361,7 @@ const glow = new THREE.Mesh(
 );
 glow.rotation.x = -Math.PI / 2;
 glow.position.y = -0.7;
-stage.add(glow);
+scalableStage.add(glow);
 
 const walker = new THREE.Group();
 const walkerBody = new THREE.Mesh(
@@ -407,7 +432,7 @@ const walkerGuideCenter = new THREE.LineSegments(
 );
 walkerGuideGroup.add(walkerGuideLeft, walkerGuideRight, walkerGuideCenter);
 walkerGuideGroup.visible = false;
-stage.add(walkerGuideGroup);
+scalableStage.add(walkerGuideGroup);
 
 const ambient = new THREE.AmbientLight(0xc5d7ff, 0.9);
 scene.add(ambient);
@@ -426,27 +451,31 @@ const orbitSunBody = new THREE.Mesh(
   new THREE.MeshStandardMaterial({
     color: 0xffd56f,
     emissive: 0xffb42f,
-    emissiveIntensity: 3.8,
+    emissiveIntensity: ORBIT_SUN_BODY_EMISSIVE_INTENSITY,
     roughness: 0.16,
-    metalness: 0.02
+    metalness: 0.02,
+    transparent: true,
+    opacity: 1
   })
 );
 orbitSun.add(orbitSunBody);
 
 const orbitSunHalo = new THREE.Mesh(
-  new THREE.SphereGeometry(ORBIT_SUN_SIZE * 2.2, 24, 16),
+  new THREE.SphereGeometry(ORBIT_SUN_SIZE * 1.7, 24, 16),
   new THREE.MeshBasicMaterial({
     color: 0xffd781,
     transparent: true,
-    opacity: 0.28,
-    side: THREE.DoubleSide
+    opacity: ORBIT_SUN_HALO_OPACITY,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
   })
 );
 orbitSun.add(orbitSunHalo);
 
-const orbitSunLight = new THREE.PointLight(0xffcf75, 22, 9.5, 1.4);
+const orbitSunLight = new THREE.PointLight(0xffcf75, ORBIT_SUN_LIGHT_INTENSITY, 9.5, 1.4);
 orbitSun.add(orbitSunLight);
-stage.add(orbitSun);
+scalableStage.add(orbitSun);
 
 const orbitMoon = new THREE.Group();
 const orbitMoonBody = new THREE.Mesh(
@@ -474,7 +503,7 @@ orbitMoon.add(orbitMoonHalo);
 
 const orbitMoonLight = new THREE.PointLight(0xdbe4ff, 5.6, 5.5, 1.9);
 orbitMoon.add(orbitMoonLight);
-stage.add(orbitMoon);
+scalableStage.add(orbitMoon);
 
 const sunTrailGeometry = new THREE.BufferGeometry();
 const sunTrailMaterial = new THREE.LineBasicMaterial({
@@ -485,7 +514,7 @@ const sunTrailMaterial = new THREE.LineBasicMaterial({
   depthTest: false
 });
 const sunTrail = new THREE.Line(sunTrailGeometry, sunTrailMaterial);
-stage.add(sunTrail);
+scalableStage.add(sunTrail);
 
 const sunTrailPointsGeometry = new THREE.BufferGeometry();
 const sunTrailPointsMaterial = new THREE.PointsMaterial({
@@ -498,7 +527,7 @@ const sunTrailPointsMaterial = new THREE.PointsMaterial({
   depthTest: false
 });
 const sunTrailPointsCloud = new THREE.Points(sunTrailPointsGeometry, sunTrailPointsMaterial);
-stage.add(sunTrailPointsCloud);
+scalableStage.add(sunTrailPointsCloud);
 
 const moonTrailGeometry = new THREE.BufferGeometry();
 const moonTrailMaterial = new THREE.LineBasicMaterial({
@@ -509,7 +538,7 @@ const moonTrailMaterial = new THREE.LineBasicMaterial({
   depthTest: false
 });
 const moonTrail = new THREE.Line(moonTrailGeometry, moonTrailMaterial);
-stage.add(moonTrail);
+scalableStage.add(moonTrail);
 
 const moonTrailPointsGeometry = new THREE.BufferGeometry();
 const moonTrailPointsMaterial = new THREE.PointsMaterial({
@@ -522,11 +551,12 @@ const moonTrailPointsMaterial = new THREE.PointsMaterial({
   depthTest: false
 });
 const moonTrailPointsCloud = new THREE.Points(moonTrailPointsGeometry, moonTrailPointsMaterial);
-stage.add(moonTrailPointsCloud);
+scalableStage.add(moonTrailPointsCloud);
 
-function createOrbitTrack(radius, color, opacity) {
+function createOrbitTrack(radius, color, opacity, height = ORBIT_TRACK_HEIGHT) {
+  const trackGroup = new THREE.Group();
   const track = new THREE.Mesh(
-    new THREE.TorusGeometry(radius, 0.04, 16, 192),
+    new THREE.TorusGeometry(radius, ORBIT_TRACK_TUBE_RADIUS, 16, 192),
     new THREE.MeshStandardMaterial({
       color,
       emissive: color,
@@ -538,13 +568,51 @@ function createOrbitTrack(radius, color, opacity) {
     })
   );
   track.rotation.x = Math.PI / 2;
-  track.position.y = ORBIT_TRACK_HEIGHT;
-  return track;
+  track.position.y = height;
+  trackGroup.add(track);
+
+  if (Math.abs(height - ORBIT_TRACK_HEIGHT) > 0.02) {
+    for (const angle of ORBIT_HEIGHT_GUIDE_ANGLES) {
+      const guideHeight = Math.abs(height - ORBIT_TRACK_HEIGHT);
+      const guide = new THREE.Mesh(
+        new THREE.CylinderGeometry(ORBIT_HEIGHT_GUIDE_RADIUS, ORBIT_HEIGHT_GUIDE_RADIUS, guideHeight, 12, 1, false),
+        new THREE.MeshStandardMaterial({
+          color,
+          emissive: color,
+          emissiveIntensity: 0.65,
+          transparent: true,
+          opacity: opacity * 0.9,
+          roughness: 0.24,
+          metalness: 0.08
+        })
+      );
+      const marker = new THREE.Mesh(
+        new THREE.SphereGeometry(ORBIT_HEIGHT_GUIDE_MARKER_SIZE, 18, 14),
+        new THREE.MeshStandardMaterial({
+          color,
+          emissive: color,
+          emissiveIntensity: 1.1,
+          transparent: true,
+          opacity,
+          roughness: 0.18,
+          metalness: 0.05
+        })
+      );
+      const x = Math.cos(angle) * radius;
+      const z = Math.sin(angle) * radius;
+      guide.position.set(x, (height + ORBIT_TRACK_HEIGHT) / 2, z);
+      marker.position.set(x, height, z);
+      trackGroup.add(guide);
+      trackGroup.add(marker);
+    }
+  }
+
+  return trackGroup;
 }
 
-stage.add(createOrbitTrack(TROPIC_CANCER_RADIUS, 0xffc96c, 0.82));
-stage.add(createOrbitTrack(EQUATOR_RADIUS, 0x7fd8ff, 0.78));
-stage.add(createOrbitTrack(TROPIC_CAPRICORN_RADIUS, 0xff93b6, 0.82));
+scalableStage.add(createOrbitTrack(TROPIC_CANCER_RADIUS, 0xffc96c, 0.88, ORBIT_SUN_HEIGHT_NORTH));
+scalableStage.add(createOrbitTrack(EQUATOR_RADIUS, 0x7fd8ff, 0.78, ORBIT_SUN_HEIGHT));
+scalableStage.add(createOrbitTrack(TROPIC_CAPRICORN_RADIUS, 0xff93b6, 0.88, ORBIT_SUN_HEIGHT_SOUTH));
 
 const simulationState = {
   orbitMoonAngle: Math.PI * 0.35,
@@ -580,6 +648,19 @@ const movementState = {
   left: false,
   right: false
 };
+const renderState = {
+  compiledFirstPerson: false,
+  compileReady: false,
+  prepStartedAtMs: 0,
+  preparing: false,
+  progress: 0,
+  targetFogFar: FOG_DEFAULT_FAR,
+  targetFogNear: FOG_DEFAULT_NEAR,
+  targetVisualScale: 1,
+  transitionDurationMs: FIRST_PERSON_RETURN_DURATION_MS,
+  transitionToken: 0,
+  visualScale: 1
+};
 
 const starCanvas = document.createElement("canvas");
 starCanvas.width = 1024;
@@ -607,13 +688,19 @@ const constants = {
   CAMERA_DEFAULT_FOV,
   CAMERA_WALKER_FOV,
   DAY_NIGHT_UPDATE_EPSILON,
+  MAP_TEXTURE_SIZE,
   DEFAULT_MAP_LABEL,
   DEFAULT_MAP_PATH,
   DISC_RADIUS,
   DOME_BASE_Y,
   DOME_RADIUS,
   EQUATOR_RADIUS,
+  FIRST_PERSON_STAGE_SCALE,
   MOON_TRAIL_MAX_POINTS,
+  FOG_DEFAULT_FAR,
+  FOG_DEFAULT_NEAR,
+  FOG_WALKER_FAR,
+  FOG_WALKER_NEAR,
   ORBIT_MOON_BASE_HEIGHT,
   ORBIT_MOON_FREE_OFFSET,
   ORBIT_MOON_HEIGHT_NORTH,
@@ -623,6 +710,7 @@ const constants = {
   ORBIT_MOON_SIZE,
   ORBIT_RADIUS_AMPLITUDE,
   ORBIT_RADIUS_MID,
+  ORBIT_SUN_HEIGHT,
   ORBIT_SUN_HEIGHT_NORTH,
   ORBIT_SUN_HEIGHT_SOUTH,
   ORBIT_SURFACE_LINE_WIDTH,
@@ -641,6 +729,8 @@ const constants = {
   WALKER_GUIDE_Y,
   WALKER_HORIZON_SHIFT_PX,
   WALKER_LOOK_DISTANCE,
+  WALKER_PITCH_MAX,
+  WALKER_PITCH_MIN,
   WALKER_SPEED,
   WALKER_START_LATITUDE,
   WALKER_START_LONGITUDE,
@@ -681,6 +771,7 @@ const cameraApi = createCameraController({
   camera,
   cameraState,
   constants,
+  renderState,
   renderer,
   walkerState
 });
@@ -709,6 +800,7 @@ const astronomyApi = createAstronomyController({
 
 const walkerApi = createWalkerController({
   constants,
+  renderState,
   walkerState,
   movementState,
   ui,
@@ -722,11 +814,204 @@ const walkerApi = createWalkerController({
   rimLight
 });
 
+const tempPreparationLookTarget = new THREE.Vector3();
+
+function syncPreparationPresentation() {
+  if (!renderState.preparing) {
+    firstPersonPrepEl.classList.remove("active");
+    firstPersonPrepEl.setAttribute("aria-hidden", "true");
+    firstPersonPrepBarFillEl.style.width = "0%";
+    firstPersonPrepProgressEl.textContent = "";
+    return;
+  }
+
+  const elapsedMs = performance.now() - renderState.prepStartedAtMs;
+  const timelineProgress = THREE.MathUtils.clamp(elapsedMs / renderState.transitionDurationMs, 0, 1);
+  const displayProgress = renderState.compileReady
+    ? timelineProgress
+    : Math.min(timelineProgress, 0.88);
+  let title = "Preparing observer render";
+  let copy = "Scaling the disc and extending the horizon for first-person mode.";
+
+  if (displayProgress >= 0.72 && !renderState.compileReady) {
+    title = "Compiling first-person shaders";
+    copy = "Warming the render path so the observer camera can enter without a hitch.";
+  } else if (displayProgress >= 0.42) {
+    title = "Shifting atmosphere and horizon";
+    copy = "Applying the first-person fog range and long-distance scale pass.";
+  }
+
+  if (renderState.compileReady && displayProgress >= 0.92) {
+    title = "Locking observer camera";
+    copy = "Finalizing the horizon alignment before the first-person view opens.";
+  }
+
+  renderState.progress = displayProgress;
+  firstPersonPrepEl.classList.add("active");
+  firstPersonPrepEl.setAttribute("aria-hidden", "false");
+  firstPersonPrepTitleEl.textContent = title;
+  firstPersonPrepCopyEl.textContent = copy;
+  firstPersonPrepBarFillEl.style.width = `${Math.round(displayProgress * 100)}%`;
+  firstPersonPrepProgressEl.textContent = `${Math.round(displayProgress * 100)}%`;
+}
+
+function updateRenderState() {
+  renderState.visualScale += (renderState.targetVisualScale - renderState.visualScale) * 0.08;
+  scene.fog.near += (renderState.targetFogNear - scene.fog.near) * 0.08;
+  scene.fog.far += (renderState.targetFogFar - scene.fog.far) * 0.08;
+  scalableStage.scale.set(renderState.visualScale, 1, renderState.visualScale);
+}
+
+function updateObserverSunVisibility(snapshot) {
+  if (!walkerState.enabled || !snapshot) {
+    orbitSun.visible = true;
+    orbitSun.renderOrder = 20;
+    sunTrail.visible = true;
+    sunTrailPointsCloud.visible = true;
+    orbitSunBody.material.opacity = 1;
+    orbitSunBody.material.emissiveIntensity = ORBIT_SUN_BODY_EMISSIVE_INTENSITY;
+    orbitSunBody.material.depthTest = false;
+    orbitSunBody.material.depthWrite = false;
+    orbitSunHalo.material.opacity = ORBIT_SUN_HALO_OPACITY;
+    orbitSunHalo.material.depthTest = true;
+    orbitSunHalo.material.depthWrite = false;
+    orbitSunLight.intensity = ORBIT_SUN_LIGHT_INTENSITY;
+    return;
+  }
+
+  const observerGeo = getGeoFromProjectedPosition(walkerState.position, constants.DISC_RADIUS);
+  const solarFactor = getSolarAltitudeFactor(
+    observerGeo.latitudeDegrees,
+    observerGeo.longitudeDegrees,
+    snapshot.sun.latitudeDegrees,
+    snapshot.sun.longitudeDegrees
+  );
+  const targetVisibility = THREE.MathUtils.clamp((solarFactor + 0.04) / 0.18, 0, 1);
+
+  orbitSun.renderOrder = 0;
+  orbitSun.visible = targetVisibility > 0.01;
+  sunTrail.visible = targetVisibility > 0.01;
+  sunTrailPointsCloud.visible = targetVisibility > 0.01;
+  orbitSunBody.material.depthTest = true;
+  orbitSunBody.material.depthWrite = true;
+  orbitSunBody.material.opacity += (targetVisibility - orbitSunBody.material.opacity) * 0.18;
+  orbitSunBody.material.emissiveIntensity += (
+    (ORBIT_SUN_BODY_EMISSIVE_INTENSITY * targetVisibility) - orbitSunBody.material.emissiveIntensity
+  ) * 0.18;
+  orbitSunHalo.material.depthTest = true;
+  orbitSunHalo.material.depthWrite = false;
+  orbitSunHalo.material.opacity += (
+    (ORBIT_SUN_HALO_OPACITY * targetVisibility) - orbitSunHalo.material.opacity
+  ) * 0.18;
+  orbitSunLight.intensity += (
+    (ORBIT_SUN_LIGHT_INTENSITY * targetVisibility) - orbitSunLight.intensity
+  ) * 0.18;
+}
+
+function configurePreparationCamera(targetCamera) {
+  const visualScale = constants.FIRST_PERSON_STAGE_SCALE;
+  const horizontalDistance = Math.cos(walkerState.pitch) * constants.WALKER_LOOK_DISTANCE;
+
+  targetCamera.fov = constants.CAMERA_WALKER_FOV;
+  targetCamera.aspect = camera.aspect;
+  targetCamera.near = 0.05;
+  targetCamera.far = 140;
+  targetCamera.position.set(
+    walkerState.position.x * visualScale,
+    constants.WALKER_EYE_HEIGHT,
+    walkerState.position.z * visualScale
+  );
+  tempPreparationLookTarget.set(
+    targetCamera.position.x + (Math.sin(walkerState.heading) * horizontalDistance),
+    constants.WALKER_EYE_HEIGHT + (Math.sin(walkerState.pitch) * constants.WALKER_LOOK_DISTANCE),
+    targetCamera.position.z + (Math.cos(walkerState.heading) * horizontalDistance)
+  );
+  targetCamera.lookAt(tempPreparationLookTarget);
+  targetCamera.updateProjectionMatrix();
+  return targetCamera;
+}
+
+function resetMovementState() {
+  movementState.forward = false;
+  movementState.backward = false;
+  movementState.left = false;
+  movementState.right = false;
+}
+
+function exitFirstPersonMode() {
+  renderState.transitionToken += 1;
+  renderState.preparing = false;
+  renderState.compileReady = false;
+  renderState.progress = 0;
+  renderState.transitionDurationMs = FIRST_PERSON_RETURN_DURATION_MS;
+  renderState.targetVisualScale = 1;
+  renderState.targetFogNear = constants.FOG_DEFAULT_NEAR;
+  renderState.targetFogFar = constants.FOG_DEFAULT_FAR;
+  walkerState.enabled = false;
+  resetMovementState();
+  stopDrag();
+  walkerApi.syncWalkerUi();
+  walkerApi.updateWalkerAvatar();
+  syncPreparationPresentation();
+}
+
+async function enterFirstPersonMode() {
+  if (renderState.preparing || walkerState.enabled) {
+    return;
+  }
+
+  const transitionToken = renderState.transitionToken + 1;
+  renderState.transitionToken = transitionToken;
+  renderState.preparing = true;
+  renderState.compileReady = renderState.compiledFirstPerson;
+  renderState.prepStartedAtMs = performance.now();
+  renderState.progress = 0;
+  renderState.transitionDurationMs = renderState.compiledFirstPerson
+    ? FIRST_PERSON_RETURN_DURATION_MS
+    : FIRST_PERSON_PREP_DURATION_MS;
+  renderState.targetVisualScale = constants.FIRST_PERSON_STAGE_SCALE;
+  renderState.targetFogNear = constants.FOG_WALKER_NEAR;
+  renderState.targetFogFar = constants.FOG_WALKER_FAR;
+  walkerApi.syncWalkerUi();
+  syncPreparationPresentation();
+
+  const compilePromise = renderState.compiledFirstPerson
+    ? Promise.resolve()
+    : renderer.compileAsync(scene, configurePreparationCamera(camera.clone())).catch(() => null);
+
+  compilePromise.then(() => {
+    if (renderState.transitionToken !== transitionToken) {
+      return;
+    }
+    renderState.compileReady = true;
+    renderState.compiledFirstPerson = true;
+  });
+
+  await Promise.all([
+    compilePromise,
+    new Promise((resolve) => window.setTimeout(resolve, renderState.transitionDurationMs))
+  ]);
+
+  if (renderState.transitionToken !== transitionToken) {
+    return;
+  }
+
+  renderState.preparing = false;
+  renderState.progress = 1;
+  walkerState.enabled = true;
+  walkerApi.syncWalkerUi();
+  walkerApi.updateWalkerAvatar();
+  syncPreparationPresentation();
+}
+
 let isDragging = false;
 let previousX = 0;
 let previousY = 0;
 
 canvas.addEventListener("pointerdown", (event) => {
+  if (renderState.preparing) {
+    return;
+  }
   isDragging = true;
   previousX = event.clientX;
   previousY = event.clientY;
@@ -734,7 +1019,7 @@ canvas.addEventListener("pointerdown", (event) => {
 });
 
 canvas.addEventListener("pointermove", (event) => {
-  if (!isDragging) {
+  if (!isDragging || renderState.preparing) {
     return;
   }
 
@@ -743,7 +1028,11 @@ canvas.addEventListener("pointermove", (event) => {
 
   if (walkerState.enabled) {
     walkerState.heading -= deltaX * 0.005;
-    walkerState.pitch = THREE.MathUtils.clamp(walkerState.pitch - (deltaY * 0.004), -0.42, 0.35);
+    walkerState.pitch = THREE.MathUtils.clamp(
+      walkerState.pitch - (deltaY * 0.004),
+      constants.WALKER_PITCH_MIN,
+      constants.WALKER_PITCH_MAX
+    );
   } else {
     cameraState.targetTheta -= deltaX * 0.008;
     cameraState.targetPhi += deltaY * 0.006;
@@ -769,7 +1058,7 @@ canvas.addEventListener("pointerleave", stopDrag);
 canvas.addEventListener("pointercancel", stopDrag);
 
 canvas.addEventListener("wheel", (event) => {
-  if (walkerState.enabled) {
+  if (walkerState.enabled || renderState.preparing) {
     return;
   }
   event.preventDefault();
@@ -783,10 +1072,8 @@ uploadInput.addEventListener("change", (event) => {
 });
 
 resetButton.addEventListener("click", () => {
-  if (walkerState.enabled) {
-    walkerState.enabled = false;
-    walkerApi.syncWalkerUi();
-    walkerApi.updateWalkerAvatar();
+  if (walkerState.enabled || renderState.preparing) {
+    exitFirstPersonMode();
   }
   cameraState.targetTheta = -0.55;
   cameraState.targetPhi = 1.12;
@@ -794,12 +1081,18 @@ resetButton.addEventListener("click", () => {
 });
 
 walkerModeEl.addEventListener("change", () => {
-  walkerState.enabled = walkerModeEl.checked;
-  walkerApi.syncWalkerUi();
-  walkerApi.updateWalkerAvatar();
+  if (walkerModeEl.checked) {
+    enterFirstPersonMode();
+    return;
+  }
+
+  exitFirstPersonMode();
 });
 
 resetWalkerButton.addEventListener("click", () => {
+  if (renderState.preparing) {
+    return;
+  }
   walkerApi.resetWalkerPosition();
   walkerState.heading = Math.PI * 0.1;
   walkerState.pitch = -0.08;
@@ -883,7 +1176,7 @@ window.addEventListener("resize", () => {
 });
 
 window.addEventListener("keydown", (event) => {
-  if (event.repeat) {
+  if (event.repeat || renderState.preparing) {
     return;
   }
 
@@ -986,7 +1279,10 @@ function animate() {
   walkerApi.updateFirstPersonOverlay();
   if (snapshot) {
     walkerApi.updateWalkerUi(snapshot);
+    updateObserverSunVisibility(snapshot);
   }
+  updateRenderState();
+  syncPreparationPresentation();
   cameraApi.updateCamera();
   renderer.render(scene, camera);
 }
