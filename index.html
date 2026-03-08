@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flat Earth 3D Model</title>
+  <link rel="icon" href="data:,">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <canvas id="scene"></canvas>
+
+    <aside class="control-panel">
+      <p class="eyebrow">3D MODEL</p>
+      <h1>Flat Earth Disc</h1>
+      <p class="panel-copy">
+        평면지도를 원판형 지구 상단 텍스처로 입힌 3D 모델입니다.
+        <code>assets/flat-earth-map.png</code>를 두거나, 아래에서 이미지를 올리면 즉시 반영됩니다.
+      </p>
+
+      <div class="button-row">
+        <label class="button primary" for="map-upload">지도 업로드</label>
+        <button class="button secondary" id="reset-camera" type="button">시점 초기화</button>
+      </div>
+
+      <input id="map-upload" type="file" accept="image/png,image/jpeg,image/webp">
+
+      <div class="stat-grid">
+        <div class="stat-card">
+          <span class="stat-label">Model</span>
+          <strong>Disc + Ice Rim</strong>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Output</span>
+          <strong>OBJ / MTL</strong>
+        </div>
+      </div>
+
+      <ol class="steps">
+        <li><code>scripts/generate-flat-earth-obj.ps1</code>로 모델 파일 생성</li>
+        <li><code>models/flat-earth-disc.obj</code>를 Blender 등에서 열기</li>
+        <li>텍스처가 필요하면 <code>assets/flat-earth-map.png</code> 사용</li>
+      </ol>
+
+      <p class="hint" id="status">
+        기본 텍스처를 찾는 중입니다.
+      </p>
+    </aside>
+  </div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
