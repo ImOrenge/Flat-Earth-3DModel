@@ -29,6 +29,29 @@
 
       <input id="map-upload" type="file" accept="image/png,image/jpeg,image/webp">
 
+      <section class="orbit-panel">
+        <p class="orbit-title">태양 궤도</p>
+        <div class="orbit-mode-grid">
+          <button class="orbit-mode active" data-orbit-mode="auto" type="button">자동</button>
+          <button class="orbit-mode" data-orbit-mode="north" type="button">북회귀선</button>
+          <button class="orbit-mode" data-orbit-mode="equator" type="button">적도</button>
+          <button class="orbit-mode" data-orbit-mode="south" type="button">남회귀선</button>
+        </div>
+        <p class="orbit-copy" id="orbit-label">자동 모드: 태양이 북회귀선, 적도, 남회귀선 사이를 왕복합니다.</p>
+      </section>
+
+      <section class="season-panel">
+        <div class="season-row">
+          <span class="season-key">태양 위도</span>
+          <strong class="season-value" id="season-latitude">23.4°N</strong>
+        </div>
+        <div class="season-row">
+          <span class="season-key">계절 상태</span>
+          <strong class="season-value" id="season-summary">북반구 여름 / 남반구 겨울</strong>
+        </div>
+        <p class="season-copy" id="season-detail">태양이 북쪽 회귀선에 가까울수록 북반구를 더 직접 비춘다는 설정으로 표시합니다.</p>
+      </section>
+
       <div class="stat-grid">
         <div class="stat-card">
           <span class="stat-label">Model</span>

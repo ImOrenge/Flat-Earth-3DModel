@@ -5,9 +5,13 @@ const DEFAULT_MAP_LABEL = "assets/flat-earth-map.png";
 const DISC_RADIUS = 5;
 const DISC_HEIGHT = 0.36;
 const RIM_THICKNESS = 0.28;
-const RIM_OUTER_RADIUS = DISC_RADIUS;
+const RIM_CLEARANCE = 0.08;
+const RIM_OUTER_RADIUS = DISC_RADIUS + RIM_CLEARANCE;
 const RIM_INNER_RADIUS = DISC_RADIUS - RIM_THICKNESS;
 const RIM_HEIGHT = 0.62;
+const RIM_CENTER_Y = 0.11;
+const RIM_TOP_Y = RIM_CENTER_Y + (RIM_HEIGHT / 2);
+const RIM_BOTTOM_Y = RIM_CENTER_Y - (RIM_HEIGHT / 2);
 const DOME_RADIUS = RIM_INNER_RADIUS - 0.14;
 const DOME_BASE_Y = 0.46;
 const TROPIC_LATITUDE = 23.44;
@@ -16,9 +20,14 @@ const ORBIT_SUN_HEIGHT = ORBIT_TRACK_HEIGHT + 0.04;
 const ORBIT_SUN_SIZE = 0.18;
 const ORBIT_SUN_SPEED = 0.011;
 const ORBIT_SUN_SEASON_SPEED = 0.0026;
+const ORBIT_SURFACE_LINE_WIDTH = 0.0045;
 
 function projectedRadiusFromLatitude(latitudeDegrees) {
   return DISC_RADIUS * ((90 - latitudeDegrees) / 180);
+}
+
+function latitudeFromProjectedRadius(radius) {
+  return 90 - ((radius / DISC_RADIUS) * 180);
 }
 
 const TROPIC_CANCER_RADIUS = projectedRadiusFromLatitude(TROPIC_LATITUDE);
@@ -31,6 +40,29 @@ const canvas = document.getElementById("scene");
 const statusEl = document.getElementById("status");
 const uploadInput = document.getElementById("map-upload");
 const resetButton = document.getElementById("reset-camera");
+const orbitLabelEl = document.getElementById("orbit-label");
+const orbitModeButtons = [...document.querySelectorAll("[data-orbit-mode]")];
+const seasonLatitudeEl = document.getElementById("season-latitude");
+const seasonSummaryEl = document.getElementById("season-summary");
+const seasonDetailEl = document.getElementById("season-detail");
+
+const orbitModes = {
+  auto: {
+    label: "자동 모드: 태양이 북회귀선, 적도, 남회귀선 사이를 왕복합니다."
+  },
+  north: {
+    radius: TROPIC_CANCER_RADIUS,
+    label: "북회귀선 모드: 태양이 북회귀선 궤도만 따라 공전합니다."
+  },
+  equator: {
+    radius: EQUATOR_RADIUS,
+    label: "적도 모드: 태양이 적도 궤도만 따라 공전합니다."
+  },
+  south: {
+    radius: TROPIC_CAPRICORN_RADIUS,
+    label: "남회귀선 모드: 태양이 남회귀선 궤도만 따라 공전합니다."
+  }
+};
 
 const renderer = new THREE.WebGLRenderer({
   canvas,
@@ -82,30 +114,100 @@ const disc = new THREE.Mesh(
 disc.rotation.x = 0.04;
 stage.add(disc);
 
-const iceWall = new THREE.Mesh(
-  new THREE.CylinderGeometry(RIM_OUTER_RADIUS, RIM_OUTER_RADIUS, RIM_HEIGHT, 128, 1, true),
-  new THREE.MeshStandardMaterial({
-    color: 0xf3f7ff,
-    roughness: 0.72,
-    metalness: 0.02,
+const northSeasonOverlay = new THREE.Mesh(
+  new THREE.CircleGeometry(EQUATOR_RADIUS, 128),
+  new THREE.MeshBasicMaterial({
+    color: 0xffd77c,
     transparent: true,
-    opacity: 0.95
+    opacity: 0.1,
+    depthWrite: false
   })
 );
-iceWall.position.y = 0.11;
-stage.add(iceWall);
+northSeasonOverlay.rotation.x = -Math.PI / 2;
+northSeasonOverlay.position.y = (DISC_HEIGHT / 2) + 0.012;
+stage.add(northSeasonOverlay);
 
-const iceCap = new THREE.Mesh(
-  new THREE.TorusGeometry((RIM_OUTER_RADIUS + RIM_INNER_RADIUS) / 2, RIM_THICKNESS / 2, 16, 128),
+const southSeasonOverlay = new THREE.Mesh(
+  new THREE.RingGeometry(EQUATOR_RADIUS, DISC_RADIUS, 128),
+  new THREE.MeshBasicMaterial({
+    color: 0x7ed3ff,
+    transparent: true,
+    opacity: 0.08,
+    depthWrite: false
+  })
+);
+southSeasonOverlay.rotation.x = -Math.PI / 2;
+southSeasonOverlay.position.y = (DISC_HEIGHT / 2) + 0.011;
+stage.add(southSeasonOverlay);
+
+const iceOuterMaterial = new THREE.MeshStandardMaterial({
+  color: 0xf3f7ff,
+  roughness: 0.72,
+  metalness: 0.02
+});
+
+const iceInnerMaterial = new THREE.MeshStandardMaterial({
+  color: 0xe4f0ff,
+  roughness: 0.66,
+  metalness: 0.02,
+  side: THREE.BackSide
+});
+
+const iceCapMaterial = new THREE.MeshStandardMaterial({
+  color: 0xffffff,
+  roughness: 0.62,
+  metalness: 0.02,
+  side: THREE.DoubleSide
+});
+
+const iceWallOuter = new THREE.Mesh(
+  new THREE.CylinderGeometry(RIM_OUTER_RADIUS, RIM_OUTER_RADIUS, RIM_HEIGHT, 128, 1, true),
+  iceOuterMaterial
+);
+iceWallOuter.position.y = RIM_CENTER_Y;
+stage.add(iceWallOuter);
+
+const iceWallInner = new THREE.Mesh(
+  new THREE.CylinderGeometry(RIM_INNER_RADIUS, RIM_INNER_RADIUS, RIM_HEIGHT, 128, 1, true),
+  iceInnerMaterial
+);
+iceWallInner.position.y = RIM_CENTER_Y;
+stage.add(iceWallInner);
+
+const iceTopCap = new THREE.Mesh(
+  new THREE.RingGeometry(RIM_INNER_RADIUS, RIM_OUTER_RADIUS, 128),
+  iceCapMaterial
+);
+iceTopCap.rotation.x = -Math.PI / 2;
+iceTopCap.position.y = RIM_TOP_Y;
+stage.add(iceTopCap);
+
+const iceBottomCap = new THREE.Mesh(
+  new THREE.RingGeometry(RIM_INNER_RADIUS, RIM_OUTER_RADIUS, 128),
+  new THREE.MeshStandardMaterial({
+    color: 0xdfe9f7,
+    roughness: 0.74,
+    metalness: 0.02,
+    side: THREE.DoubleSide
+  })
+);
+iceBottomCap.rotation.x = -Math.PI / 2;
+iceBottomCap.position.y = RIM_BOTTOM_Y;
+stage.add(iceBottomCap);
+
+const iceCrown = new THREE.Mesh(
+  new THREE.TorusGeometry((RIM_OUTER_RADIUS + RIM_INNER_RADIUS) / 2, 0.05, 12, 128),
   new THREE.MeshStandardMaterial({
     color: 0xffffff,
-    roughness: 0.68,
-    metalness: 0.02
+    emissive: 0x3a546f,
+    emissiveIntensity: 0.18,
+    roughness: 0.52,
+    metalness: 0.03
   })
 );
-iceCap.rotation.x = Math.PI / 2;
-iceCap.position.y = 0.42;
-stage.add(iceCap);
+iceCrown.rotation.x = Math.PI / 2;
+iceCrown.position.y = RIM_TOP_Y + 0.01;
+stage.add(iceCrown);
 
 const dome = new THREE.Mesh(
   new THREE.SphereGeometry(DOME_RADIUS, 96, 48, 0, Math.PI * 2, 0, Math.PI / 2),
@@ -191,14 +293,14 @@ stage.add(orbitSun);
 
 function createOrbitTrack(radius, color, opacity) {
   const track = new THREE.Mesh(
-    new THREE.TorusGeometry(radius, 0.025, 12, 144),
+    new THREE.TorusGeometry(radius, 0.04, 16, 192),
     new THREE.MeshStandardMaterial({
       color,
       emissive: color,
-      emissiveIntensity: 0.35,
+      emissiveIntensity: 0.95,
       transparent: true,
       opacity,
-      roughness: 0.32,
+      roughness: 0.18,
       metalness: 0.06
     })
   );
@@ -207,12 +309,13 @@ function createOrbitTrack(radius, color, opacity) {
   return track;
 }
 
-stage.add(createOrbitTrack(TROPIC_CANCER_RADIUS, 0xffc96c, 0.58));
-stage.add(createOrbitTrack(EQUATOR_RADIUS, 0x7fd8ff, 0.5));
-stage.add(createOrbitTrack(TROPIC_CAPRICORN_RADIUS, 0xff93b6, 0.58));
+stage.add(createOrbitTrack(TROPIC_CANCER_RADIUS, 0xffc96c, 0.82));
+stage.add(createOrbitTrack(EQUATOR_RADIUS, 0x7fd8ff, 0.78));
+stage.add(createOrbitTrack(TROPIC_CAPRICORN_RADIUS, 0xff93b6, 0.82));
 
 let orbitSunAngle = 0;
 let orbitSeasonPhase = -Math.PI / 2;
+let orbitMode = "auto";
 
 const starCanvas = document.createElement("canvas");
 starCanvas.width = 1024;
@@ -239,6 +342,83 @@ function setStatus(message) {
   statusEl.textContent = message;
 }
 
+function formatLatitude(latitude) {
+  const absolute = Math.abs(latitude).toFixed(1);
+  if (Math.abs(latitude) < 0.05) {
+    return `${absolute}°`;
+  }
+  return `${absolute}°${latitude >= 0 ? "N" : "S"}`;
+}
+
+function updateOrbitModeUi() {
+  for (const button of orbitModeButtons) {
+    button.classList.toggle("active", button.dataset.orbitMode === orbitMode);
+  }
+  orbitLabelEl.textContent = orbitModes[orbitMode].label;
+}
+
+function getCurrentOrbitRadius() {
+  if (orbitMode === "auto") {
+    return ORBIT_RADIUS_MID + Math.sin(orbitSeasonPhase) * ORBIT_RADIUS_AMPLITUDE;
+  }
+  return orbitModes[orbitMode].radius;
+}
+
+function updateSeasonPresentation(radius) {
+  const latitude = latitudeFromProjectedRadius(radius);
+  const ratio = THREE.MathUtils.clamp(latitude / TROPIC_LATITUDE, -1, 1);
+  const northWarmth = THREE.MathUtils.clamp((ratio + 1) / 2, 0, 1);
+  const southWarmth = 1 - northWarmth;
+
+  northSeasonOverlay.material.color.setRGB(
+    THREE.MathUtils.lerp(0.48, 1.0, northWarmth),
+    THREE.MathUtils.lerp(0.73, 0.83, northWarmth),
+    THREE.MathUtils.lerp(1.0, 0.49, northWarmth)
+  );
+  northSeasonOverlay.material.opacity = THREE.MathUtils.lerp(0.05, 0.18, Math.abs(ratio));
+
+  southSeasonOverlay.material.color.setRGB(
+    THREE.MathUtils.lerp(0.48, 1.0, southWarmth),
+    THREE.MathUtils.lerp(0.73, 0.83, southWarmth),
+    THREE.MathUtils.lerp(1.0, 0.49, southWarmth)
+  );
+  southSeasonOverlay.material.opacity = THREE.MathUtils.lerp(0.05, 0.18, Math.abs(ratio));
+
+  seasonLatitudeEl.textContent = formatLatitude(latitude);
+
+  if (Math.abs(latitude) < 1.2) {
+    seasonSummaryEl.textContent = "양 반구 전환기 / 적도 통과";
+    seasonDetailEl.textContent = "태양이 적도 부근 궤도를 지나면서 북반구와 남반구의 계절이 바뀌는 구간으로 표시합니다.";
+    return;
+  }
+
+  if (latitude > 0) {
+    seasonSummaryEl.textContent = "북반구 여름 / 남반구 겨울";
+    seasonDetailEl.textContent = "태양이 북쪽 회귀선 쪽으로 올라갈수록 북반구를 더 직접 비추고, 남반구는 상대적으로 멀어지는 설정으로 표현합니다.";
+    return;
+  }
+
+  seasonSummaryEl.textContent = "북반구 겨울 / 남반구 여름";
+  seasonDetailEl.textContent = "태양이 남쪽 회귀선 쪽으로 내려갈수록 남반구를 더 직접 비추고, 북반구는 상대적으로 멀어지는 설정으로 표현합니다.";
+}
+
+function drawOrbitCircle(ctx, size, radius, strokeStyle) {
+  ctx.beginPath();
+  ctx.arc(size / 2, size / 2, radius * (size / 2), 0, Math.PI * 2);
+  ctx.strokeStyle = strokeStyle;
+  ctx.lineWidth = Math.max(2, size * ORBIT_SURFACE_LINE_WIDTH);
+  ctx.shadowColor = strokeStyle;
+  ctx.shadowBlur = size * 0.01;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+}
+
+function drawSurfaceOrbitGuides(ctx, size) {
+  drawOrbitCircle(ctx, size, TROPIC_CANCER_RADIUS / DISC_RADIUS, "rgba(255, 203, 113, 0.92)");
+  drawOrbitCircle(ctx, size, EQUATOR_RADIUS / DISC_RADIUS, "rgba(133, 224, 255, 0.88)");
+  drawOrbitCircle(ctx, size, TROPIC_CAPRICORN_RADIUS / DISC_RADIUS, "rgba(255, 148, 188, 0.92)");
+}
+
 function configureTexture(texture) {
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
@@ -263,6 +443,7 @@ function createSquareTextureFromImage(image) {
   const ctx = mapCanvas.getContext("2d");
   ctx.clearRect(0, 0, side, side);
   ctx.drawImage(image, sourceX, sourceY, side, side, 0, 0, side, side);
+  drawSurfaceOrbitGuides(ctx, side);
 
   const texture = new THREE.CanvasTexture(mapCanvas);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -321,6 +502,7 @@ function createFallbackTexture() {
   ctx.font = "40px Space Grotesk, sans-serif";
   ctx.fillStyle = "rgba(235,245,255,0.9)";
   ctx.fillText("or place assets/flat-earth-map.png", 1024, 1060);
+  drawSurfaceOrbitGuides(ctx, 2048);
 
   const fallback = new THREE.CanvasTexture(mapCanvas);
   fallback.colorSpace = THREE.SRGBColorSpace;
@@ -445,23 +627,35 @@ resetButton.addEventListener("click", () => {
   cameraState.targetRadius = 10.5;
 });
 
+for (const button of orbitModeButtons) {
+  button.addEventListener("click", () => {
+    orbitMode = button.dataset.orbitMode;
+    updateOrbitModeUi();
+  });
+}
+
 window.addEventListener("resize", resize);
 
 function animate() {
   requestAnimationFrame(animate);
   stage.rotation.y += 0.0017;
   orbitSunAngle += ORBIT_SUN_SPEED;
-  orbitSeasonPhase += ORBIT_SUN_SEASON_SPEED;
-  const orbitRadius = ORBIT_RADIUS_MID + Math.sin(orbitSeasonPhase) * ORBIT_RADIUS_AMPLITUDE;
+  if (orbitMode === "auto") {
+    orbitSeasonPhase += ORBIT_SUN_SEASON_SPEED;
+  }
+  const orbitRadius = getCurrentOrbitRadius();
   orbitSun.position.set(
     Math.cos(orbitSunAngle) * orbitRadius,
     ORBIT_SUN_HEIGHT,
     Math.sin(orbitSunAngle) * orbitRadius
   );
+  updateSeasonPresentation(orbitRadius);
   updateCamera();
   renderer.render(scene, camera);
 }
 
 resize();
 loadDefaultTexture();
+updateOrbitModeUi();
+updateSeasonPresentation(getCurrentOrbitRadius());
 animate();

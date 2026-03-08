@@ -72,7 +72,8 @@ function Get-ProjectedRadius {
 
 $segments = 128
 $rimThickness = 0.28
-$rimOuterRadius = $radius
+$rimClearance = 0.08
+$rimOuterRadius = $radius + $rimClearance
 $rimInnerRadius = $rimOuterRadius - $rimThickness
 $rimHeight = 0.62
 $rimBottom = -0.02
