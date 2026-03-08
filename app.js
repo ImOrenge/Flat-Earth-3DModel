@@ -10,6 +10,22 @@ const RIM_INNER_RADIUS = DISC_RADIUS - RIM_THICKNESS;
 const RIM_HEIGHT = 0.62;
 const DOME_RADIUS = RIM_INNER_RADIUS - 0.14;
 const DOME_BASE_Y = 0.46;
+const TROPIC_LATITUDE = 23.44;
+const ORBIT_TRACK_HEIGHT = DOME_BASE_Y + 2.01;
+const ORBIT_SUN_HEIGHT = ORBIT_TRACK_HEIGHT + 0.04;
+const ORBIT_SUN_SIZE = 0.18;
+const ORBIT_SUN_SPEED = 0.011;
+const ORBIT_SUN_SEASON_SPEED = 0.0026;
+
+function projectedRadiusFromLatitude(latitudeDegrees) {
+  return DISC_RADIUS * ((90 - latitudeDegrees) / 180);
+}
+
+const TROPIC_CANCER_RADIUS = projectedRadiusFromLatitude(TROPIC_LATITUDE);
+const EQUATOR_RADIUS = projectedRadiusFromLatitude(0);
+const TROPIC_CAPRICORN_RADIUS = projectedRadiusFromLatitude(-TROPIC_LATITUDE);
+const ORBIT_RADIUS_MID = (TROPIC_CANCER_RADIUS + TROPIC_CAPRICORN_RADIUS) / 2;
+const ORBIT_RADIUS_AMPLITUDE = (TROPIC_CAPRICORN_RADIUS - TROPIC_CANCER_RADIUS) / 2;
 
 const canvas = document.getElementById("scene");
 const statusEl = document.getElementById("status");
@@ -137,13 +153,66 @@ stage.add(glow);
 const ambient = new THREE.AmbientLight(0xc5d7ff, 1.3);
 scene.add(ambient);
 
-const sun = new THREE.DirectionalLight(0xeaf4ff, 1.7);
-sun.position.set(5, 7, 6);
-scene.add(sun);
+const keyLight = new THREE.DirectionalLight(0xeaf4ff, 1.7);
+keyLight.position.set(5, 7, 6);
+scene.add(keyLight);
 
 const rimLight = new THREE.DirectionalLight(0x8fd9ff, 0.85);
 rimLight.position.set(-7, 4, -5);
 scene.add(rimLight);
+
+const orbitSun = new THREE.Group();
+const orbitSunBody = new THREE.Mesh(
+  new THREE.SphereGeometry(ORBIT_SUN_SIZE, 32, 24),
+  new THREE.MeshStandardMaterial({
+    color: 0xffd56f,
+    emissive: 0xffb42f,
+    emissiveIntensity: 2.4,
+    roughness: 0.16,
+    metalness: 0.02
+  })
+);
+orbitSun.add(orbitSunBody);
+
+const orbitSunHalo = new THREE.Mesh(
+  new THREE.SphereGeometry(ORBIT_SUN_SIZE * 1.9, 24, 16),
+  new THREE.MeshBasicMaterial({
+    color: 0xffd781,
+    transparent: true,
+    opacity: 0.18,
+    side: THREE.DoubleSide
+  })
+);
+orbitSun.add(orbitSunHalo);
+
+const orbitSunLight = new THREE.PointLight(0xffcf75, 14, 8, 1.6);
+orbitSun.add(orbitSunLight);
+stage.add(orbitSun);
+
+function createOrbitTrack(radius, color, opacity) {
+  const track = new THREE.Mesh(
+    new THREE.TorusGeometry(radius, 0.025, 12, 144),
+    new THREE.MeshStandardMaterial({
+      color,
+      emissive: color,
+      emissiveIntensity: 0.35,
+      transparent: true,
+      opacity,
+      roughness: 0.32,
+      metalness: 0.06
+    })
+  );
+  track.rotation.x = Math.PI / 2;
+  track.position.y = ORBIT_TRACK_HEIGHT;
+  return track;
+}
+
+stage.add(createOrbitTrack(TROPIC_CANCER_RADIUS, 0xffc96c, 0.58));
+stage.add(createOrbitTrack(EQUATOR_RADIUS, 0x7fd8ff, 0.5));
+stage.add(createOrbitTrack(TROPIC_CAPRICORN_RADIUS, 0xff93b6, 0.58));
+
+let orbitSunAngle = 0;
+let orbitSeasonPhase = -Math.PI / 2;
 
 const starCanvas = document.createElement("canvas");
 starCanvas.width = 1024;
@@ -381,6 +450,14 @@ window.addEventListener("resize", resize);
 function animate() {
   requestAnimationFrame(animate);
   stage.rotation.y += 0.0017;
+  orbitSunAngle += ORBIT_SUN_SPEED;
+  orbitSeasonPhase += ORBIT_SUN_SEASON_SPEED;
+  const orbitRadius = ORBIT_RADIUS_MID + Math.sin(orbitSeasonPhase) * ORBIT_RADIUS_AMPLITUDE;
+  orbitSun.position.set(
+    Math.cos(orbitSunAngle) * orbitRadius,
+    ORBIT_SUN_HEIGHT,
+    Math.sin(orbitSunAngle) * orbitRadius
+  );
   updateCamera();
   renderer.render(scene, camera);
 }

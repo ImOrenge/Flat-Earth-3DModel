@@ -63,6 +63,13 @@ if (Test-Path $sourceTexturePath) {
 $radius = 5.0
 $height = 0.36
 $halfHeight = $height / 2.0
+$tropicLatitude = 23.44
+
+function Get-ProjectedRadius {
+  param([double]$LatitudeDegrees)
+  return $radius * ((90.0 - $LatitudeDegrees) / 180.0)
+}
+
 $segments = 128
 $rimThickness = 0.28
 $rimOuterRadius = $radius
@@ -74,6 +81,18 @@ $domeRadius = $rimInnerRadius - 0.14
 $domeBaseY = 0.46
 $domeSegments = 96
 $domeRings = 24
+$orbitTrackY = $domeBaseY + 2.01
+$northTropicOrbitRadius = Get-ProjectedRadius $tropicLatitude
+$equatorOrbitRadius = Get-ProjectedRadius 0.0
+$southTropicOrbitRadius = Get-ProjectedRadius (-$tropicLatitude)
+$orbitTrackTubeRadius = 0.026
+$orbitTrackSegments = 96
+$orbitTrackTubeSegments = 12
+$sunOrbitRadius = $northTropicOrbitRadius
+$sunOrbitHeight = $orbitTrackY + 0.04
+$sunRadius = 0.18
+$sunSegments = 32
+$sunRings = 16
 
 $vertices = [System.Collections.Generic.List[double[]]]::new()
 $uvs = [System.Collections.Generic.List[double[]]]::new()
@@ -101,6 +120,98 @@ function Add-Normal {
 function Add-Face {
   param([string]$line)
   $script:faces.Add($line)
+}
+
+function New-TorusMesh {
+  param(
+    [double]$MajorRadius,
+    [double]$MinorRadius,
+    [double]$CenterY,
+    [int]$RadialSegments,
+    [int]$TubeSegments
+  )
+
+  $torusVertices = [System.Collections.Generic.List[System.Collections.Generic.List[int]]]::new()
+  $torusUvs = [System.Collections.Generic.List[System.Collections.Generic.List[int]]]::new()
+  $torusNormals = [System.Collections.Generic.List[System.Collections.Generic.List[int]]]::new()
+
+  for ($ring = 0; $ring -le $RadialSegments; $ring++) {
+    $uAngle = ([Math]::PI * 2.0) * ($ring / $RadialSegments)
+    $cosU = [Math]::Cos($uAngle)
+    $sinU = [Math]::Sin($uAngle)
+    $ringVertexIndices = [System.Collections.Generic.List[int]]::new()
+    $ringUvIndices = [System.Collections.Generic.List[int]]::new()
+    $ringNormalIndices = [System.Collections.Generic.List[int]]::new()
+
+    for ($segment = 0; $segment -le $TubeSegments; $segment++) {
+      $vAngle = ([Math]::PI * 2.0) * ($segment / $TubeSegments)
+      $cosV = [Math]::Cos($vAngle)
+      $sinV = [Math]::Sin($vAngle)
+
+      $normalX = $cosU * $cosV
+      $normalY = $sinV
+      $normalZ = $sinU * $cosV
+
+      $x = ($MajorRadius + ($MinorRadius * $cosV)) * $cosU
+      $y = $CenterY + ($MinorRadius * $sinV)
+      $z = ($MajorRadius + ($MinorRadius * $cosV)) * $sinU
+      $u = $ring / $RadialSegments
+      $v = $segment / $TubeSegments
+
+      $ringVertexIndices.Add((Add-Vertex $x $y $z)) | Out-Null
+      $ringUvIndices.Add((Add-UV $u $v)) | Out-Null
+      $ringNormalIndices.Add((Add-Normal $normalX $normalY $normalZ)) | Out-Null
+    }
+
+    $torusVertices.Add($ringVertexIndices) | Out-Null
+    $torusUvs.Add($ringUvIndices) | Out-Null
+    $torusNormals.Add($ringNormalIndices) | Out-Null
+  }
+
+  return @{
+    Vertices = $torusVertices
+    Uvs = $torusUvs
+    Normals = $torusNormals
+  }
+}
+
+function Add-QuadStripFaces {
+  param(
+    [System.Collections.Generic.List[string]]$TargetLines,
+    $VertexGrid,
+    $UvGrid,
+    $NormalGrid,
+    [int]$RingCount,
+    [int]$SegmentCount
+  )
+
+  for ($ring = 0; $ring -lt $RingCount; $ring++) {
+    for ($segment = 0; $segment -lt $SegmentCount; $segment++) {
+      $a = $VertexGrid[$ring][$segment]
+      $b = $VertexGrid[$ring + 1][$segment]
+      $c = $VertexGrid[$ring + 1][$segment + 1]
+      $d = $VertexGrid[$ring][$segment + 1]
+
+      $ua = $UvGrid[$ring][$segment]
+      $ub = $UvGrid[$ring + 1][$segment]
+      $uc = $UvGrid[$ring + 1][$segment + 1]
+      $ud = $UvGrid[$ring][$segment + 1]
+
+      $na = $NormalGrid[$ring][$segment]
+      $nb = $NormalGrid[$ring + 1][$segment]
+      $nc = $NormalGrid[$ring + 1][$segment + 1]
+      $nd = $NormalGrid[$ring][$segment + 1]
+
+      $TargetLines.Add(("f {0}/{1}/{2} {3}/{4}/{5} {6}/{7}/{8}" -f `
+        $a, $ua, $na, `
+        $b, $ub, $nb, `
+        $c, $uc, $nc)) | Out-Null
+      $TargetLines.Add(("f {0}/{1}/{2} {3}/{4}/{5} {6}/{7}/{8}" -f `
+        $a, $ua, $na, `
+        $c, $uc, $nc, `
+        $d, $ud, $nd)) | Out-Null
+    }
+  }
 }
 
 $topNormal = Add-Normal 0 1 0
@@ -244,6 +355,50 @@ for ($ring = 0; $ring -le $domeRings; $ring++) {
   $domeUvs.Add($ringUvIndices) | Out-Null
   $domeNormals.Add($ringNormalIndices) | Out-Null
 }
+
+$sunVertices = [System.Collections.Generic.List[System.Collections.Generic.List[int]]]::new()
+$sunUvs = [System.Collections.Generic.List[System.Collections.Generic.List[int]]]::new()
+$sunNormals = [System.Collections.Generic.List[System.Collections.Generic.List[int]]]::new()
+$sunCenterX = $sunOrbitRadius
+$sunCenterY = $sunOrbitHeight
+$sunCenterZ = 0.0
+
+for ($ring = 0; $ring -le $sunRings; $ring++) {
+  $phi = [Math]::PI * ($ring / $sunRings)
+  $ringVertexIndices = [System.Collections.Generic.List[int]]::new()
+  $ringUvIndices = [System.Collections.Generic.List[int]]::new()
+  $ringNormalIndices = [System.Collections.Generic.List[int]]::new()
+
+  for ($segment = 0; $segment -le $sunSegments; $segment++) {
+    $theta = ([Math]::PI * 2.0) * ($segment / $sunSegments)
+    $sinPhi = [Math]::Sin($phi)
+    $cosPhi = [Math]::Cos($phi)
+    $cosTheta = [Math]::Cos($theta)
+    $sinTheta = [Math]::Sin($theta)
+
+    $normalX = $sinPhi * $cosTheta
+    $normalY = $cosPhi
+    $normalZ = $sinPhi * $sinTheta
+
+    $x = $sunCenterX + ($normalX * $sunRadius)
+    $y = $sunCenterY + ($normalY * $sunRadius)
+    $z = $sunCenterZ + ($normalZ * $sunRadius)
+    $u = $segment / $sunSegments
+    $v = 1.0 - ($ring / $sunRings)
+
+    $ringVertexIndices.Add((Add-Vertex $x $y $z)) | Out-Null
+    $ringUvIndices.Add((Add-UV $u $v)) | Out-Null
+    $ringNormalIndices.Add((Add-Normal $normalX $normalY $normalZ)) | Out-Null
+  }
+
+  $sunVertices.Add($ringVertexIndices) | Out-Null
+  $sunUvs.Add($ringUvIndices) | Out-Null
+  $sunNormals.Add($ringNormalIndices) | Out-Null
+}
+
+$northTropicTrack = New-TorusMesh -MajorRadius $northTropicOrbitRadius -MinorRadius $orbitTrackTubeRadius -CenterY $orbitTrackY -RadialSegments $orbitTrackSegments -TubeSegments $orbitTrackTubeSegments
+$equatorTrack = New-TorusMesh -MajorRadius $equatorOrbitRadius -MinorRadius $orbitTrackTubeRadius -CenterY $orbitTrackY -RadialSegments $orbitTrackSegments -TubeSegments $orbitTrackTubeSegments
+$southTropicTrack = New-TorusMesh -MajorRadius $southTropicOrbitRadius -MinorRadius $orbitTrackTubeRadius -CenterY $orbitTrackY -RadialSegments $orbitTrackSegments -TubeSegments $orbitTrackTubeSegments
 
 Add-Face "mtllib flat-earth-disc.mtl"
 Add-Face "o FlatEarthDisc"
@@ -467,6 +622,48 @@ for ($ring = 0; $ring -lt $domeRings; $ring++) {
   }
 }
 
+$objLines.Add("g OrbitNorthTropic") | Out-Null
+$objLines.Add("usemtl OrbitNorthTropic") | Out-Null
+Add-QuadStripFaces -TargetLines $objLines -VertexGrid $northTropicTrack.Vertices -UvGrid $northTropicTrack.Uvs -NormalGrid $northTropicTrack.Normals -RingCount $orbitTrackSegments -SegmentCount $orbitTrackTubeSegments
+
+$objLines.Add("g OrbitEquator") | Out-Null
+$objLines.Add("usemtl OrbitEquator") | Out-Null
+Add-QuadStripFaces -TargetLines $objLines -VertexGrid $equatorTrack.Vertices -UvGrid $equatorTrack.Uvs -NormalGrid $equatorTrack.Normals -RingCount $orbitTrackSegments -SegmentCount $orbitTrackTubeSegments
+
+$objLines.Add("g OrbitSouthTropic") | Out-Null
+$objLines.Add("usemtl OrbitSouthTropic") | Out-Null
+Add-QuadStripFaces -TargetLines $objLines -VertexGrid $southTropicTrack.Vertices -UvGrid $southTropicTrack.Uvs -NormalGrid $southTropicTrack.Normals -RingCount $orbitTrackSegments -SegmentCount $orbitTrackTubeSegments
+
+$objLines.Add("g SunBody") | Out-Null
+$objLines.Add("usemtl SunLight") | Out-Null
+for ($ring = 0; $ring -lt $sunRings; $ring++) {
+  for ($segment = 0; $segment -lt $sunSegments; $segment++) {
+    $a = $sunVertices[$ring][$segment]
+    $b = $sunVertices[$ring + 1][$segment]
+    $c = $sunVertices[$ring + 1][$segment + 1]
+    $d = $sunVertices[$ring][$segment + 1]
+
+    $ua = $sunUvs[$ring][$segment]
+    $ub = $sunUvs[$ring + 1][$segment]
+    $uc = $sunUvs[$ring + 1][$segment + 1]
+    $ud = $sunUvs[$ring][$segment + 1]
+
+    $na = $sunNormals[$ring][$segment]
+    $nb = $sunNormals[$ring + 1][$segment]
+    $nc = $sunNormals[$ring + 1][$segment + 1]
+    $nd = $sunNormals[$ring][$segment + 1]
+
+    $objLines.Add(("f {0}/{1}/{2} {3}/{4}/{5} {6}/{7}/{8}" -f `
+      $a, $ua, $na, `
+      $b, $ub, $nb, `
+      $c, $uc, $nc)) | Out-Null
+    $objLines.Add(("f {0}/{1}/{2} {3}/{4}/{5} {6}/{7}/{8}" -f `
+      $a, $ua, $na, `
+      $c, $uc, $nc, `
+      $d, $ud, $nd)) | Out-Null
+  }
+}
+
 [System.IO.File]::WriteAllLines($objPath, $objLines)
 
 $mtlLines = @(
@@ -501,7 +698,35 @@ $mtlLines = @(
   "Ks 0.350000 0.350000 0.350000",
   "Ns 96.000000",
   "d 0.320000",
-  "illum 4"
+  "illum 4",
+  "",
+  "newmtl OrbitNorthTropic",
+  "Ka 0.880000 0.640000 0.240000",
+  "Kd 1.000000 0.790000 0.350000",
+  "Ks 0.120000 0.120000 0.120000",
+  "Ns 24.000000",
+  "illum 2",
+  "",
+  "newmtl OrbitEquator",
+  "Ka 0.320000 0.700000 0.860000",
+  "Kd 0.500000 0.860000 1.000000",
+  "Ks 0.120000 0.120000 0.120000",
+  "Ns 24.000000",
+  "illum 2",
+  "",
+  "newmtl OrbitSouthTropic",
+  "Ka 0.820000 0.380000 0.560000",
+  "Kd 1.000000 0.580000 0.720000",
+  "Ks 0.120000 0.120000 0.120000",
+  "Ns 24.000000",
+  "illum 2",
+  "",
+  "newmtl SunLight",
+  "Ka 1.000000 0.720000 0.220000",
+  "Kd 1.000000 0.840000 0.360000",
+  "Ks 0.500000 0.400000 0.150000",
+  "Ns 64.000000",
+  "illum 2"
 )
 [System.IO.File]::WriteAllLines($mtlPath, $mtlLines)
 
