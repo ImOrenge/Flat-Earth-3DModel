@@ -13,66 +13,150 @@
 <body>
   <div class="app-shell">
     <canvas id="scene"></canvas>
-
-    <aside class="control-panel">
-      <p class="eyebrow">3D MODEL</p>
-      <h1>Flat Earth Disc</h1>
-      <p class="panel-copy">
-        평면지도를 원판형 지구 상단 텍스처로 입힌 3D 모델입니다.
-        <code>assets/flat-earth-map.png</code>를 두거나, 아래에서 이미지를 올리면 즉시 반영됩니다.
-      </p>
-
-      <div class="button-row">
-        <label class="button primary" for="map-upload">지도 업로드</label>
-        <button class="button secondary" id="reset-camera" type="button">시점 초기화</button>
+    <div class="first-person-overlay" id="first-person-overlay" aria-hidden="true">
+      <div class="first-person-horizon" id="first-person-horizon"></div>
+      <div class="first-person-vp">
+        <span class="first-person-vp-dot"></span>
+        <span class="first-person-vp-ring"></span>
       </div>
+    </div>
 
-      <input id="map-upload" type="file" accept="image/png,image/jpeg,image/webp">
+    <div class="panel-layout">
+      <aside class="control-panel summary-panel">
+        <p class="eyebrow">3D MODEL</p>
+        <h1>Flat Earth Disc</h1>
+        <p class="panel-copy">
+          Flat map texture based 3D preview. Drop a custom map into
+          <code>assets/flat-earth-map.png</code> or upload one here for an immediate update.
+        </p>
 
-      <section class="orbit-panel">
-        <p class="orbit-title">태양 궤도</p>
-        <div class="orbit-mode-grid">
-          <button class="orbit-mode active" data-orbit-mode="auto" type="button">자동</button>
-          <button class="orbit-mode" data-orbit-mode="north" type="button">북회귀선</button>
-          <button class="orbit-mode" data-orbit-mode="equator" type="button">적도</button>
-          <button class="orbit-mode" data-orbit-mode="south" type="button">남회귀선</button>
+        <div class="button-row">
+          <label class="button primary" for="map-upload">Upload Map</label>
+          <button class="button secondary" id="reset-camera" type="button">Reset Camera</button>
         </div>
-        <p class="orbit-copy" id="orbit-label">자동 모드: 태양이 북회귀선, 적도, 남회귀선 사이를 왕복합니다.</p>
-      </section>
 
-      <section class="season-panel">
-        <div class="season-row">
-          <span class="season-key">태양 위도</span>
-          <strong class="season-value" id="season-latitude">23.4°N</strong>
-        </div>
-        <div class="season-row">
-          <span class="season-key">계절 상태</span>
-          <strong class="season-value" id="season-summary">북반구 여름 / 남반구 겨울</strong>
-        </div>
-        <p class="season-copy" id="season-detail">태양이 북쪽 회귀선에 가까울수록 북반구를 더 직접 비춘다는 설정으로 표시합니다.</p>
-      </section>
+        <input id="map-upload" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml">
 
-      <div class="stat-grid">
-        <div class="stat-card">
-          <span class="stat-label">Model</span>
-          <strong>Disc + Ice Rim</strong>
-        </div>
-        <div class="stat-card">
-          <span class="stat-label">Output</span>
-          <strong>OBJ / MTL</strong>
-        </div>
-      </div>
+        <section class="season-panel">
+          <div class="season-row">
+            <span class="season-key">Solar Latitude</span>
+            <strong class="season-value" id="season-latitude">23.4degN</strong>
+          </div>
+          <div class="season-row">
+            <span class="season-key">Season State</span>
+            <strong class="season-value" id="season-summary">Northern summer / Southern winter</strong>
+          </div>
+          <p class="season-copy" id="season-detail">
+            The summary updates from the current solar latitude and shows which hemisphere is getting the
+            stronger direct illumination in this model.
+          </p>
+        </section>
 
-      <ol class="steps">
-        <li><code>scripts/generate-flat-earth-obj.ps1</code>로 모델 파일 생성</li>
-        <li><code>models/flat-earth-disc.obj</code>를 Blender 등에서 열기</li>
-        <li>텍스처가 필요하면 <code>assets/flat-earth-map.png</code> 사용</li>
-      </ol>
+        <div class="stat-grid">
+          <div class="stat-card">
+            <span class="stat-label">Model</span>
+            <strong>Disc + Ice Rim</strong>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Output</span>
+            <strong>OBJ / MTL</strong>
+          </div>
+        </div>
 
-      <p class="hint" id="status">
-        기본 텍스처를 찾는 중입니다.
-      </p>
-    </aside>
+        <ol class="steps">
+          <li>Generate the mesh with <code>scripts/generate-flat-earth-obj.ps1</code>.</li>
+          <li>Open <code>models/flat-earth-disc.obj</code> in Blender or another DCC tool.</li>
+          <li>Swap the top texture with <code>assets/flat-earth-map.png</code> when needed.</li>
+        </ol>
+
+        <p class="hint" id="status">Loading the default texture.</p>
+      </aside>
+
+      <aside class="control-panel detail-panel">
+        <p class="eyebrow">DETAIL CONTROLS</p>
+
+        <section class="sync-panel">
+          <div class="sync-row">
+            <span class="sync-title">Reality Sync</span>
+            <label class="toggle">
+              <input id="reality-sync" type="checkbox" checked>
+              <span>On</span>
+            </label>
+          </div>
+          <div class="sync-row">
+            <span class="sync-title">Use Current Time</span>
+            <label class="toggle">
+              <input id="reality-live" type="checkbox" checked>
+              <span>Live</span>
+            </label>
+          </div>
+          <label class="field" for="observation-time">
+            <span class="field-label">Observation Time</span>
+            <input class="datetime-input" id="observation-time" type="datetime-local">
+          </label>
+          <div class="button-row compact">
+            <button class="button secondary compact-button" id="apply-observation-time" type="button">Preview Time</button>
+            <button class="button secondary compact-button" id="set-current-time" type="button">Back To Now</button>
+          </div>
+          <p class="sync-copy" id="time-summary">Syncing to the current local time.</p>
+          <div class="coord-grid">
+            <div class="coord-card">
+              <span class="coord-label">Sun</span>
+              <strong class="coord-value" id="sun-coordinates">0.00degN / 0.00degE</strong>
+            </div>
+            <div class="coord-card">
+              <span class="coord-label">Moon</span>
+              <strong class="coord-value" id="moon-coordinates">0.00degN / 0.00degE</strong>
+            </div>
+          </div>
+          <div class="sync-row overlay-row">
+            <span class="sync-title">Day/Night Overlay</span>
+            <label class="toggle">
+              <input id="day-night-overlay" type="checkbox" checked>
+              <span>Clear</span>
+            </label>
+          </div>
+          <p class="sync-copy subtle" id="day-night-summary">Night side overlay is active.</p>
+        </section>
+
+        <section class="walker-panel">
+          <div class="sync-row">
+            <span class="sync-title">Walker View</span>
+            <label class="toggle">
+              <input id="walker-mode" type="checkbox">
+              <span>First Person</span>
+            </label>
+          </div>
+          <p class="sync-copy" id="walker-summary">
+            Walk on the map with WASD or the arrow keys and judge day or night from the observer position.
+          </p>
+          <div class="coord-grid">
+            <div class="coord-card">
+              <span class="coord-label">Observer</span>
+              <strong class="coord-value" id="walker-coordinates">0.00degN / 0.00degE</strong>
+            </div>
+            <div class="coord-card">
+              <span class="coord-label">Local Light</span>
+              <strong class="coord-value" id="walker-light">Day</strong>
+            </div>
+          </div>
+          <div class="button-row compact">
+            <button class="button secondary compact-button" id="reset-walker" type="button">Reset Walker</button>
+          </div>
+        </section>
+
+        <section class="orbit-panel">
+          <p class="orbit-title">Solar Orbit</p>
+          <div class="orbit-mode-grid">
+            <button class="orbit-mode active" data-orbit-mode="auto" type="button">Auto</button>
+            <button class="orbit-mode" data-orbit-mode="north" type="button">North Tropic</button>
+            <button class="orbit-mode" data-orbit-mode="equator" type="button">Equator</button>
+            <button class="orbit-mode" data-orbit-mode="south" type="button">South Tropic</button>
+          </div>
+          <p class="orbit-copy" id="orbit-label">Auto mode sweeps the sun between the tropics.</p>
+        </section>
+      </aside>
+    </div>
   </div>
 
   <script type="module" src="./app.js"></script>

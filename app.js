@@ -1,7 +1,15 @@
 import * as THREE from "./vendor/three.module.js";
+import {
+  getGeoFromProjectedPosition,
+  projectedRadiusFromLatitude
+} from "./modules/geo-utils.js";
+import { createAstronomyController } from "./modules/astronomy-controller.js";
+import { createCameraController } from "./modules/camera-controller.js";
+import { createTextureManager } from "./modules/texture-manager.js";
+import { createWalkerController } from "./modules/walker-controller.js";
 
-const DEFAULT_MAP_PATH = "./assets/flat-earth-map.png";
-const DEFAULT_MAP_LABEL = "assets/flat-earth-map.png";
+const DEFAULT_MAP_PATH = "./assets/flat-earth-map-square.svg";
+const DEFAULT_MAP_LABEL = "assets/flat-earth-map-square.svg";
 const DISC_RADIUS = 5;
 const DISC_HEIGHT = 0.36;
 const RIM_THICKNESS = 0.28;
@@ -17,26 +25,55 @@ const DOME_BASE_Y = 0.46;
 const TROPIC_LATITUDE = 23.44;
 const ORBIT_TRACK_HEIGHT = DOME_BASE_Y + 2.01;
 const ORBIT_SUN_HEIGHT = ORBIT_TRACK_HEIGHT + 0.04;
+const ORBIT_SUN_HEIGHT_NORTH = ORBIT_SUN_HEIGHT + 0.18;
+const ORBIT_SUN_HEIGHT_SOUTH = ORBIT_SUN_HEIGHT - 0.2;
 const ORBIT_SUN_SIZE = 0.18;
 const ORBIT_SUN_SPEED = 0.011;
 const ORBIT_SUN_SEASON_SPEED = 0.0026;
+const ORBIT_MOON_BASE_HEIGHT = ORBIT_TRACK_HEIGHT + 0.28;
+const ORBIT_MOON_HEIGHT_NORTH = ORBIT_MOON_BASE_HEIGHT + 0.16;
+const ORBIT_MOON_HEIGHT_SOUTH = ORBIT_MOON_BASE_HEIGHT - 0.26;
+const ORBIT_MOON_SIZE = 0.13;
+const ORBIT_MOON_SPEED = 0.0048;
+const ORBIT_MOON_DRIFT_SPEED = 0.0021;
+const ORBIT_MOON_RADIUS_SWAY = 0.7;
+const ORBIT_MOON_FREE_OFFSET = 0.42;
 const ORBIT_SURFACE_LINE_WIDTH = 0.0045;
+const SUN_TRAIL_MAX_POINTS = 720;
+const MOON_TRAIL_MAX_POINTS = 600;
+const REALITY_TRAIL_WINDOW_MS = 12 * 60 * 60 * 1000;
+const REALITY_TRAIL_REFRESH_MS = 60 * 1000;
+const DAY_NIGHT_TEXTURE_SIZE = 512;
+const DAY_NIGHT_UPDATE_EPSILON = 0.18;
+const CAMERA_DEFAULT_FOV = 42;
+const CAMERA_WALKER_FOV = 68;
+const SURFACE_Y = DISC_HEIGHT / 2;
+const WALKER_SURFACE_OFFSET = 0.045;
+const WALKER_EYE_HEIGHT = SURFACE_Y + 0.16;
+const WALKER_BODY_HEIGHT = 0.12;
+const WALKER_BODY_RADIUS = 0.045;
+const WALKER_SPEED = 1.5;
+const WALKER_LOOK_DISTANCE = 0.95;
+const WALKER_START_LATITUDE = 37.57;
+const WALKER_START_LONGITUDE = 126.98;
+const WALKER_GUIDE_Y = SURFACE_Y + 0.02;
+const WALKER_GUIDE_HALF_WIDTH = 0.28;
+const WALKER_GUIDE_START = 0.3;
+const WALKER_GUIDE_LENGTH = 3.7;
+const WALKER_GUIDE_MARK_SIZE = 0.1;
+const WALKER_GUIDE_MARK_GAP = 0.5;
+const WALKER_HORIZON_SHIFT_PX = 240;
 
-function projectedRadiusFromLatitude(latitudeDegrees) {
-  return DISC_RADIUS * ((90 - latitudeDegrees) / 180);
-}
-
-function latitudeFromProjectedRadius(radius) {
-  return 90 - ((radius / DISC_RADIUS) * 180);
-}
-
-const TROPIC_CANCER_RADIUS = projectedRadiusFromLatitude(TROPIC_LATITUDE);
-const EQUATOR_RADIUS = projectedRadiusFromLatitude(0);
-const TROPIC_CAPRICORN_RADIUS = projectedRadiusFromLatitude(-TROPIC_LATITUDE);
+const TROPIC_CANCER_RADIUS = projectedRadiusFromLatitude(TROPIC_LATITUDE, DISC_RADIUS);
+const EQUATOR_RADIUS = projectedRadiusFromLatitude(0, DISC_RADIUS);
+const TROPIC_CAPRICORN_RADIUS = projectedRadiusFromLatitude(-TROPIC_LATITUDE, DISC_RADIUS);
 const ORBIT_RADIUS_MID = (TROPIC_CANCER_RADIUS + TROPIC_CAPRICORN_RADIUS) / 2;
 const ORBIT_RADIUS_AMPLITUDE = (TROPIC_CAPRICORN_RADIUS - TROPIC_CANCER_RADIUS) / 2;
+const ORBIT_MOON_RADIUS_BASE = ORBIT_RADIUS_MID + 0.35;
 
 const canvas = document.getElementById("scene");
+const firstPersonOverlayEl = document.getElementById("first-person-overlay");
+const firstPersonHorizonEl = document.getElementById("first-person-horizon");
 const statusEl = document.getElementById("status");
 const uploadInput = document.getElementById("map-upload");
 const resetButton = document.getElementById("reset-camera");
@@ -45,22 +82,37 @@ const orbitModeButtons = [...document.querySelectorAll("[data-orbit-mode]")];
 const seasonLatitudeEl = document.getElementById("season-latitude");
 const seasonSummaryEl = document.getElementById("season-summary");
 const seasonDetailEl = document.getElementById("season-detail");
+const realitySyncEl = document.getElementById("reality-sync");
+const realityLiveEl = document.getElementById("reality-live");
+const observationTimeEl = document.getElementById("observation-time");
+const applyObservationTimeButton = document.getElementById("apply-observation-time");
+const setCurrentTimeButton = document.getElementById("set-current-time");
+const timeSummaryEl = document.getElementById("time-summary");
+const sunCoordinatesEl = document.getElementById("sun-coordinates");
+const moonCoordinatesEl = document.getElementById("moon-coordinates");
+const dayNightOverlayEl = document.getElementById("day-night-overlay");
+const dayNightSummaryEl = document.getElementById("day-night-summary");
+const walkerModeEl = document.getElementById("walker-mode");
+const walkerSummaryEl = document.getElementById("walker-summary");
+const walkerCoordinatesEl = document.getElementById("walker-coordinates");
+const walkerLightEl = document.getElementById("walker-light");
+const resetWalkerButton = document.getElementById("reset-walker");
 
 const orbitModes = {
   auto: {
-    label: "자동 모드: 태양이 북회귀선, 적도, 남회귀선 사이를 왕복합니다."
+    label: "?�동 모드: ?�양??북회귀?? ?�도, ?�회귀???�이�??�복?�니??"
   },
   north: {
     radius: TROPIC_CANCER_RADIUS,
-    label: "북회귀선 모드: 태양이 북회귀선 궤도만 따라 공전합니다."
+    label: "북회귀??모드: ?�양??북회귀??궤도�??�라 공전?�니??"
   },
   equator: {
     radius: EQUATOR_RADIUS,
-    label: "적도 모드: 태양이 적도 궤도만 따라 공전합니다."
+    label: "?�도 모드: ?�양???�도 궤도�??�라 공전?�니??"
   },
   south: {
     radius: TROPIC_CAPRICORN_RADIUS,
-    label: "남회귀선 모드: 태양이 남회귀선 궤도만 따라 공전합니다."
+    label: "?�회귀??모드: ?�양???�회귀??궤도�??�라 공전?�니??"
   }
 };
 
@@ -75,7 +127,7 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0x06101d, 14, 28);
 
-const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
+const camera = new THREE.PerspectiveCamera(CAMERA_DEFAULT_FOV, 1, 0.1, 100);
 
 const cameraState = {
   radius: 10.5,
@@ -111,8 +163,40 @@ const disc = new THREE.Mesh(
   new THREE.CylinderGeometry(DISC_RADIUS, DISC_RADIUS, DISC_HEIGHT, 128, 1, false),
   [sideMaterial, topMaterial, bottomMaterial]
 );
-disc.rotation.x = 0.04;
 stage.add(disc);
+
+const transparentSurfaceMaterial = new THREE.MeshBasicMaterial({
+  color: 0xffffff,
+  transparent: true,
+  opacity: 0,
+  depthWrite: false,
+  depthTest: false
+});
+
+const dayNightCanvas = document.createElement("canvas");
+dayNightCanvas.width = DAY_NIGHT_TEXTURE_SIZE;
+dayNightCanvas.height = DAY_NIGHT_TEXTURE_SIZE;
+const dayNightCtx = dayNightCanvas.getContext("2d");
+const dayNightTexture = new THREE.CanvasTexture(dayNightCanvas);
+dayNightTexture.colorSpace = THREE.SRGBColorSpace;
+dayNightTexture.wrapS = THREE.ClampToEdgeWrapping;
+dayNightTexture.wrapT = THREE.ClampToEdgeWrapping;
+dayNightTexture.flipY = false;
+const dayNightOverlayMaterial = new THREE.MeshBasicMaterial({
+  map: dayNightTexture,
+  transparent: true,
+  opacity: 0.88,
+  depthWrite: false,
+  depthTest: false,
+  side: THREE.DoubleSide
+});
+const dayNightOverlay = new THREE.Mesh(
+  new THREE.CylinderGeometry(DISC_RADIUS, DISC_RADIUS, 0.008, 128, 1, false),
+  [transparentSurfaceMaterial, dayNightOverlayMaterial, transparentSurfaceMaterial]
+);
+dayNightOverlay.position.y = (DISC_HEIGHT / 2) + 0.03;
+dayNightOverlay.renderOrder = 12;
+stage.add(dayNightOverlay);
 
 const northSeasonOverlay = new THREE.Mesh(
   new THREE.CircleGeometry(EQUATOR_RADIUS, 128),
@@ -125,6 +209,7 @@ const northSeasonOverlay = new THREE.Mesh(
 );
 northSeasonOverlay.rotation.x = -Math.PI / 2;
 northSeasonOverlay.position.y = (DISC_HEIGHT / 2) + 0.012;
+northSeasonOverlay.renderOrder = 8;
 stage.add(northSeasonOverlay);
 
 const southSeasonOverlay = new THREE.Mesh(
@@ -138,6 +223,7 @@ const southSeasonOverlay = new THREE.Mesh(
 );
 southSeasonOverlay.rotation.x = -Math.PI / 2;
 southSeasonOverlay.position.y = (DISC_HEIGHT / 2) + 0.011;
+southSeasonOverlay.renderOrder = 7;
 stage.add(southSeasonOverlay);
 
 const iceOuterMaterial = new THREE.MeshStandardMaterial({
@@ -245,21 +331,92 @@ const glow = new THREE.Mesh(
   new THREE.MeshBasicMaterial({
     color: 0x123a67,
     transparent: true,
-    opacity: 0.3
+    opacity: 0.18
   })
 );
 glow.rotation.x = -Math.PI / 2;
 glow.position.y = -0.7;
 stage.add(glow);
 
-const ambient = new THREE.AmbientLight(0xc5d7ff, 1.3);
+const walker = new THREE.Group();
+const walkerBody = new THREE.Mesh(
+  new THREE.CapsuleGeometry(WALKER_BODY_RADIUS, WALKER_BODY_HEIGHT, 6, 12),
+  new THREE.MeshStandardMaterial({
+    color: 0xf6fbff,
+    emissive: 0x69b7ff,
+    emissiveIntensity: 0.55,
+    roughness: 0.42,
+    metalness: 0.08
+  })
+);
+walkerBody.position.y = WALKER_SURFACE_OFFSET + 0.09;
+walker.add(walkerBody);
+
+const walkerHeading = new THREE.Mesh(
+  new THREE.ConeGeometry(0.045, 0.14, 18),
+  new THREE.MeshStandardMaterial({
+    color: 0xffd06e,
+    emissive: 0xffb84d,
+    emissiveIntensity: 0.75,
+    roughness: 0.24,
+    metalness: 0.05
+  })
+);
+walkerHeading.rotation.x = Math.PI / 2;
+walkerHeading.position.set(0, WALKER_SURFACE_OFFSET + 0.1, 0.13);
+walker.add(walkerHeading);
+
+const walkerRing = new THREE.Mesh(
+  new THREE.RingGeometry(0.09, 0.11, 32),
+  new THREE.MeshBasicMaterial({
+    color: 0xb5e8ff,
+    transparent: true,
+    opacity: 0.7,
+    side: THREE.DoubleSide,
+    depthWrite: false
+  })
+);
+walkerRing.rotation.x = -Math.PI / 2;
+walkerRing.position.y = WALKER_SURFACE_OFFSET;
+walker.add(walkerRing);
+stage.add(walker);
+
+function createWalkerGuideLine(color, opacity) {
+  return new THREE.Line(
+    new THREE.BufferGeometry(),
+    new THREE.LineBasicMaterial({
+      color,
+      transparent: true,
+      opacity,
+      depthWrite: false
+    })
+  );
+}
+
+const walkerGuideGroup = new THREE.Group();
+const walkerGuideLeft = createWalkerGuideLine(0xa5ddff, 0.5);
+const walkerGuideRight = createWalkerGuideLine(0xa5ddff, 0.5);
+const walkerGuideCenter = new THREE.LineSegments(
+  new THREE.BufferGeometry(),
+  new THREE.LineBasicMaterial({
+    color: 0xf3fbff,
+    transparent: true,
+    opacity: 0.6,
+    depthWrite: false
+  })
+);
+walkerGuideGroup.add(walkerGuideLeft, walkerGuideRight, walkerGuideCenter);
+walkerGuideGroup.visible = false;
+stage.add(walkerGuideGroup);
+
+const ambient = new THREE.AmbientLight(0xc5d7ff, 0.9);
 scene.add(ambient);
 
-const keyLight = new THREE.DirectionalLight(0xeaf4ff, 1.7);
+const keyLight = new THREE.DirectionalLight(0xeaf4ff, 1.35);
 keyLight.position.set(5, 7, 6);
 scene.add(keyLight);
 
-const rimLight = new THREE.DirectionalLight(0x8fd9ff, 0.85);
+const rimLight = new THREE.DirectionalLight(0x8fd9ff, 0.42);
 rimLight.position.set(-7, 4, -5);
 scene.add(rimLight);
 
@@ -269,7 +426,7 @@ const orbitSunBody = new THREE.Mesh(
   new THREE.MeshStandardMaterial({
     color: 0xffd56f,
     emissive: 0xffb42f,
-    emissiveIntensity: 2.4,
+    emissiveIntensity: 3.8,
     roughness: 0.16,
     metalness: 0.02
   })
@@ -277,19 +434,95 @@ const orbitSunBody = new THREE.Mesh(
 orbitSun.add(orbitSunBody);
 
 const orbitSunHalo = new THREE.Mesh(
-  new THREE.SphereGeometry(ORBIT_SUN_SIZE * 1.9, 24, 16),
+  new THREE.SphereGeometry(ORBIT_SUN_SIZE * 2.2, 24, 16),
   new THREE.MeshBasicMaterial({
     color: 0xffd781,
     transparent: true,
-    opacity: 0.18,
+    opacity: 0.28,
     side: THREE.DoubleSide
   })
 );
 orbitSun.add(orbitSunHalo);
 
-const orbitSunLight = new THREE.PointLight(0xffcf75, 14, 8, 1.6);
+const orbitSunLight = new THREE.PointLight(0xffcf75, 22, 9.5, 1.4);
 orbitSun.add(orbitSunLight);
 stage.add(orbitSun);
+
+const orbitMoon = new THREE.Group();
+const orbitMoonBody = new THREE.Mesh(
+  new THREE.SphereGeometry(ORBIT_MOON_SIZE, 32, 24),
+  new THREE.MeshStandardMaterial({
+    color: 0xd8deea,
+    emissive: 0xa8b6d4,
+    emissiveIntensity: 1.2,
+    roughness: 0.42,
+    metalness: 0.82
+  })
+);
+orbitMoon.add(orbitMoonBody);
+
+const orbitMoonHalo = new THREE.Mesh(
+  new THREE.SphereGeometry(ORBIT_MOON_SIZE * 2.4, 24, 16),
+  new THREE.MeshBasicMaterial({
+    color: 0xcfd8f7,
+    transparent: true,
+    opacity: 0.15,
+    side: THREE.DoubleSide
+  })
+);
+orbitMoon.add(orbitMoonHalo);
+
+const orbitMoonLight = new THREE.PointLight(0xdbe4ff, 5.6, 5.5, 1.9);
+orbitMoon.add(orbitMoonLight);
+stage.add(orbitMoon);
+
+const sunTrailGeometry = new THREE.BufferGeometry();
+const sunTrailMaterial = new THREE.LineBasicMaterial({
+  color: 0xffdc85,
+  transparent: true,
+  opacity: 0.95,
+  depthWrite: false,
+  depthTest: false
+});
+const sunTrail = new THREE.Line(sunTrailGeometry, sunTrailMaterial);
+stage.add(sunTrail);
+
+const sunTrailPointsGeometry = new THREE.BufferGeometry();
+const sunTrailPointsMaterial = new THREE.PointsMaterial({
+  color: 0xffef9a,
+  size: 0.09,
+  sizeAttenuation: true,
+  transparent: true,
+  opacity: 0.95,
+  depthWrite: false,
+  depthTest: false
+});
+const sunTrailPointsCloud = new THREE.Points(sunTrailPointsGeometry, sunTrailPointsMaterial);
+stage.add(sunTrailPointsCloud);
+
+const moonTrailGeometry = new THREE.BufferGeometry();
+const moonTrailMaterial = new THREE.LineBasicMaterial({
+  color: 0xd7def2,
+  transparent: true,
+  opacity: 0.72,
+  depthWrite: false,
+  depthTest: false
+});
+const moonTrail = new THREE.Line(moonTrailGeometry, moonTrailMaterial);
+stage.add(moonTrail);
+
+const moonTrailPointsGeometry = new THREE.BufferGeometry();
+const moonTrailPointsMaterial = new THREE.PointsMaterial({
+  color: 0xf4f7ff,
+  size: 0.07,
+  sizeAttenuation: true,
+  transparent: true,
+  opacity: 0.78,
+  depthWrite: false,
+  depthTest: false
+});
+const moonTrailPointsCloud = new THREE.Points(moonTrailPointsGeometry, moonTrailPointsMaterial);
+stage.add(moonTrailPointsCloud);
 
 function createOrbitTrack(radius, color, opacity) {
   const track = new THREE.Mesh(
@@ -313,9 +546,40 @@ stage.add(createOrbitTrack(TROPIC_CANCER_RADIUS, 0xffc96c, 0.82));
 stage.add(createOrbitTrack(EQUATOR_RADIUS, 0x7fd8ff, 0.78));
 stage.add(createOrbitTrack(TROPIC_CAPRICORN_RADIUS, 0xff93b6, 0.82));
 
-let orbitSunAngle = 0;
-let orbitSeasonPhase = -Math.PI / 2;
-let orbitMode = "auto";
+const simulationState = {
+  orbitMoonAngle: Math.PI * 0.35,
+  orbitMoonDriftPhase: Math.PI * 0.18,
+  orbitMode: "auto",
+  orbitSeasonPhase: -Math.PI / 2,
+  orbitSunAngle: 0
+};
+const astronomyState = {
+  enabled: true,
+  live: true,
+  selectedDate: new Date(),
+  lastTrailRebuildMs: 0,
+  lastInputSyncMs: 0
+};
+const dayNightState = {
+  enabled: true,
+  lastLatitudeDegrees: null,
+  lastLongitudeDegrees: null
+};
+const walkerState = {
+  enabled: false,
+  heading: Math.PI * 0.1,
+  pitch: -0.08,
+  position: new THREE.Vector3(),
+  velocity: new THREE.Vector3(),
+  lastLightLabel: "",
+  lastCoordinatesLabel: ""
+};
+const movementState = {
+  forward: false,
+  backward: false,
+  left: false,
+  right: false
+};
 
 const starCanvas = document.createElement("canvas");
 starCanvas.width = 1024;
@@ -337,237 +601,126 @@ for (let i = 0; i < 500; i += 1) {
 const skyTexture = new THREE.CanvasTexture(starCanvas);
 skyTexture.colorSpace = THREE.SRGBColorSpace;
 scene.background = skyTexture;
+const clock = new THREE.Clock();
 
-function setStatus(message) {
-  statusEl.textContent = message;
-}
+const constants = {
+  CAMERA_DEFAULT_FOV,
+  CAMERA_WALKER_FOV,
+  DAY_NIGHT_UPDATE_EPSILON,
+  DEFAULT_MAP_LABEL,
+  DEFAULT_MAP_PATH,
+  DISC_RADIUS,
+  DOME_BASE_Y,
+  DOME_RADIUS,
+  EQUATOR_RADIUS,
+  MOON_TRAIL_MAX_POINTS,
+  ORBIT_MOON_BASE_HEIGHT,
+  ORBIT_MOON_FREE_OFFSET,
+  ORBIT_MOON_HEIGHT_NORTH,
+  ORBIT_MOON_HEIGHT_SOUTH,
+  ORBIT_MOON_RADIUS_BASE,
+  ORBIT_MOON_RADIUS_SWAY,
+  ORBIT_MOON_SIZE,
+  ORBIT_RADIUS_AMPLITUDE,
+  ORBIT_RADIUS_MID,
+  ORBIT_SUN_HEIGHT_NORTH,
+  ORBIT_SUN_HEIGHT_SOUTH,
+  ORBIT_SURFACE_LINE_WIDTH,
+  REALITY_TRAIL_REFRESH_MS,
+  REALITY_TRAIL_WINDOW_MS,
+  SUN_TRAIL_MAX_POINTS,
+  TROPIC_CANCER_RADIUS,
+  TROPIC_CAPRICORN_RADIUS,
+  TROPIC_LATITUDE,
+  WALKER_EYE_HEIGHT,
+  WALKER_GUIDE_HALF_WIDTH,
+  WALKER_GUIDE_LENGTH,
+  WALKER_GUIDE_MARK_GAP,
+  WALKER_GUIDE_MARK_SIZE,
+  WALKER_GUIDE_START,
+  WALKER_GUIDE_Y,
+  WALKER_HORIZON_SHIFT_PX,
+  WALKER_LOOK_DISTANCE,
+  WALKER_SPEED,
+  WALKER_START_LATITUDE,
+  WALKER_START_LONGITUDE,
+  WALKER_SURFACE_OFFSET
+};
 
-function formatLatitude(latitude) {
-  const absolute = Math.abs(latitude).toFixed(1);
-  if (Math.abs(latitude) < 0.05) {
-    return `${absolute}°`;
-  }
-  return `${absolute}°${latitude >= 0 ? "N" : "S"}`;
-}
+const ui = {
+  applyObservationTimeButton,
+  dayNightOverlayEl,
+  dayNightSummaryEl,
+  firstPersonHorizonEl,
+  firstPersonOverlayEl,
+  moonCoordinatesEl,
+  observationTimeEl,
+  orbitLabelEl,
+  realityLiveEl,
+  realitySyncEl,
+  seasonDetailEl,
+  seasonLatitudeEl,
+  seasonSummaryEl,
+  statusEl,
+  sunCoordinatesEl,
+  timeSummaryEl,
+  walkerCoordinatesEl,
+  walkerLightEl,
+  walkerModeEl,
+  walkerSummaryEl
+};
 
-function updateOrbitModeUi() {
-  for (const button of orbitModeButtons) {
-    button.classList.toggle("active", button.dataset.orbitMode === orbitMode);
-  }
-  orbitLabelEl.textContent = orbitModes[orbitMode].label;
-}
+const textureApi = createTextureManager({
+  constants,
+  renderer,
+  topMaterial,
+  statusEl
+});
 
-function getCurrentOrbitRadius() {
-  if (orbitMode === "auto") {
-    return ORBIT_RADIUS_MID + Math.sin(orbitSeasonPhase) * ORBIT_RADIUS_AMPLITUDE;
-  }
-  return orbitModes[orbitMode].radius;
-}
+const cameraApi = createCameraController({
+  camera,
+  cameraState,
+  constants,
+  renderer,
+  walkerState
+});
 
-function updateSeasonPresentation(radius) {
-  const latitude = latitudeFromProjectedRadius(radius);
-  const ratio = THREE.MathUtils.clamp(latitude / TROPIC_LATITUDE, -1, 1);
-  const northWarmth = THREE.MathUtils.clamp((ratio + 1) / 2, 0, 1);
-  const southWarmth = 1 - northWarmth;
+const astronomyApi = createAstronomyController({
+  constants,
+  ui,
+  astronomyState,
+  dayNightState,
+  simulationState,
+  orbitModes,
+  orbitModeButtons,
+  dayNightCanvas,
+  dayNightCtx,
+  dayNightTexture,
+  dayNightOverlay,
+  orbitMoon,
+  orbitSun,
+  moonTrailGeometry,
+  moonTrailPointsGeometry,
+  northSeasonOverlay,
+  southSeasonOverlay,
+  sunTrailGeometry,
+  sunTrailPointsGeometry
+});
 
-  northSeasonOverlay.material.color.setRGB(
-    THREE.MathUtils.lerp(0.48, 1.0, northWarmth),
-    THREE.MathUtils.lerp(0.73, 0.83, northWarmth),
-    THREE.MathUtils.lerp(1.0, 0.49, northWarmth)
-  );
-  northSeasonOverlay.material.opacity = THREE.MathUtils.lerp(0.05, 0.18, Math.abs(ratio));
-
-  southSeasonOverlay.material.color.setRGB(
-    THREE.MathUtils.lerp(0.48, 1.0, southWarmth),
-    THREE.MathUtils.lerp(0.73, 0.83, southWarmth),
-    THREE.MathUtils.lerp(1.0, 0.49, southWarmth)
-  );
-  southSeasonOverlay.material.opacity = THREE.MathUtils.lerp(0.05, 0.18, Math.abs(ratio));
-
-  seasonLatitudeEl.textContent = formatLatitude(latitude);
-
-  if (Math.abs(latitude) < 1.2) {
-    seasonSummaryEl.textContent = "양 반구 전환기 / 적도 통과";
-    seasonDetailEl.textContent = "태양이 적도 부근 궤도를 지나면서 북반구와 남반구의 계절이 바뀌는 구간으로 표시합니다.";
-    return;
-  }
-
-  if (latitude > 0) {
-    seasonSummaryEl.textContent = "북반구 여름 / 남반구 겨울";
-    seasonDetailEl.textContent = "태양이 북쪽 회귀선 쪽으로 올라갈수록 북반구를 더 직접 비추고, 남반구는 상대적으로 멀어지는 설정으로 표현합니다.";
-    return;
-  }
-
-  seasonSummaryEl.textContent = "북반구 겨울 / 남반구 여름";
-  seasonDetailEl.textContent = "태양이 남쪽 회귀선 쪽으로 내려갈수록 남반구를 더 직접 비추고, 북반구는 상대적으로 멀어지는 설정으로 표현합니다.";
-}
-
-function drawOrbitCircle(ctx, size, radius, strokeStyle) {
-  ctx.beginPath();
-  ctx.arc(size / 2, size / 2, radius * (size / 2), 0, Math.PI * 2);
-  ctx.strokeStyle = strokeStyle;
-  ctx.lineWidth = Math.max(2, size * ORBIT_SURFACE_LINE_WIDTH);
-  ctx.shadowColor = strokeStyle;
-  ctx.shadowBlur = size * 0.01;
-  ctx.stroke();
-  ctx.shadowBlur = 0;
-}
-
-function drawSurfaceOrbitGuides(ctx, size) {
-  drawOrbitCircle(ctx, size, TROPIC_CANCER_RADIUS / DISC_RADIUS, "rgba(255, 203, 113, 0.92)");
-  drawOrbitCircle(ctx, size, EQUATOR_RADIUS / DISC_RADIUS, "rgba(133, 224, 255, 0.88)");
-  drawOrbitCircle(ctx, size, TROPIC_CAPRICORN_RADIUS / DISC_RADIUS, "rgba(255, 148, 188, 0.92)");
-}
-
-function configureTexture(texture) {
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  texture.wrapS = THREE.ClampToEdgeWrapping;
-  texture.wrapT = THREE.ClampToEdgeWrapping;
-  texture.needsUpdate = true;
-  topMaterial.map = texture;
-  topMaterial.needsUpdate = true;
-}
-
-function createSquareTextureFromImage(image) {
-  const side = Math.min(image.naturalWidth || image.width, image.naturalHeight || image.height);
-  const sourceWidth = image.naturalWidth || image.width;
-  const sourceHeight = image.naturalHeight || image.height;
-  const sourceX = Math.floor((sourceWidth - side) / 2);
-  const sourceY = Math.floor((sourceHeight - side) / 2);
-
-  const mapCanvas = document.createElement("canvas");
-  mapCanvas.width = side;
-  mapCanvas.height = side;
-
-  const ctx = mapCanvas.getContext("2d");
-  ctx.clearRect(0, 0, side, side);
-  ctx.drawImage(image, sourceX, sourceY, side, side, 0, 0, side, side);
-  drawSurfaceOrbitGuides(ctx, side);
-
-  const texture = new THREE.CanvasTexture(mapCanvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
-}
-
-function loadSquareTexture(url, successMessage, errorHandler, finalize) {
-  const image = new Image();
-  image.onload = () => {
-    configureTexture(createSquareTextureFromImage(image));
-    setStatus(successMessage);
-    if (finalize) {
-      finalize();
-    }
-  };
-  image.onerror = () => {
-    errorHandler();
-    if (finalize) {
-      finalize();
-    }
-  };
-  image.src = url;
-}
-
-function createFallbackTexture() {
-  const mapCanvas = document.createElement("canvas");
-  mapCanvas.width = 2048;
-  mapCanvas.height = 2048;
-  const ctx = mapCanvas.getContext("2d");
-
-  const gradient = ctx.createRadialGradient(1024, 1024, 120, 1024, 1024, 1024);
-  gradient.addColorStop(0, "#2d6d92");
-  gradient.addColorStop(1, "#0c3953");
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, 2048, 2048);
-
-  ctx.strokeStyle = "rgba(210, 233, 255, 0.3)";
-  ctx.lineWidth = 2;
-  for (let ring = 180; ring <= 950; ring += 110) {
-    ctx.beginPath();
-    ctx.arc(1024, 1024, ring, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-
-  for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 12) {
-    ctx.beginPath();
-    ctx.moveTo(1024, 1024);
-    ctx.lineTo(1024 + Math.cos(angle) * 960, 1024 + Math.sin(angle) * 960);
-    ctx.stroke();
-  }
-
-  ctx.fillStyle = "rgba(255,255,255,0.85)";
-  ctx.font = "bold 112px Space Grotesk, sans-serif";
-  ctx.textAlign = "center";
-  ctx.fillText("DROP A FLAT MAP", 1024, 980);
-  ctx.font = "40px Space Grotesk, sans-serif";
-  ctx.fillStyle = "rgba(235,245,255,0.9)";
-  ctx.fillText("or place assets/flat-earth-map.png", 1024, 1060);
-  drawSurfaceOrbitGuides(ctx, 2048);
-
-  const fallback = new THREE.CanvasTexture(mapCanvas);
-  fallback.colorSpace = THREE.SRGBColorSpace;
-  return fallback;
-}
-
-function applyFallback() {
-  configureTexture(createFallbackTexture());
-  setStatus("기본 텍스처가 없어 임시 맵을 표시 중입니다. 이미지를 올리면 교체됩니다.");
-}
-
-function loadDefaultTexture() {
-  loadSquareTexture(
-    DEFAULT_MAP_PATH,
-    `${DEFAULT_MAP_LABEL} 텍스처를 정사각형으로 맞춰 적용했습니다.`,
-    () => {
-      applyFallback();
-    }
-  );
-}
-
-function loadUserTexture(file) {
-  if (!file) {
-    return;
-  }
-
-  const objectUrl = URL.createObjectURL(file);
-  loadSquareTexture(
-    objectUrl,
-    `${file.name} 텍스처를 정사각형으로 맞춰 적용했습니다.`,
-    () => {
-      setStatus("이미지를 불러오지 못했습니다. PNG 또는 JPG를 다시 시도하세요.");
-    },
-    () => {
-      URL.revokeObjectURL(objectUrl);
-    }
-  );
-}
-
-function clampCamera() {
-  cameraState.targetPhi = Math.min(Math.max(cameraState.targetPhi, 0.3), 1.48);
-  cameraState.targetRadius = Math.min(Math.max(cameraState.targetRadius, 7.2), 16);
-}
-
-function updateCamera() {
-  cameraState.theta += (cameraState.targetTheta - cameraState.theta) * 0.08;
-  cameraState.phi += (cameraState.targetPhi - cameraState.phi) * 0.08;
-  cameraState.radius += (cameraState.targetRadius - cameraState.radius) * 0.08;
-
-  const sinPhi = Math.sin(cameraState.phi);
-  camera.position.set(
-    cameraState.radius * sinPhi * Math.sin(cameraState.theta),
-    cameraState.radius * Math.cos(cameraState.phi),
-    cameraState.radius * sinPhi * Math.cos(cameraState.theta)
-  );
-  camera.lookAt(0, 0.15, 0);
-}
-
-function resize() {
-  const width = window.innerWidth;
-  const height = window.innerWidth <= 820 ? Math.round(window.innerHeight * 0.66) : window.innerHeight;
-  renderer.setSize(width, height, false);
-  camera.aspect = width / height;
-  camera.updateProjectionMatrix();
-}
+const walkerApi = createWalkerController({
+  constants,
+  walkerState,
+  movementState,
+  ui,
+  walker,
+  walkerGuideGroup,
+  walkerGuideLeft,
+  walkerGuideRight,
+  walkerGuideCenter,
+  ambient,
+  keyLight,
+  rimLight
+});
 
 let isDragging = false;
 let previousX = 0;
@@ -588,9 +741,14 @@ canvas.addEventListener("pointermove", (event) => {
   const deltaX = event.clientX - previousX;
   const deltaY = event.clientY - previousY;
 
-  cameraState.targetTheta -= deltaX * 0.008;
-  cameraState.targetPhi += deltaY * 0.006;
-  clampCamera();
+  if (walkerState.enabled) {
+    walkerState.heading -= deltaX * 0.005;
+    walkerState.pitch = THREE.MathUtils.clamp(walkerState.pitch - (deltaY * 0.004), -0.42, 0.35);
+  } else {
+    cameraState.targetTheta -= deltaX * 0.008;
+    cameraState.targetPhi += deltaY * 0.006;
+    cameraApi.clampCamera();
+  }
 
   previousX = event.clientX;
   previousY = event.clientY;
@@ -611,51 +769,235 @@ canvas.addEventListener("pointerleave", stopDrag);
 canvas.addEventListener("pointercancel", stopDrag);
 
 canvas.addEventListener("wheel", (event) => {
+  if (walkerState.enabled) {
+    return;
+  }
   event.preventDefault();
   cameraState.targetRadius += event.deltaY * 0.01;
-  clampCamera();
+  cameraApi.clampCamera();
 }, { passive: false });
 
 uploadInput.addEventListener("change", (event) => {
   const file = event.target.files[0];
-  loadUserTexture(file);
+  textureApi.loadUserTexture(file);
 });
 
 resetButton.addEventListener("click", () => {
+  if (walkerState.enabled) {
+    walkerState.enabled = false;
+    walkerApi.syncWalkerUi();
+    walkerApi.updateWalkerAvatar();
+  }
   cameraState.targetTheta = -0.55;
   cameraState.targetPhi = 1.12;
   cameraState.targetRadius = 10.5;
 });
 
+walkerModeEl.addEventListener("change", () => {
+  walkerState.enabled = walkerModeEl.checked;
+  walkerApi.syncWalkerUi();
+  walkerApi.updateWalkerAvatar();
+});
+
+resetWalkerButton.addEventListener("click", () => {
+  walkerApi.resetWalkerPosition();
+  walkerState.heading = Math.PI * 0.1;
+  walkerState.pitch = -0.08;
+  walkerApi.updateWalkerAvatar();
+});
+
+realitySyncEl.addEventListener("change", () => {
+  if (realitySyncEl.checked) {
+    const nextDate = realityLiveEl.checked ? new Date() : new Date(observationTimeEl.value);
+    astronomyApi.enableRealityMode({
+      live: realityLiveEl.checked,
+      date: Number.isNaN(nextDate.getTime()) ? new Date() : nextDate
+    });
+    return;
+  }
+  astronomyApi.disableRealityMode();
+});
+
+realityLiveEl.addEventListener("change", () => {
+  if (!realitySyncEl.checked) {
+    realityLiveEl.checked = false;
+    return;
+  }
+  if (realityLiveEl.checked) {
+    astronomyApi.enableRealityMode({ live: true, date: new Date() });
+    return;
+  }
+  astronomyApi.applyObservationTimeSelection();
+});
+
+observationTimeEl.addEventListener("change", () => {
+  if (!realitySyncEl.checked) {
+    realitySyncEl.checked = true;
+  }
+  realityLiveEl.checked = false;
+  astronomyApi.applyObservationTimeSelection();
+});
+
+applyObservationTimeButton.addEventListener("click", () => {
+  if (!realitySyncEl.checked) {
+    realitySyncEl.checked = true;
+  }
+  realityLiveEl.checked = false;
+  astronomyApi.applyObservationTimeSelection();
+});
+
+setCurrentTimeButton.addEventListener("click", () => {
+  realitySyncEl.checked = true;
+  realityLiveEl.checked = true;
+  astronomyApi.enableRealityMode({ live: true, date: new Date() });
+});
+
+dayNightOverlayEl.addEventListener("change", () => {
+  dayNightState.enabled = dayNightOverlayEl.checked;
+  dayNightState.lastLatitudeDegrees = null;
+  dayNightState.lastLongitudeDegrees = null;
+  astronomyApi.syncDayNightOverlayUi();
+
+  if (astronomyState.enabled) {
+    const observationDate = astronomyState.live ? new Date() : astronomyState.selectedDate;
+    const snapshot = astronomyApi.getAstronomySnapshot(observationDate);
+    astronomyApi.updateDayNightOverlayFromSun(snapshot.sun.latitudeDegrees, snapshot.sun.longitudeDegrees, true);
+    return;
+  }
+
+  const demoSunGeo = getGeoFromProjectedPosition(orbitSun.position, DISC_RADIUS);
+  astronomyApi.updateDayNightOverlayFromSun(demoSunGeo.latitudeDegrees, demoSunGeo.longitudeDegrees, true);
+});
+
 for (const button of orbitModeButtons) {
   button.addEventListener("click", () => {
-    orbitMode = button.dataset.orbitMode;
-    updateOrbitModeUi();
+    simulationState.orbitMode = button.dataset.orbitMode;
+    astronomyApi.updateOrbitModeUi();
+    astronomyApi.resetSunTrail();
+    astronomyApi.resetMoonTrail();
   });
 }
 
-window.addEventListener("resize", resize);
+window.addEventListener("resize", () => {
+  cameraApi.resize();
+});
+
+window.addEventListener("keydown", (event) => {
+  if (event.repeat) {
+    return;
+  }
+
+  switch (event.code) {
+    case "KeyW":
+    case "ArrowUp":
+      movementState.forward = true;
+      event.preventDefault();
+      break;
+    case "KeyS":
+    case "ArrowDown":
+      movementState.backward = true;
+      event.preventDefault();
+      break;
+    case "KeyA":
+    case "ArrowLeft":
+      movementState.left = true;
+      event.preventDefault();
+      break;
+    case "KeyD":
+    case "ArrowRight":
+      movementState.right = true;
+      event.preventDefault();
+      break;
+    default:
+      break;
+  }
+});
+
+window.addEventListener("keyup", (event) => {
+  switch (event.code) {
+    case "KeyW":
+    case "ArrowUp":
+      movementState.forward = false;
+      break;
+    case "KeyS":
+    case "ArrowDown":
+      movementState.backward = false;
+      break;
+    case "KeyA":
+    case "ArrowLeft":
+      movementState.left = false;
+      break;
+    case "KeyD":
+    case "ArrowRight":
+      movementState.right = false;
+      break;
+    default:
+      break;
+  }
+});
 
 function animate() {
   requestAnimationFrame(animate);
-  stage.rotation.y += 0.0017;
-  orbitSunAngle += ORBIT_SUN_SPEED;
-  if (orbitMode === "auto") {
-    orbitSeasonPhase += ORBIT_SUN_SEASON_SPEED;
+  const deltaSeconds = Math.min(clock.getDelta(), 0.05);
+  let snapshot;
+
+  if (astronomyState.enabled) {
+    const observationDate = astronomyState.live ? new Date() : astronomyState.selectedDate;
+    if (astronomyState.live) {
+      astronomyState.selectedDate = observationDate;
+      astronomyApi.syncLiveObservationInput(observationDate);
+    }
+    stage.rotation.y += (0 - stage.rotation.y) * 0.08;
+    snapshot = astronomyApi.getAstronomySnapshot(observationDate);
+    astronomyApi.applyAstronomySnapshot(snapshot);
+  } else {
+    if (walkerState.enabled) {
+      stage.rotation.y += (0 - stage.rotation.y) * 0.08;
+    } else {
+      stage.rotation.y += 0.0017;
+    }
+    simulationState.orbitSunAngle += ORBIT_SUN_SPEED;
+    if (simulationState.orbitMode === "auto") {
+      simulationState.orbitSeasonPhase += ORBIT_SUN_SEASON_SPEED;
+    }
+    simulationState.orbitMoonAngle += ORBIT_MOON_SPEED;
+    simulationState.orbitMoonDriftPhase += ORBIT_MOON_DRIFT_SPEED;
+    const orbitRadius = astronomyApi.getCurrentOrbitRadius();
+    orbitSun.position.set(
+      Math.cos(simulationState.orbitSunAngle) * orbitRadius,
+      astronomyApi.getSunOrbitHeight(orbitRadius),
+      Math.sin(simulationState.orbitSunAngle) * orbitRadius
+    );
+    astronomyApi.updateSunTrail();
+    astronomyApi.updateMoonOrbit(orbitRadius);
+    astronomyApi.updateMoonTrail();
+    astronomyApi.updateSeasonPresentation(orbitRadius);
+    const demoSunGeo = getGeoFromProjectedPosition(orbitSun.position, DISC_RADIUS);
+    astronomyApi.updateDayNightOverlayFromSun(demoSunGeo.latitudeDegrees, demoSunGeo.longitudeDegrees);
+    snapshot = {
+      sun: demoSunGeo,
+      moon: getGeoFromProjectedPosition(orbitMoon.position, DISC_RADIUS)
+    };
   }
-  const orbitRadius = getCurrentOrbitRadius();
-  orbitSun.position.set(
-    Math.cos(orbitSunAngle) * orbitRadius,
-    ORBIT_SUN_HEIGHT,
-    Math.sin(orbitSunAngle) * orbitRadius
-  );
-  updateSeasonPresentation(orbitRadius);
-  updateCamera();
+
+  walkerApi.updateWalkerMovement(deltaSeconds);
+  walkerApi.updateWalkerAvatar();
+  walkerApi.updateWalkerPerspectiveGuides();
+  walkerApi.updateFirstPersonOverlay();
+  if (snapshot) {
+    walkerApi.updateWalkerUi(snapshot);
+  }
+  cameraApi.updateCamera();
   renderer.render(scene, camera);
 }
 
-resize();
-loadDefaultTexture();
-updateOrbitModeUi();
-updateSeasonPresentation(getCurrentOrbitRadius());
+cameraApi.resize();
+textureApi.loadDefaultTexture();
+walkerApi.resetWalkerPosition();
+walkerApi.updateWalkerAvatar();
+astronomyApi.setObservationInputValue(astronomyState.selectedDate);
+astronomyApi.syncDayNightOverlayUi();
+walkerApi.syncWalkerUi();
+astronomyApi.enableRealityMode({ live: true, date: astronomyState.selectedDate });
 animate();
+
