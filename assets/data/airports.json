@@ -1,0 +1,15 @@
+[
+  { "icao": "EDDF", "iata": "FRA", "name": "Frankfurt Airport", "city": "Frankfurt", "countryCode": "DE", "latitude": 50.0379, "longitude": 8.5622 },
+  { "icao": "EGLL", "iata": "LHR", "name": "Heathrow Airport", "city": "London", "countryCode": "GB", "latitude": 51.47, "longitude": -0.4543 },
+  { "icao": "FAOR", "iata": "JNB", "name": "O. R. Tambo International Airport", "city": "Johannesburg", "countryCode": "ZA", "latitude": -26.1337, "longitude": 28.242 },
+  { "icao": "KJFK", "iata": "JFK", "name": "John F. Kennedy International Airport", "city": "New York", "countryCode": "US", "latitude": 40.6413, "longitude": -73.7781 },
+  { "icao": "KLAX", "iata": "LAX", "name": "Los Angeles International Airport", "city": "Los Angeles", "countryCode": "US", "latitude": 33.9416, "longitude": -118.4085 },
+  { "icao": "LFPG", "iata": "CDG", "name": "Charles de Gaulle Airport", "city": "Paris", "countryCode": "FR", "latitude": 49.0097, "longitude": 2.5479 },
+  { "icao": "OMDB", "iata": "DXB", "name": "Dubai International Airport", "city": "Dubai", "countryCode": "AE", "latitude": 25.2532, "longitude": 55.3657 },
+  { "icao": "RJTT", "iata": "HND", "name": "Haneda Airport", "city": "Tokyo", "countryCode": "JP", "latitude": 35.5494, "longitude": 139.7798 },
+  { "icao": "RKSI", "iata": "ICN", "name": "Incheon International Airport", "city": "Seoul", "countryCode": "KR", "latitude": 37.4602, "longitude": 126.4407 },
+  { "icao": "SCEL", "iata": "SCL", "name": "Arturo Merino Benitez International Airport", "city": "Santiago", "countryCode": "CL", "latitude": -33.3929, "longitude": -70.7858 },
+  { "icao": "SBGR", "iata": "GRU", "name": "Sao Paulo Guarulhos Airport", "city": "Sao Paulo", "countryCode": "BR", "latitude": -23.4356, "longitude": -46.4731 },
+  { "icao": "WSSS", "iata": "SIN", "name": "Singapore Changi Airport", "city": "Singapore", "countryCode": "SG", "latitude": 1.3644, "longitude": 103.9915 },
+  { "icao": "YSSY", "iata": "SYD", "name": "Sydney Airport", "city": "Sydney", "countryCode": "AU", "latitude": -33.9399, "longitude": 151.1753 }
+]

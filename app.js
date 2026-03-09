@@ -3,9 +3,14 @@ import {
   getGeoFromProjectedPosition,
   projectedRadiusFromLatitude
 } from "./modules/geo-utils.js";
-import { getSolarAltitudeFactor } from "./modules/astronomy-utils.js";
+import {
+  getMoonHorizontalCoordinates,
+  getSolarAltitudeFactor,
+  getSunHorizontalCoordinates
+} from "./modules/astronomy-utils.js";
 import { createAstronomyController } from "./modules/astronomy-controller.js";
 import { createCameraController } from "./modules/camera-controller.js";
+import { createRouteSimulationController } from "./modules/route-simulation-controller.js";
 import { createTextureManager } from "./modules/texture-manager.js";
 import { createWalkerController } from "./modules/walker-controller.js";
 
@@ -23,6 +28,11 @@ const RIM_TOP_Y = RIM_CENTER_Y + (RIM_HEIGHT / 2);
 const RIM_BOTTOM_Y = RIM_CENTER_Y - (RIM_HEIGHT / 2);
 const DOME_RADIUS = RIM_INNER_RADIUS - 0.14;
 const DOME_BASE_Y = 0.46;
+const DOME_VERTICAL_SCALE = 0.78;
+const POLARIS_ALTITUDE_OFFSET = 0.08;
+const POLARIS_CORE_RADIUS = 0.07;
+const POLARIS_GLOW_SIZE = 0.42;
+const POLARIS_HALO_SIZE = 0.78;
 const TROPIC_LATITUDE = 23.44;
 const ORBIT_TRACK_HEIGHT = DOME_BASE_Y + 2.01;
 const ORBIT_SUN_HEIGHT = ORBIT_TRACK_HEIGHT + 0.12;
@@ -43,9 +53,6 @@ const ORBIT_MOON_HEIGHT_NORTH = ORBIT_MOON_BASE_HEIGHT + 0.16;
 const ORBIT_MOON_HEIGHT_SOUTH = ORBIT_MOON_BASE_HEIGHT - 0.26;
 const ORBIT_MOON_SIZE = 0.13;
 const ORBIT_MOON_SPEED = 0.0048;
-const ORBIT_MOON_DRIFT_SPEED = 0.0021;
-const ORBIT_MOON_RADIUS_SWAY = 0.7;
-const ORBIT_MOON_FREE_OFFSET = 0.42;
 const ORBIT_SURFACE_LINE_WIDTH = 0.0045;
 const SUN_TRAIL_MAX_POINTS = 720;
 const MOON_TRAIL_MAX_POINTS = 600;
@@ -53,9 +60,15 @@ const REALITY_TRAIL_WINDOW_MS = 12 * 60 * 60 * 1000;
 const REALITY_TRAIL_REFRESH_MS = 60 * 1000;
 const DAY_NIGHT_TEXTURE_SIZE = 512;
 const DAY_NIGHT_UPDATE_EPSILON = 0.18;
+const ANALEMMA_SURFACE_OFFSET = 0.046;
+const SKY_ANALEMMA_RADIUS = 2.4;
 const MAP_TEXTURE_SIZE = 4096;
 const CAMERA_DEFAULT_FOV = 42;
 const CAMERA_WALKER_FOV = 54;
+const CAMERA_TOPDOWN_DEFAULT_RADIUS = 8.2;
+const CAMERA_TOPDOWN_MIN_RADIUS = 5.9;
+const CAMERA_TOPDOWN_MAX_RADIUS = 18.5;
+const TOPDOWN_STAGE_SCALE = 1.32;
 const FOG_DEFAULT_NEAR = 14;
 const FOG_DEFAULT_FAR = 28;
 const FOG_WALKER_NEAR = 36;
@@ -63,6 +76,17 @@ const FOG_WALKER_FAR = 180;
 const FIRST_PERSON_STAGE_SCALE = 10;
 const FIRST_PERSON_PREP_DURATION_MS = 1250;
 const FIRST_PERSON_RETURN_DURATION_MS = 420;
+const FIRST_PERSON_CELESTIAL_NEAR_RADIUS = 32;
+const FIRST_PERSON_CELESTIAL_FAR_RADIUS = 74;
+const FIRST_PERSON_CELESTIAL_FADE_RANGE = 5;
+const FIRST_PERSON_SUN_SCALE = 3.8;
+const FIRST_PERSON_MOON_SCALE = 4.4;
+const FIRST_PERSON_SUN_RAY_LENGTH = 13;
+const FIRST_PERSON_SUN_RAY_WIDTH = 1.5;
+const FIRST_PERSON_SUN_RAY_SHORT_LENGTH = 7.4;
+const FIRST_PERSON_SUN_RAY_SHORT_WIDTH = 0.72;
+const FIRST_PERSON_SUN_RAY_ALIGNMENT_START = 0.72;
+const FIRST_PERSON_SUN_RAY_ALIGNMENT_END = 0.96;
 const SURFACE_Y = DISC_HEIGHT / 2;
 const WALKER_SURFACE_OFFSET = 0.045;
 const WALKER_EYE_HEIGHT = SURFACE_Y + 0.07;
@@ -87,7 +111,6 @@ const EQUATOR_RADIUS = projectedRadiusFromLatitude(0, DISC_RADIUS);
 const TROPIC_CAPRICORN_RADIUS = projectedRadiusFromLatitude(-TROPIC_LATITUDE, DISC_RADIUS);
 const ORBIT_RADIUS_MID = (TROPIC_CANCER_RADIUS + TROPIC_CAPRICORN_RADIUS) / 2;
 const ORBIT_RADIUS_AMPLITUDE = (TROPIC_CAPRICORN_RADIUS - TROPIC_CANCER_RADIUS) / 2;
-const ORBIT_MOON_RADIUS_BASE = ORBIT_RADIUS_MID + 0.35;
 
 const canvas = document.getElementById("scene");
 const firstPersonOverlayEl = document.getElementById("first-person-overlay");
@@ -100,6 +123,8 @@ const firstPersonPrepProgressEl = document.getElementById("first-person-prep-pro
 const statusEl = document.getElementById("status");
 const uploadInput = document.getElementById("map-upload");
 const resetButton = document.getElementById("reset-camera");
+const controlTabButtons = [...document.querySelectorAll("[data-control-tab]")];
+const controlTabPanels = [...document.querySelectorAll("[data-control-panel]")];
 const orbitLabelEl = document.getElementById("orbit-label");
 const orbitModeButtons = [...document.querySelectorAll("[data-orbit-mode]")];
 const seasonLatitudeEl = document.getElementById("season-latitude");
@@ -115,11 +140,38 @@ const sunCoordinatesEl = document.getElementById("sun-coordinates");
 const moonCoordinatesEl = document.getElementById("moon-coordinates");
 const dayNightOverlayEl = document.getElementById("day-night-overlay");
 const dayNightSummaryEl = document.getElementById("day-night-summary");
+const analemmaOverlayEl = document.getElementById("analemma-overlay");
+const analemmaSummaryEl = document.getElementById("analemma-summary");
+const skyAnalemmaOverlayEl = document.getElementById("sky-analemma-overlay");
+const skyAnalemmaSummaryEl = document.getElementById("sky-analemma-summary");
+const seasonalYearEl = document.getElementById("seasonal-year");
+const seasonalEventTimeEl = document.getElementById("seasonal-event-time");
+const seasonalMoonAnchorEl = document.getElementById("seasonal-moon-anchor");
+const seasonalMoonDriftEl = document.getElementById("seasonal-moon-drift");
+const seasonalMoonSummaryEl = document.getElementById("seasonal-moon-summary");
+const seasonalSunSummaryEl = document.getElementById("seasonal-sun-summary");
+const seasonalSunGridEl = document.getElementById("seasonal-sun-grid");
+const seasonalEventButtons = [...document.querySelectorAll("[data-seasonal-event]")];
 const walkerModeEl = document.getElementById("walker-mode");
 const walkerSummaryEl = document.getElementById("walker-summary");
 const walkerCoordinatesEl = document.getElementById("walker-coordinates");
 const walkerLightEl = document.getElementById("walker-light");
 const resetWalkerButton = document.getElementById("reset-walker");
+const routeDatasetStatusEl = document.getElementById("route-dataset-status");
+const routeSelectEl = document.getElementById("route-select");
+const routeSpeedEl = document.getElementById("route-speed");
+const routeSpeedValueEl = document.getElementById("route-speed-value");
+const routePlaybackButton = document.getElementById("route-playback");
+const routeResetButton = document.getElementById("route-reset");
+const routeSummaryEl = document.getElementById("route-summary");
+const routeLegEl = document.getElementById("route-leg");
+const routeAircraftEl = document.getElementById("route-aircraft");
+const routeOriginEl = document.getElementById("route-origin");
+const routeDestinationEl = document.getElementById("route-destination");
+const routeCountriesEl = document.getElementById("route-countries");
+const routeDurationEl = document.getElementById("route-duration");
+const routeProgressEl = document.getElementById("route-progress");
+const routeGeoSummaryEl = document.getElementById("route-geo-summary");
 
 const orbitModes = {
   auto: {
@@ -139,6 +191,29 @@ const orbitModes = {
   }
 };
 
+const seasonalEventButtonLabels = {
+  springEquinox: "Spring Equinox",
+  summerSolstice: "Summer Solstice",
+  autumnEquinox: "Autumn Equinox",
+  winterSolstice: "Winter Solstice"
+};
+
+for (const button of seasonalEventButtons) {
+  button.textContent = seasonalEventButtonLabels[button.dataset.seasonalEvent] ?? button.textContent;
+}
+
+function setControlTab(tabKey) {
+  for (const button of controlTabButtons) {
+    button.classList.toggle("active", button.dataset.controlTab === tabKey);
+  }
+
+  for (const panel of controlTabPanels) {
+    const isActive = panel.dataset.controlPanel === tabKey;
+    panel.classList.toggle("active", isActive);
+    panel.hidden = !isActive;
+  }
+}
+
 const renderer = new THREE.WebGLRenderer({
   canvas,
   antialias: true,
@@ -153,12 +228,12 @@ scene.fog = new THREE.Fog(0x06101d, FOG_DEFAULT_NEAR, FOG_DEFAULT_FAR);
 const camera = new THREE.PerspectiveCamera(CAMERA_DEFAULT_FOV, 1, 0.1, 100);
 
 const cameraState = {
-  radius: 10.5,
+  radius: CAMERA_TOPDOWN_DEFAULT_RADIUS,
   theta: -0.55,
   phi: 1.12,
   targetTheta: -0.55,
   targetPhi: 1.12,
-  targetRadius: 10.5
+  targetRadius: CAMERA_TOPDOWN_DEFAULT_RADIUS
 };
 
 const stage = new THREE.Group();
@@ -251,6 +326,61 @@ southSeasonOverlay.position.y = (DISC_HEIGHT / 2) + 0.011;
 southSeasonOverlay.renderOrder = 7;
 scalableStage.add(southSeasonOverlay);
 
+const analemmaProjectionGeometry = new THREE.BufferGeometry();
+const analemmaProjectionMaterial = new THREE.LineBasicMaterial({
+  color: 0xffb25d,
+  transparent: true,
+  opacity: 0.94,
+  depthWrite: false,
+  depthTest: false
+});
+const analemmaProjection = new THREE.Line(analemmaProjectionGeometry, analemmaProjectionMaterial);
+analemmaProjection.renderOrder = 14;
+scalableStage.add(analemmaProjection);
+
+const analemmaProjectionPointsGeometry = new THREE.BufferGeometry();
+const analemmaProjectionPointsMaterial = new THREE.PointsMaterial({
+  color: 0xfff1be,
+  size: 0.048,
+  sizeAttenuation: true,
+  transparent: true,
+  opacity: 0.92,
+  depthWrite: false,
+  depthTest: false
+});
+const analemmaProjectionPoints = new THREE.Points(
+  analemmaProjectionPointsGeometry,
+  analemmaProjectionPointsMaterial
+);
+analemmaProjectionPoints.renderOrder = 15;
+scalableStage.add(analemmaProjectionPoints);
+
+const skyAnalemmaGeometry = new THREE.BufferGeometry();
+const skyAnalemmaMaterial = new THREE.LineBasicMaterial({
+  color: 0x9ed9ff,
+  transparent: true,
+  opacity: 0.96,
+  depthWrite: false,
+  depthTest: false
+});
+const skyAnalemma = new THREE.LineSegments(skyAnalemmaGeometry, skyAnalemmaMaterial);
+skyAnalemma.renderOrder = 16;
+scalableStage.add(skyAnalemma);
+
+const skyAnalemmaPointsGeometry = new THREE.BufferGeometry();
+const skyAnalemmaPointsMaterial = new THREE.PointsMaterial({
+  color: 0xe9f7ff,
+  size: 0.052,
+  sizeAttenuation: true,
+  transparent: true,
+  opacity: 0.94,
+  depthWrite: false,
+  depthTest: false
+});
+const skyAnalemmaPoints = new THREE.Points(skyAnalemmaPointsGeometry, skyAnalemmaPointsMaterial);
+skyAnalemmaPoints.renderOrder = 17;
+scalableStage.add(skyAnalemmaPoints);
+
 const iceOuterMaterial = new THREE.MeshStandardMaterial({
   color: 0xf3f7ff,
   roughness: 0.72,
@@ -334,6 +464,7 @@ const dome = new THREE.Mesh(
     side: THREE.DoubleSide
   })
 );
+dome.scale.y = DOME_VERTICAL_SCALE;
 dome.position.y = DOME_BASE_Y;
 scalableStage.add(dome);
 
@@ -350,6 +481,67 @@ const domeRing = new THREE.Mesh(
 domeRing.rotation.x = Math.PI / 2;
 domeRing.position.y = DOME_BASE_Y;
 scalableStage.add(domeRing);
+
+const polarisTextureCanvas = document.createElement("canvas");
+polarisTextureCanvas.width = 256;
+polarisTextureCanvas.height = 256;
+const polarisTextureCtx = polarisTextureCanvas.getContext("2d");
+const polarisGlowGradient = polarisTextureCtx.createRadialGradient(128, 128, 0, 128, 128, 128);
+polarisGlowGradient.addColorStop(0, "rgba(255,255,255,1)");
+polarisGlowGradient.addColorStop(0.18, "rgba(214,238,255,0.98)");
+polarisGlowGradient.addColorStop(0.42, "rgba(120,184,255,0.42)");
+polarisGlowGradient.addColorStop(1, "rgba(120,184,255,0)");
+polarisTextureCtx.fillStyle = polarisGlowGradient;
+polarisTextureCtx.fillRect(0, 0, polarisTextureCanvas.width, polarisTextureCanvas.height);
+const polarisGlowTexture = new THREE.CanvasTexture(polarisTextureCanvas);
+polarisGlowTexture.colorSpace = THREE.SRGBColorSpace;
+
+const polaris = new THREE.Group();
+const polarisCore = new THREE.Mesh(
+  new THREE.SphereGeometry(POLARIS_CORE_RADIUS, 24, 24),
+  new THREE.MeshBasicMaterial({
+    color: 0xf5fbff,
+    transparent: true,
+    opacity: 0.98,
+    depthTest: false,
+    depthWrite: false
+  })
+);
+polarisCore.renderOrder = 26;
+polaris.add(polarisCore);
+
+const polarisGlow = new THREE.Sprite(
+  new THREE.SpriteMaterial({
+    map: polarisGlowTexture,
+    color: 0xbfe0ff,
+    transparent: true,
+    opacity: 0.92,
+    blending: THREE.AdditiveBlending,
+    depthTest: false,
+    depthWrite: false
+  })
+);
+polarisGlow.scale.setScalar(POLARIS_GLOW_SIZE);
+polarisGlow.renderOrder = 25;
+polaris.add(polarisGlow);
+
+const polarisHalo = new THREE.Sprite(
+  new THREE.SpriteMaterial({
+    map: polarisGlowTexture,
+    color: 0x7ec6ff,
+    transparent: true,
+    opacity: 0.34,
+    blending: THREE.AdditiveBlending,
+    depthTest: false,
+    depthWrite: false
+  })
+);
+polarisHalo.scale.setScalar(POLARIS_HALO_SIZE);
+polarisHalo.renderOrder = 24;
+polaris.add(polarisHalo);
+
+polaris.position.set(0, DOME_BASE_Y + (DOME_RADIUS * DOME_VERTICAL_SCALE) + POLARIS_ALTITUDE_OFFSET, 0);
+scalableStage.add(polaris);
 
 const glow = new THREE.Mesh(
   new THREE.CircleGeometry(6.7, 96),
@@ -477,6 +669,91 @@ const orbitSunLight = new THREE.PointLight(0xffcf75, ORBIT_SUN_LIGHT_INTENSITY, 
 orbitSun.add(orbitSunLight);
 scalableStage.add(orbitSun);
 
+const observerSun = orbitSun.clone(true);
+const observerSunBody = observerSun.children[0];
+observerSunBody.material = observerSunBody.material.clone();
+const observerSunHalo = observerSun.children[1];
+observerSunHalo.material = observerSunHalo.material.clone();
+const observerSunLight = observerSun.children[2];
+observerSun.visible = false;
+scene.add(observerSun);
+
+function createSunRayTexture() {
+  const width = 256;
+  const height = 1024;
+  const rayCanvas = document.createElement("canvas");
+  rayCanvas.width = width;
+  rayCanvas.height = height;
+  const rayCtx = rayCanvas.getContext("2d");
+  const rayImage = rayCtx.createImageData(width, height);
+  const { data } = rayImage;
+
+  for (let y = 0; y < height; y += 1) {
+    const progress = y / (height - 1);
+    const verticalFade = (1 - progress) ** 1.8;
+    const beamHalfWidth = (width * 0.08) + ((1 - progress) * width * 0.16);
+
+    for (let x = 0; x < width; x += 1) {
+      const index = ((y * width) + x) * 4;
+      const centeredX = Math.abs(x - (width / 2));
+      const horizontalFade = Math.exp(-((centeredX / beamHalfWidth) ** 2) * 2.6);
+      const glowBoost = Math.exp(-((centeredX / (width * 0.12)) ** 2) * 4.2);
+      const alpha = THREE.MathUtils.clamp(
+        (verticalFade * horizontalFade * 255) + (glowBoost * verticalFade * 56),
+        0,
+        255
+      );
+
+      data[index] = 255;
+      data[index + 1] = 245;
+      data[index + 2] = 214;
+      data[index + 3] = alpha;
+    }
+  }
+
+  rayCtx.putImageData(rayImage, 0, 0);
+  const texture = new THREE.CanvasTexture(rayCanvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+const sunRayTexture = createSunRayTexture();
+const firstPersonSunRayGroup = new THREE.Group();
+firstPersonSunRayGroup.visible = false;
+scene.add(firstPersonSunRayGroup);
+
+function createSunRayMesh(width, length, rotationZ, opacity, pulseOffset) {
+  const geometry = new THREE.PlaneGeometry(width, length);
+  geometry.translate(0, -(length * 0.5), 0);
+  const material = new THREE.MeshBasicMaterial({
+    map: sunRayTexture,
+    color: 0xffe8ad,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    depthTest: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending
+  });
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.rotation.z = rotationZ;
+  mesh.renderOrder = 26;
+  mesh.userData.baseOpacity = opacity;
+  mesh.userData.pulseOffset = pulseOffset;
+  return mesh;
+}
+
+const firstPersonSunRayMeshes = [
+  createSunRayMesh(FIRST_PERSON_SUN_RAY_WIDTH, FIRST_PERSON_SUN_RAY_LENGTH, 0, 0.18, 0),
+  createSunRayMesh(FIRST_PERSON_SUN_RAY_WIDTH, FIRST_PERSON_SUN_RAY_LENGTH, Math.PI / 3, 0.14, 0.8),
+  createSunRayMesh(FIRST_PERSON_SUN_RAY_WIDTH, FIRST_PERSON_SUN_RAY_LENGTH, (Math.PI * 2) / 3, 0.14, 1.6),
+  createSunRayMesh(FIRST_PERSON_SUN_RAY_SHORT_WIDTH, FIRST_PERSON_SUN_RAY_SHORT_LENGTH, Math.PI / 6, 0.2, 0.35),
+  createSunRayMesh(FIRST_PERSON_SUN_RAY_SHORT_WIDTH, FIRST_PERSON_SUN_RAY_SHORT_LENGTH, Math.PI / 2, 0.17, 1.15),
+  createSunRayMesh(FIRST_PERSON_SUN_RAY_SHORT_WIDTH, FIRST_PERSON_SUN_RAY_SHORT_LENGTH, (Math.PI * 5) / 6, 0.17, 1.95)
+];
+firstPersonSunRayGroup.add(...firstPersonSunRayMeshes);
+
 const orbitMoon = new THREE.Group();
 const orbitMoonBody = new THREE.Mesh(
   new THREE.SphereGeometry(ORBIT_MOON_SIZE, 32, 24),
@@ -485,7 +762,9 @@ const orbitMoonBody = new THREE.Mesh(
     emissive: 0xa8b6d4,
     emissiveIntensity: 1.2,
     roughness: 0.42,
-    metalness: 0.82
+    metalness: 0.82,
+    transparent: true,
+    opacity: 1
   })
 );
 orbitMoon.add(orbitMoonBody);
@@ -504,6 +783,15 @@ orbitMoon.add(orbitMoonHalo);
 const orbitMoonLight = new THREE.PointLight(0xdbe4ff, 5.6, 5.5, 1.9);
 orbitMoon.add(orbitMoonLight);
 scalableStage.add(orbitMoon);
+
+const observerMoon = orbitMoon.clone(true);
+const observerMoonBody = observerMoon.children[0];
+observerMoonBody.material = observerMoonBody.material.clone();
+const observerMoonHalo = observerMoon.children[1];
+observerMoonHalo.material = observerMoonHalo.material.clone();
+const observerMoonLight = observerMoon.children[2];
+observerMoon.visible = false;
+scene.add(observerMoon);
 
 const sunTrailGeometry = new THREE.BufferGeometry();
 const sunTrailMaterial = new THREE.LineBasicMaterial({
@@ -616,7 +904,6 @@ scalableStage.add(createOrbitTrack(TROPIC_CAPRICORN_RADIUS, 0xff93b6, 0.88, ORBI
 
 const simulationState = {
   orbitMoonAngle: Math.PI * 0.35,
-  orbitMoonDriftPhase: Math.PI * 0.18,
   orbitMode: "auto",
   orbitSeasonPhase: -Math.PI / 2,
   orbitSunAngle: 0
@@ -632,6 +919,20 @@ const dayNightState = {
   enabled: true,
   lastLatitudeDegrees: null,
   lastLongitudeDegrees: null
+};
+const analemmaState = {
+  enabled: true,
+  lastProjectionKey: ""
+};
+const seasonalMoonState = {
+  selectedEventKey: null,
+  selectedYear: astronomyState.selectedDate.getFullYear()
+};
+const skyAnalemmaState = {
+  enabled: true,
+  lastProjectionKey: "",
+  lastVisibleSamples: 0,
+  lastTotalSamples: 0
 };
 const walkerState = {
   enabled: false,
@@ -654,8 +955,10 @@ const renderState = {
   prepStartedAtMs: 0,
   preparing: false,
   progress: 0,
+  stageScale: TOPDOWN_STAGE_SCALE,
   targetFogFar: FOG_DEFAULT_FAR,
   targetFogNear: FOG_DEFAULT_NEAR,
+  targetStageScale: TOPDOWN_STAGE_SCALE,
   targetVisualScale: 1,
   transitionDurationMs: FIRST_PERSON_RETURN_DURATION_MS,
   transitionToken: 0,
@@ -686,8 +989,13 @@ const clock = new THREE.Clock();
 
 const constants = {
   CAMERA_DEFAULT_FOV,
+  CAMERA_TOPDOWN_DEFAULT_RADIUS,
+  CAMERA_TOPDOWN_MAX_RADIUS,
+  CAMERA_TOPDOWN_MIN_RADIUS,
   CAMERA_WALKER_FOV,
   DAY_NIGHT_UPDATE_EPSILON,
+  ANALEMMA_SURFACE_OFFSET,
+  SKY_ANALEMMA_RADIUS,
   MAP_TEXTURE_SIZE,
   DEFAULT_MAP_LABEL,
   DEFAULT_MAP_PATH,
@@ -702,14 +1010,12 @@ const constants = {
   FOG_WALKER_FAR,
   FOG_WALKER_NEAR,
   ORBIT_MOON_BASE_HEIGHT,
-  ORBIT_MOON_FREE_OFFSET,
   ORBIT_MOON_HEIGHT_NORTH,
   ORBIT_MOON_HEIGHT_SOUTH,
-  ORBIT_MOON_RADIUS_BASE,
-  ORBIT_MOON_RADIUS_SWAY,
   ORBIT_MOON_SIZE,
   ORBIT_RADIUS_AMPLITUDE,
   ORBIT_RADIUS_MID,
+  SURFACE_Y,
   ORBIT_SUN_HEIGHT,
   ORBIT_SUN_HEIGHT_NORTH,
   ORBIT_SUN_HEIGHT_SOUTH,
@@ -739,6 +1045,8 @@ const constants = {
 
 const ui = {
   applyObservationTimeButton,
+  analemmaOverlayEl,
+  analemmaSummaryEl,
   dayNightOverlayEl,
   dayNightSummaryEl,
   firstPersonHorizonEl,
@@ -748,9 +1056,18 @@ const ui = {
   orbitLabelEl,
   realityLiveEl,
   realitySyncEl,
+  seasonalEventTimeEl,
   seasonDetailEl,
   seasonLatitudeEl,
   seasonSummaryEl,
+  seasonalMoonAnchorEl,
+  seasonalMoonDriftEl,
+  seasonalMoonSummaryEl,
+  seasonalSunGridEl,
+  seasonalSunSummaryEl,
+  seasonalYearEl,
+  skyAnalemmaOverlayEl,
+  skyAnalemmaSummaryEl,
   statusEl,
   sunCoordinatesEl,
   timeSummaryEl,
@@ -780,22 +1097,31 @@ const astronomyApi = createAstronomyController({
   constants,
   ui,
   astronomyState,
+  seasonalMoonState,
+  analemmaState,
+  skyAnalemmaState,
   dayNightState,
   simulationState,
+  walkerState,
   orbitModes,
   orbitModeButtons,
+  seasonalEventButtons,
   dayNightCanvas,
   dayNightCtx,
   dayNightTexture,
   dayNightOverlay,
-  orbitMoon,
+  analemmaProjectionGeometry,
+  analemmaProjectionPointsGeometry,
+  skyAnalemmaGeometry,
+  skyAnalemmaPointsGeometry,
   orbitSun,
+  orbitMoon,
+  sunTrailGeometry,
+  sunTrailPointsGeometry,
   moonTrailGeometry,
   moonTrailPointsGeometry,
   northSeasonOverlay,
-  southSeasonOverlay,
-  sunTrailGeometry,
-  sunTrailPointsGeometry
+  southSeasonOverlay
 });
 
 const walkerApi = createWalkerController({
@@ -814,7 +1140,39 @@ const walkerApi = createWalkerController({
   rimLight
 });
 
+const routeSimulationApi = createRouteSimulationController({
+  constants,
+  scalableStage,
+  ui: {
+    routeAircraftEl,
+    routeCountriesEl,
+    routeDatasetStatusEl,
+    routeDestinationEl,
+    routeDurationEl,
+    routeGeoSummaryEl,
+    routeLegEl,
+    routeOriginEl,
+    routePlaybackButton,
+    routeProgressEl,
+    routeResetButton,
+    routeSelectEl,
+    routeSpeedEl,
+    routeSpeedValueEl,
+    routeSummaryEl
+  }
+});
+
 const tempPreparationLookTarget = new THREE.Vector3();
+const tempObserverNorthAxis = new THREE.Vector3();
+const tempObserverEastAxis = new THREE.Vector3();
+const tempObserverSkyOrigin = new THREE.Vector3();
+const tempObserverSkyPoint = new THREE.Vector3();
+const tempObserverRelative = new THREE.Vector3();
+const tempDemoSunSourceWorld = new THREE.Vector3();
+const tempDemoMoonSourceWorld = new THREE.Vector3();
+const tempSunWorldPosition = new THREE.Vector3();
+const tempSunViewDirection = new THREE.Vector3();
+const tempCameraForward = new THREE.Vector3();
 
 function syncPreparationPresentation() {
   if (!renderState.preparing) {
@@ -856,14 +1214,84 @@ function syncPreparationPresentation() {
 }
 
 function updateRenderState() {
+  renderState.stageScale += (renderState.targetStageScale - renderState.stageScale) * 0.08;
   renderState.visualScale += (renderState.targetVisualScale - renderState.visualScale) * 0.08;
   scene.fog.near += (renderState.targetFogNear - scene.fog.near) * 0.08;
   scene.fog.far += (renderState.targetFogFar - scene.fog.far) * 0.08;
+  stage.scale.setScalar(renderState.stageScale);
   scalableStage.scale.set(renderState.visualScale, 1, renderState.visualScale);
 }
 
-function updateObserverSunVisibility(snapshot) {
+function getObserverSkyAxes(observerPosition, observerLongitudeDegrees) {
+  const planarLength = Math.hypot(observerPosition.x, observerPosition.z);
+
+  if (planarLength > 0.0001) {
+    tempObserverNorthAxis.set(-observerPosition.x / planarLength, 0, -observerPosition.z / planarLength);
+    tempObserverEastAxis.set(-tempObserverNorthAxis.z, 0, tempObserverNorthAxis.x);
+    return;
+  }
+
+  const longitudeRadians = observerLongitudeDegrees * Math.PI / 180;
+  tempObserverNorthAxis.set(Math.cos(longitudeRadians), 0, -Math.sin(longitudeRadians));
+  tempObserverEastAxis.set(Math.sin(longitudeRadians), 0, Math.cos(longitudeRadians));
+}
+
+function getObserverSkyDistance(altitudeDegrees) {
+  const altitudeFactor = THREE.MathUtils.clamp((altitudeDegrees + 2) / 92, 0, 1);
+  return THREE.MathUtils.lerp(
+    FIRST_PERSON_CELESTIAL_FAR_RADIUS,
+    FIRST_PERSON_CELESTIAL_NEAR_RADIUS,
+    altitudeFactor
+  );
+}
+
+function positionBodyInObserverSky(body, horizontal, observerGeo) {
+  const skyDistance = getObserverSkyDistance(horizontal.altitudeDegrees);
+  const horizontalRadius = Math.cos(horizontal.altitudeRadians) * skyDistance;
+
+  getObserverSkyAxes(walkerState.position, observerGeo.longitudeDegrees);
+  tempObserverSkyOrigin.set(
+    walkerState.position.x * renderState.visualScale,
+    constants.WALKER_EYE_HEIGHT,
+    walkerState.position.z * renderState.visualScale
+  );
+  tempObserverSkyPoint.copy(tempObserverSkyOrigin)
+    .addScaledVector(tempObserverNorthAxis, horizontalRadius * Math.cos(horizontal.azimuthRadians))
+    .addScaledVector(tempObserverEastAxis, horizontalRadius * Math.sin(horizontal.azimuthRadians))
+    .addScaledVector(THREE.Object3D.DEFAULT_UP, Math.sin(horizontal.altitudeRadians) * skyDistance);
+
+  body.position.copy(tempObserverSkyPoint);
+}
+
+function getHorizontalFromWorldPosition(sourceWorldPosition, observerGeo) {
+  getObserverSkyAxes(walkerState.position, observerGeo.longitudeDegrees);
+  tempObserverSkyOrigin.set(
+    walkerState.position.x * renderState.visualScale,
+    constants.WALKER_EYE_HEIGHT,
+    walkerState.position.z * renderState.visualScale
+  );
+  tempObserverRelative.copy(sourceWorldPosition).sub(tempObserverSkyOrigin);
+
+  const northComponent = tempObserverRelative.dot(tempObserverNorthAxis);
+  const eastComponent = tempObserverRelative.dot(tempObserverEastAxis);
+  const upComponent = tempObserverRelative.y;
+  const planarDistance = Math.hypot(northComponent, eastComponent);
+  const altitudeRadians = Math.atan2(upComponent, Math.max(planarDistance, 0.0001));
+  const azimuthRadians = Math.atan2(eastComponent, northComponent);
+
+  return {
+    altitudeDegrees: THREE.MathUtils.radToDeg(altitudeRadians),
+    azimuthDegrees: THREE.MathUtils.euclideanModulo(THREE.MathUtils.radToDeg(azimuthRadians), 360),
+    altitudeRadians,
+    azimuthRadians
+  };
+}
+
+function updateObserverCelestialPerspective(snapshot) {
   if (!walkerState.enabled || !snapshot) {
+    observerSun.visible = false;
+    observerMoon.visible = false;
+    firstPersonSunRayGroup.visible = false;
     orbitSun.visible = true;
     orbitSun.renderOrder = 20;
     sunTrail.visible = true;
@@ -876,36 +1304,121 @@ function updateObserverSunVisibility(snapshot) {
     orbitSunHalo.material.depthTest = true;
     orbitSunHalo.material.depthWrite = false;
     orbitSunLight.intensity = ORBIT_SUN_LIGHT_INTENSITY;
+    orbitMoon.visible = true;
+    orbitMoon.renderOrder = 18;
+    moonTrail.visible = true;
+    moonTrailPointsCloud.visible = true;
+    orbitMoonBody.material.opacity = 1;
+    orbitMoonBody.material.emissiveIntensity = 1.2;
+    orbitMoonBody.material.depthTest = false;
+    orbitMoonBody.material.depthWrite = false;
+    orbitMoonHalo.material.opacity = 0.15;
+    orbitMoonHalo.material.depthTest = true;
+    orbitMoonHalo.material.depthWrite = false;
+    orbitMoonLight.intensity = 5.6;
     return;
   }
 
   const observerGeo = getGeoFromProjectedPosition(walkerState.position, constants.DISC_RADIUS);
+  const sunHorizontal = astronomyState.enabled
+    ? getSunHorizontalCoordinates(
+      snapshot.date,
+      observerGeo.latitudeDegrees,
+      observerGeo.longitudeDegrees
+    )
+    : getHorizontalFromWorldPosition(orbitSun.getWorldPosition(tempDemoSunSourceWorld), observerGeo);
+  const moonHorizontal = astronomyState.enabled
+    ? getMoonHorizontalCoordinates(
+      snapshot.date,
+      observerGeo.latitudeDegrees,
+      observerGeo.longitudeDegrees
+    )
+    : getHorizontalFromWorldPosition(orbitMoon.getWorldPosition(tempDemoMoonSourceWorld), observerGeo);
   const solarFactor = getSolarAltitudeFactor(
     observerGeo.latitudeDegrees,
     observerGeo.longitudeDegrees,
     snapshot.sun.latitudeDegrees,
     snapshot.sun.longitudeDegrees
   );
-  const targetVisibility = THREE.MathUtils.clamp((solarFactor + 0.04) / 0.18, 0, 1);
+  const sunTargetVisibility = THREE.MathUtils.clamp(
+    (sunHorizontal.altitudeDegrees + FIRST_PERSON_CELESTIAL_FADE_RANGE) / (FIRST_PERSON_CELESTIAL_FADE_RANGE * 2),
+    0,
+    1
+  );
+  const moonTargetVisibility = THREE.MathUtils.clamp(
+    (moonHorizontal.altitudeDegrees + FIRST_PERSON_CELESTIAL_FADE_RANGE) / (FIRST_PERSON_CELESTIAL_FADE_RANGE * 2),
+    0,
+    1
+  );
 
-  orbitSun.renderOrder = 0;
-  orbitSun.visible = targetVisibility > 0.01;
-  sunTrail.visible = targetVisibility > 0.01;
-  sunTrailPointsCloud.visible = targetVisibility > 0.01;
-  orbitSunBody.material.depthTest = true;
-  orbitSunBody.material.depthWrite = true;
-  orbitSunBody.material.opacity += (targetVisibility - orbitSunBody.material.opacity) * 0.18;
-  orbitSunBody.material.emissiveIntensity += (
-    (ORBIT_SUN_BODY_EMISSIVE_INTENSITY * targetVisibility) - orbitSunBody.material.emissiveIntensity
+  positionBodyInObserverSky(observerSun, sunHorizontal, observerGeo);
+  positionBodyInObserverSky(observerMoon, moonHorizontal, observerGeo);
+  observerSun.scale.setScalar(FIRST_PERSON_SUN_SCALE);
+  observerMoon.scale.setScalar(FIRST_PERSON_MOON_SCALE);
+
+  orbitSun.visible = false;
+  sunTrail.visible = false;
+  sunTrailPointsCloud.visible = false;
+  observerSun.renderOrder = 24;
+  observerSun.visible = sunTargetVisibility > 0.01;
+  observerSunBody.material.depthTest = false;
+  observerSunBody.material.depthWrite = false;
+  observerSunBody.material.opacity += (sunTargetVisibility - observerSunBody.material.opacity) * 0.18;
+  observerSunBody.material.emissiveIntensity += (
+    (ORBIT_SUN_BODY_EMISSIVE_INTENSITY * sunTargetVisibility) - observerSunBody.material.emissiveIntensity
   ) * 0.18;
-  orbitSunHalo.material.depthTest = true;
-  orbitSunHalo.material.depthWrite = false;
-  orbitSunHalo.material.opacity += (
-    (ORBIT_SUN_HALO_OPACITY * targetVisibility) - orbitSunHalo.material.opacity
+  observerSunHalo.material.depthTest = false;
+  observerSunHalo.material.depthWrite = false;
+  observerSunHalo.material.opacity += (
+    (ORBIT_SUN_HALO_OPACITY * sunTargetVisibility) - observerSunHalo.material.opacity
   ) * 0.18;
-  orbitSunLight.intensity += (
-    (ORBIT_SUN_LIGHT_INTENSITY * targetVisibility) - orbitSunLight.intensity
+  observerSunLight.intensity += (
+    (ORBIT_SUN_LIGHT_INTENSITY * sunTargetVisibility) - observerSunLight.intensity
   ) * 0.18;
+  tempSunWorldPosition.copy(observerSun.position);
+  tempSunViewDirection.copy(observerSun.position).sub(camera.position);
+  const sunDistance = Math.max(tempSunViewDirection.length(), 0.0001);
+  tempSunViewDirection.divideScalar(sunDistance);
+  camera.getWorldDirection(tempCameraForward);
+  const lookAlignment = THREE.MathUtils.clamp(
+    (tempCameraForward.dot(tempSunViewDirection) - FIRST_PERSON_SUN_RAY_ALIGNMENT_START) /
+      (FIRST_PERSON_SUN_RAY_ALIGNMENT_END - FIRST_PERSON_SUN_RAY_ALIGNMENT_START),
+    0,
+    1
+  );
+  const lowSunBoost = THREE.MathUtils.lerp(1.18, 0.62, THREE.MathUtils.clamp(sunHorizontal.altitudeDegrees / 65, 0, 1));
+  const rayStrength = sunTargetVisibility * lookAlignment * lowSunBoost;
+
+  firstPersonSunRayGroup.visible = rayStrength > 0.015;
+  if (firstPersonSunRayGroup.visible) {
+    const pulseTime = performance.now() * 0.0018;
+    const rayScale = THREE.MathUtils.lerp(0.9, 1.55, rayStrength);
+    firstPersonSunRayGroup.position.copy(tempSunWorldPosition);
+    firstPersonSunRayGroup.quaternion.copy(camera.quaternion);
+    firstPersonSunRayGroup.scale.setScalar(rayScale);
+
+    for (const rayMesh of firstPersonSunRayMeshes) {
+      const shimmer = 0.82 + (Math.sin(pulseTime + rayMesh.userData.pulseOffset) * 0.18);
+      rayMesh.material.opacity = rayMesh.userData.baseOpacity * rayStrength * shimmer;
+    }
+  }
+
+  orbitMoon.renderOrder = 23;
+  orbitMoon.visible = false;
+  moonTrail.visible = false;
+  moonTrailPointsCloud.visible = false;
+  observerMoon.renderOrder = 23;
+  observerMoon.visible = moonTargetVisibility > 0.01;
+  observerMoonBody.material.depthTest = false;
+  observerMoonBody.material.depthWrite = false;
+  observerMoonBody.material.opacity += (moonTargetVisibility - observerMoonBody.material.opacity) * 0.18;
+  observerMoonBody.material.emissiveIntensity += (
+    ((0.55 + (solarFactor * 0.12) + moonTargetVisibility) * 0.7) - observerMoonBody.material.emissiveIntensity
+  ) * 0.12;
+  observerMoonHalo.material.depthTest = false;
+  observerMoonHalo.material.depthWrite = false;
+  observerMoonHalo.material.opacity += ((0.15 * moonTargetVisibility) - observerMoonHalo.material.opacity) * 0.18;
+  observerMoonLight.intensity += ((5.6 * moonTargetVisibility) - observerMoonLight.intensity) * 0.18;
 }
 
 function configurePreparationCamera(targetCamera) {
@@ -944,6 +1457,7 @@ function exitFirstPersonMode() {
   renderState.compileReady = false;
   renderState.progress = 0;
   renderState.transitionDurationMs = FIRST_PERSON_RETURN_DURATION_MS;
+  renderState.targetStageScale = TOPDOWN_STAGE_SCALE;
   renderState.targetVisualScale = 1;
   renderState.targetFogNear = constants.FOG_DEFAULT_NEAR;
   renderState.targetFogFar = constants.FOG_DEFAULT_FAR;
@@ -969,6 +1483,7 @@ async function enterFirstPersonMode() {
   renderState.transitionDurationMs = renderState.compiledFirstPerson
     ? FIRST_PERSON_RETURN_DURATION_MS
     : FIRST_PERSON_PREP_DURATION_MS;
+  renderState.targetStageScale = 1;
   renderState.targetVisualScale = constants.FIRST_PERSON_STAGE_SCALE;
   renderState.targetFogNear = constants.FOG_WALKER_NEAR;
   renderState.targetFogFar = constants.FOG_WALKER_FAR;
@@ -1066,6 +1581,12 @@ canvas.addEventListener("wheel", (event) => {
   cameraApi.clampCamera();
 }, { passive: false });
 
+for (const button of controlTabButtons) {
+  button.addEventListener("click", () => {
+    setControlTab(button.dataset.controlTab);
+  });
+}
+
 uploadInput.addEventListener("change", (event) => {
   const file = event.target.files[0];
   textureApi.loadUserTexture(file);
@@ -1077,7 +1598,7 @@ resetButton.addEventListener("click", () => {
   }
   cameraState.targetTheta = -0.55;
   cameraState.targetPhi = 1.12;
-  cameraState.targetRadius = 10.5;
+  cameraState.targetRadius = constants.CAMERA_TOPDOWN_DEFAULT_RADIUS;
 });
 
 walkerModeEl.addEventListener("change", () => {
@@ -1097,6 +1618,22 @@ resetWalkerButton.addEventListener("click", () => {
   walkerState.heading = Math.PI * 0.1;
   walkerState.pitch = -0.08;
   walkerApi.updateWalkerAvatar();
+});
+
+routeSelectEl.addEventListener("change", () => {
+  routeSimulationApi.selectRoute(routeSelectEl.value);
+});
+
+routeSpeedEl.addEventListener("input", () => {
+  routeSimulationApi.setSpeedMultiplier(routeSpeedEl.value);
+});
+
+routePlaybackButton.addEventListener("click", () => {
+  routeSimulationApi.togglePlayback();
+});
+
+routeResetButton.addEventListener("click", () => {
+  routeSimulationApi.resetProgress();
 });
 
 realitySyncEl.addEventListener("change", () => {
@@ -1162,12 +1699,34 @@ dayNightOverlayEl.addEventListener("change", () => {
   astronomyApi.updateDayNightOverlayFromSun(demoSunGeo.latitudeDegrees, demoSunGeo.longitudeDegrees, true);
 });
 
+analemmaOverlayEl.addEventListener("change", () => {
+  analemmaState.enabled = analemmaOverlayEl.checked;
+  const projectionDate = astronomyState.live ? new Date() : astronomyState.selectedDate;
+  astronomyApi.syncAnalemmaUi(projectionDate, true);
+});
+
+skyAnalemmaOverlayEl.addEventListener("change", () => {
+  skyAnalemmaState.enabled = skyAnalemmaOverlayEl.checked;
+  const projectionDate = astronomyState.live ? new Date() : astronomyState.selectedDate;
+  astronomyApi.syncSkyAnalemmaUi(projectionDate, true);
+});
+
 for (const button of orbitModeButtons) {
   button.addEventListener("click", () => {
     simulationState.orbitMode = button.dataset.orbitMode;
     astronomyApi.updateOrbitModeUi();
     astronomyApi.resetSunTrail();
     astronomyApi.resetMoonTrail();
+  });
+}
+
+seasonalYearEl.addEventListener("change", () => {
+  astronomyApi.previewSeasonalMoonAudit(undefined, seasonalYearEl.value);
+});
+
+for (const button of seasonalEventButtons) {
+  button.addEventListener("click", () => {
+    astronomyApi.previewSeasonalMoonAudit(button.dataset.seasonalEvent, seasonalYearEl.value);
   });
 }
 
@@ -1233,28 +1792,28 @@ function animate() {
   requestAnimationFrame(animate);
   const deltaSeconds = Math.min(clock.getDelta(), 0.05);
   let snapshot;
+  let projectionDate = astronomyState.selectedDate;
+  stage.rotation.y = 0;
+  const polarisPulse = 0.5 + (Math.sin(performance.now() * 0.0032) * 0.5);
+  polarisCore.material.opacity = THREE.MathUtils.lerp(0.84, 1, polarisPulse);
+  polarisGlow.material.opacity = THREE.MathUtils.lerp(0.72, 0.98, polarisPulse);
+  polarisHalo.material.opacity = THREE.MathUtils.lerp(0.2, 0.42, polarisPulse);
 
   if (astronomyState.enabled) {
     const observationDate = astronomyState.live ? new Date() : astronomyState.selectedDate;
+    projectionDate = observationDate;
     if (astronomyState.live) {
       astronomyState.selectedDate = observationDate;
       astronomyApi.syncLiveObservationInput(observationDate);
     }
-    stage.rotation.y += (0 - stage.rotation.y) * 0.08;
     snapshot = astronomyApi.getAstronomySnapshot(observationDate);
     astronomyApi.applyAstronomySnapshot(snapshot);
   } else {
-    if (walkerState.enabled) {
-      stage.rotation.y += (0 - stage.rotation.y) * 0.08;
-    } else {
-      stage.rotation.y += 0.0017;
-    }
     simulationState.orbitSunAngle += ORBIT_SUN_SPEED;
     if (simulationState.orbitMode === "auto") {
       simulationState.orbitSeasonPhase += ORBIT_SUN_SEASON_SPEED;
     }
     simulationState.orbitMoonAngle += ORBIT_MOON_SPEED;
-    simulationState.orbitMoonDriftPhase += ORBIT_MOON_DRIFT_SPEED;
     const orbitRadius = astronomyApi.getCurrentOrbitRadius();
     orbitSun.position.set(
       Math.cos(simulationState.orbitSunAngle) * orbitRadius,
@@ -1268,6 +1827,7 @@ function animate() {
     const demoSunGeo = getGeoFromProjectedPosition(orbitSun.position, DISC_RADIUS);
     astronomyApi.updateDayNightOverlayFromSun(demoSunGeo.latitudeDegrees, demoSunGeo.longitudeDegrees);
     snapshot = {
+      date: projectionDate,
       sun: demoSunGeo,
       moon: getGeoFromProjectedPosition(orbitMoon.position, DISC_RADIUS)
     };
@@ -1277,13 +1837,18 @@ function animate() {
   walkerApi.updateWalkerAvatar();
   walkerApi.updateWalkerPerspectiveGuides();
   walkerApi.updateFirstPersonOverlay();
+  routeSimulationApi.update(deltaSeconds);
+  astronomyApi.syncSeasonalSunUi();
+  astronomyApi.syncSkyAnalemmaUi(projectionDate);
   if (snapshot) {
     walkerApi.updateWalkerUi(snapshot);
-    updateObserverSunVisibility(snapshot);
   }
   updateRenderState();
   syncPreparationPresentation();
   cameraApi.updateCamera();
+  if (snapshot) {
+    updateObserverCelestialPerspective(snapshot);
+  }
   renderer.render(scene, camera);
 }
 
@@ -1291,9 +1856,15 @@ cameraApi.resize();
 textureApi.loadDefaultTexture();
 walkerApi.resetWalkerPosition();
 walkerApi.updateWalkerAvatar();
+setControlTab("astronomy");
 astronomyApi.setObservationInputValue(astronomyState.selectedDate);
 astronomyApi.syncDayNightOverlayUi();
+astronomyApi.syncAnalemmaUi(astronomyState.selectedDate, true);
+astronomyApi.syncSkyAnalemmaUi(astronomyState.selectedDate, true);
+astronomyApi.syncSeasonalMoonUi();
+astronomyApi.syncSeasonalSunUi(true);
 walkerApi.syncWalkerUi();
+routeSimulationApi.initialize();
 astronomyApi.enableRealityMode({ live: true, date: astronomyState.selectedDate });
 animate();
 

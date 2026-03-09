@@ -12,7 +12,10 @@ export function createCameraController({
 
   function clampCamera() {
     cameraState.targetPhi = Math.min(Math.max(cameraState.targetPhi, 0.3), 1.48);
-    cameraState.targetRadius = Math.min(Math.max(cameraState.targetRadius, 7.2), 16);
+    cameraState.targetRadius = Math.min(
+      Math.max(cameraState.targetRadius, constants.CAMERA_TOPDOWN_MIN_RADIUS),
+      constants.CAMERA_TOPDOWN_MAX_RADIUS
+    );
   }
 
   function updateCamera() {

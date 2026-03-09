@@ -87,88 +87,219 @@
 
       <aside class="control-panel detail-panel">
         <p class="eyebrow">DETAIL CONTROLS</p>
+        <div class="panel-tabs" role="tablist" aria-label="Detail control sections">
+          <button class="panel-tab active" data-control-tab="astronomy" type="button">Astronomy</button>
+          <button class="panel-tab" data-control-tab="routes" type="button">Route Control</button>
+        </div>
 
-        <section class="sync-panel">
-          <div class="sync-row">
-            <span class="sync-title">Reality Sync</span>
-            <label class="toggle">
-              <input id="reality-sync" type="checkbox" checked>
-              <span>On</span>
-            </label>
-          </div>
-          <div class="sync-row">
-            <span class="sync-title">Use Current Time</span>
-            <label class="toggle">
-              <input id="reality-live" type="checkbox" checked>
-              <span>Live</span>
-            </label>
-          </div>
-          <label class="field" for="observation-time">
-            <span class="field-label">Observation Time</span>
-            <input class="datetime-input" id="observation-time" type="datetime-local">
-          </label>
-          <div class="button-row compact">
-            <button class="button secondary compact-button" id="apply-observation-time" type="button">Preview Time</button>
-            <button class="button secondary compact-button" id="set-current-time" type="button">Back To Now</button>
-          </div>
-          <p class="sync-copy" id="time-summary">Syncing to the current local time.</p>
-          <div class="coord-grid">
-            <div class="coord-card">
-              <span class="coord-label">Sun</span>
-              <strong class="coord-value" id="sun-coordinates">0.00degN / 0.00degE</strong>
+        <div class="panel-tab-content active" data-control-panel="astronomy">
+          <section class="sync-panel">
+            <div class="sync-row">
+              <span class="sync-title">Reality Sync</span>
+              <label class="toggle">
+                <input id="reality-sync" type="checkbox" checked>
+                <span>On</span>
+              </label>
             </div>
-            <div class="coord-card">
-              <span class="coord-label">Moon</span>
-              <strong class="coord-value" id="moon-coordinates">0.00degN / 0.00degE</strong>
+            <div class="sync-row">
+              <span class="sync-title">Use Current Time</span>
+              <label class="toggle">
+                <input id="reality-live" type="checkbox" checked>
+                <span>Live</span>
+              </label>
             </div>
-          </div>
-          <div class="sync-row overlay-row">
-            <span class="sync-title">Day/Night Overlay</span>
-            <label class="toggle">
-              <input id="day-night-overlay" type="checkbox" checked>
-              <span>Clear</span>
+            <label class="field" for="observation-time">
+              <span class="field-label">Observation Time</span>
+              <input class="datetime-input" id="observation-time" type="datetime-local">
             </label>
-          </div>
-          <p class="sync-copy subtle" id="day-night-summary">Night side overlay is active.</p>
-        </section>
+            <div class="button-row compact">
+              <button class="button secondary compact-button" id="apply-observation-time" type="button">Preview Time</button>
+              <button class="button secondary compact-button" id="set-current-time" type="button">Back To Now</button>
+            </div>
+            <p class="sync-copy" id="time-summary">Syncing to the current local time.</p>
+            <div class="coord-grid">
+              <div class="coord-card">
+                <span class="coord-label">Sun</span>
+                <strong class="coord-value" id="sun-coordinates">0.00degN / 0.00degE</strong>
+              </div>
+              <div class="coord-card">
+                <span class="coord-label">Moon</span>
+                <strong class="coord-value" id="moon-coordinates">0.00degN / 0.00degE</strong>
+              </div>
+            </div>
+            <div class="sync-row overlay-row">
+              <span class="sync-title">Day/Night Overlay</span>
+              <label class="toggle">
+                <input id="day-night-overlay" type="checkbox" checked>
+                <span>Clear</span>
+              </label>
+            </div>
+            <p class="sync-copy subtle" id="day-night-summary">Night side overlay is active.</p>
+            <div class="sync-row overlay-row">
+              <span class="sync-title">Ground Analemma</span>
+              <label class="toggle">
+                <input id="analemma-overlay" type="checkbox" checked>
+                <span>Yearly Path</span>
+              </label>
+            </div>
+            <p class="sync-copy subtle" id="analemma-summary">
+              Ground projection samples one sun position per day for the current local clock time.
+            </p>
+            <div class="sync-row overlay-row">
+              <span class="sync-title">Sky Analemma</span>
+              <label class="toggle">
+                <input id="sky-analemma-overlay" type="checkbox" checked>
+                <span>Walker Sky</span>
+              </label>
+            </div>
+            <p class="sync-copy subtle" id="sky-analemma-summary">
+              Walker-based sky analemma uses the observer position and one solar sample per day at the selected local time.
+            </p>
+          </section>
 
-        <section class="walker-panel">
-          <div class="sync-row">
-            <span class="sync-title">Walker View</span>
-            <label class="toggle">
-              <input id="walker-mode" type="checkbox">
-              <span>First Person</span>
-            </label>
-          </div>
-          <p class="sync-copy" id="walker-summary">
-            Walk on the map with WASD or the arrow keys and judge day or night from the observer position.
-          </p>
-          <div class="coord-grid">
-            <div class="coord-card">
-              <span class="coord-label">Observer</span>
-              <strong class="coord-value" id="walker-coordinates">0.00degN / 0.00degE</strong>
+          <section class="walker-panel">
+            <div class="sync-row">
+              <span class="sync-title">Walker View</span>
+              <label class="toggle">
+                <input id="walker-mode" type="checkbox">
+                <span>First Person</span>
+              </label>
             </div>
-            <div class="coord-card">
-              <span class="coord-label">Local Light</span>
-              <strong class="coord-value" id="walker-light">Day</strong>
+            <p class="sync-copy" id="walker-summary">
+              Walk on the map with WASD or the arrow keys and judge day or night from the observer position.
+            </p>
+            <div class="coord-grid">
+              <div class="coord-card">
+                <span class="coord-label">Observer</span>
+                <strong class="coord-value" id="walker-coordinates">0.00degN / 0.00degE</strong>
+              </div>
+              <div class="coord-card">
+                <span class="coord-label">Local Light</span>
+                <strong class="coord-value" id="walker-light">Day</strong>
+              </div>
             </div>
-          </div>
-          <div class="button-row compact">
-            <button class="button secondary compact-button" id="reset-walker" type="button">Reset Walker</button>
-          </div>
-        </section>
+            <div class="button-row compact">
+              <button class="button secondary compact-button" id="reset-walker" type="button">Reset Walker</button>
+            </div>
+          </section>
 
-        <section class="orbit-panel">
-          <p class="orbit-title">Solar Orbit</p>
-          <div class="orbit-mode-grid">
-            <button class="orbit-mode active" data-orbit-mode="auto" type="button">Auto</button>
-            <button class="orbit-mode" data-orbit-mode="north" type="button">North Tropic</button>
-            <button class="orbit-mode" data-orbit-mode="equator" type="button">Equator</button>
-            <button class="orbit-mode" data-orbit-mode="south" type="button">South Tropic</button>
-          </div>
-          <p class="orbit-copy" id="orbit-label">Auto mode sweeps the sun between the tropics.</p>
-          <p class="sync-copy subtle">Altitude profile: north tropic highest, equator mid, south tropic lowest.</p>
-        </section>
+          <section class="moon-audit-panel">
+            <p class="orbit-title">Seasonal Audit Controls</p>
+            <label class="field" for="seasonal-year">
+              <span class="field-label">Audit Year</span>
+              <input class="datetime-input seasonal-year-input" id="seasonal-year" type="number" min="1900" max="2100" step="1">
+            </label>
+            <div class="seasonal-event-grid">
+              <button class="orbit-mode" data-seasonal-event="springEquinox" type="button">Spring Equinox</button>
+              <button class="orbit-mode" data-seasonal-event="summerSolstice" type="button">Summer Solstice</button>
+              <button class="orbit-mode" data-seasonal-event="autumnEquinox" type="button">Autumn Equinox</button>
+              <button class="orbit-mode" data-seasonal-event="winterSolstice" type="button">Winter Solstice</button>
+            </div>
+            <p class="sync-copy" id="seasonal-event-time">
+              Select a solstice or equinox to update both the sun and moon audits from the same anchor.
+            </p>
+            <p class="audit-block-title">Moon Audit</p>
+            <div class="coord-grid">
+              <div class="coord-card">
+                <span class="coord-label">Moon Anchor</span>
+                <strong class="coord-value" id="seasonal-moon-anchor">0.00degN / 0.00degE</strong>
+              </div>
+              <div class="coord-card">
+                <span class="coord-label">24h Drift</span>
+                <strong class="coord-value" id="seasonal-moon-drift">dLat 0.0deg / dLon 0.0deg</strong>
+              </div>
+            </div>
+            <p class="sync-copy subtle" id="seasonal-moon-summary">
+              The selected seasonal anchor loads an exact preview time and summarizes the moon's 24-hour subpoint swing.
+            </p>
+          </section>
+
+          <section class="sun-audit-panel">
+            <p class="orbit-title">Sun Audit</p>
+            <p class="sync-copy" id="seasonal-sun-summary">
+              Uses the shared seasonal anchor above. Equinoxes should stay near 0deg solar latitude and solstices near 23.4degN or 23.4degS.
+            </p>
+            <div class="seasonal-sun-grid" id="seasonal-sun-grid"></div>
+          </section>
+
+          <section class="orbit-panel">
+            <p class="orbit-title">Solar Orbit</p>
+            <div class="orbit-mode-grid">
+              <button class="orbit-mode active" data-orbit-mode="auto" type="button">Auto</button>
+              <button class="orbit-mode" data-orbit-mode="north" type="button">North Tropic</button>
+              <button class="orbit-mode" data-orbit-mode="equator" type="button">Equator</button>
+              <button class="orbit-mode" data-orbit-mode="south" type="button">South Tropic</button>
+            </div>
+            <p class="orbit-copy" id="orbit-label">Auto mode sweeps the sun between the tropics.</p>
+            <p class="sync-copy subtle">Altitude profile: north tropic highest, equator mid, south tropic lowest.</p>
+          </section>
+        </div>
+
+        <div class="panel-tab-content" data-control-panel="routes" hidden>
+          <section class="route-panel">
+            <p class="orbit-title">Offline Route Library</p>
+            <p class="sync-copy" id="route-dataset-status">Loading offline route library...</p>
+            <label class="field" for="route-select">
+              <span class="field-label">Route</span>
+              <select class="select-input" id="route-select" disabled></select>
+            </label>
+            <label class="field" for="route-speed">
+              <span class="field-label">Playback Speed</span>
+              <input class="slider-input" id="route-speed" type="range" min="1" max="24" step="1" value="8" disabled>
+            </label>
+            <div class="sync-row">
+              <span class="sync-title">Cycle Rate</span>
+              <strong class="route-speed-value" id="route-speed-value">8x | 15.0s cycle</strong>
+            </div>
+            <div class="button-row compact">
+              <button class="button secondary compact-button" id="route-playback" type="button" disabled>Pause</button>
+              <button class="button secondary compact-button" id="route-reset" type="button" disabled>Reset Leg</button>
+            </div>
+          </section>
+
+          <section class="route-panel route-summary-panel">
+            <p class="orbit-title">Active Route</p>
+            <p class="sync-copy" id="route-summary">
+              Offline route metadata and aircraft position will appear here once the dataset is ready.
+            </p>
+            <div class="coord-grid">
+              <div class="coord-card">
+                <span class="coord-label">Leg</span>
+                <strong class="coord-value" id="route-leg">Select a route</strong>
+              </div>
+              <div class="coord-card">
+                <span class="coord-label">Aircraft</span>
+                <strong class="coord-value" id="route-aircraft">-</strong>
+              </div>
+              <div class="coord-card">
+                <span class="coord-label">Origin</span>
+                <strong class="coord-value" id="route-origin">-</strong>
+              </div>
+              <div class="coord-card">
+                <span class="coord-label">Destination</span>
+                <strong class="coord-value" id="route-destination">-</strong>
+              </div>
+              <div class="coord-card">
+                <span class="coord-label">Countries</span>
+                <strong class="coord-value" id="route-countries">-</strong>
+              </div>
+              <div class="coord-card">
+                <span class="coord-label">Planned Block</span>
+                <strong class="coord-value" id="route-duration">-</strong>
+              </div>
+            </div>
+            <div class="coord-grid">
+              <div class="coord-card">
+                <span class="coord-label">Progress</span>
+                <strong class="coord-value" id="route-progress">-</strong>
+              </div>
+              <div class="coord-card">
+                <span class="coord-label">Geo Path</span>
+                <strong class="coord-value" id="route-geo-summary">-</strong>
+              </div>
+            </div>
+          </section>
+        </div>
       </aside>
     </div>
   </div>

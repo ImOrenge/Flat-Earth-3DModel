@@ -26,6 +26,16 @@ export function getGeoFromProjectedPosition(position, discRadius) {
   };
 }
 
+export function getProjectedPositionFromGeo(latitudeDegrees, longitudeDegrees, discRadius, y = 0) {
+  const projectedRadius = projectedRadiusFromLatitude(latitudeDegrees, discRadius);
+  const longitudeRadians = toRadians(longitudeDegrees);
+  return {
+    x: -Math.cos(longitudeRadians) * projectedRadius,
+    y,
+    z: Math.sin(longitudeRadians) * projectedRadius
+  };
+}
+
 function formatDirection(value, positive, negative) {
   if (Math.abs(value) < 0.005) {
     return "";
