@@ -145,15 +145,15 @@
             <p class="sync-copy subtle" id="analemma-summary">
               Ground projection samples one sun position per day for the current local clock time.
             </p>
-            <div class="sync-row overlay-row">
-              <span class="sync-title">Sky Analemma</span>
+            <div class="sync-row overlay-row" hidden>
+              <span class="sync-title">Sky Orbit</span>
               <label class="toggle">
-                <input id="sky-analemma-overlay" type="checkbox" checked>
-                <span>Walker Sky</span>
+                <input id="sky-analemma-overlay" type="checkbox">
+                <span>Observer Arc</span>
               </label>
             </div>
-            <p class="sync-copy subtle" id="sky-analemma-summary">
-              Walker-based sky analemma uses the observer position and one solar sample per day at the selected local time.
+            <p class="sync-copy subtle" id="sky-analemma-summary" hidden>
+              Observer-based sky orbit shows the selected day's solar and lunar paths above the local horizon.
             </p>
           </section>
 

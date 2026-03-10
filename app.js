@@ -10,6 +10,7 @@ import {
 } from "./modules/astronomy-utils.js";
 import { createAstronomyController } from "./modules/astronomy-controller.js";
 import { createCameraController } from "./modules/camera-controller.js";
+import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js";
 import { createRouteSimulationController } from "./modules/route-simulation-controller.js";
 import { createTextureManager } from "./modules/texture-manager.js";
 import { createWalkerController } from "./modules/walker-controller.js";
@@ -29,21 +30,27 @@ const RIM_BOTTOM_Y = RIM_CENTER_Y - (RIM_HEIGHT / 2);
 const DOME_RADIUS = RIM_INNER_RADIUS - 0.14;
 const DOME_BASE_Y = 0.46;
 const DOME_VERTICAL_SCALE = 0.78;
+const CELESTIAL_HEIGHT_DROP = 0.42;
+const CELESTIAL_ALTITUDE_DROP_DEGREES = 6;
 const POLARIS_ALTITUDE_OFFSET = 0.08;
 const POLARIS_CORE_RADIUS = 0.07;
 const POLARIS_GLOW_SIZE = 0.42;
 const POLARIS_HALO_SIZE = 0.78;
+const POLARIS_CORE_OPACITY = 1;
+const POLARIS_GLOW_OPACITY = 1;
+const POLARIS_HALO_OPACITY = 0.48;
 const TROPIC_LATITUDE = 23.44;
-const ORBIT_TRACK_HEIGHT = DOME_BASE_Y + 2.01;
+const ORBIT_TRACK_HEIGHT = DOME_BASE_Y + 2.01 - CELESTIAL_HEIGHT_DROP;
 const ORBIT_SUN_HEIGHT = ORBIT_TRACK_HEIGHT + 0.12;
 const ORBIT_SUN_HEIGHT_NORTH = ORBIT_SUN_HEIGHT + 0.52;
 const ORBIT_SUN_HEIGHT_SOUTH = ORBIT_SUN_HEIGHT - 0.56;
-const ORBIT_SUN_SIZE = 0.18;
+const CELESTIAL_BODY_SIZE = 0.13;
+const ORBIT_SUN_SIZE = CELESTIAL_BODY_SIZE;
 const ORBIT_SUN_SPEED = 0.011;
 const ORBIT_SUN_SEASON_SPEED = 0.0026;
-const ORBIT_SUN_HALO_OPACITY = 0.12;
-const ORBIT_SUN_LIGHT_INTENSITY = 22;
-const ORBIT_SUN_BODY_EMISSIVE_INTENSITY = 3.8;
+const ORBIT_SUN_HALO_OPACITY = 0.2;
+const ORBIT_SUN_LIGHT_INTENSITY = 32;
+const ORBIT_SUN_BODY_EMISSIVE_INTENSITY = 5.4;
 const ORBIT_TRACK_TUBE_RADIUS = 0.045;
 const ORBIT_HEIGHT_GUIDE_RADIUS = 0.018;
 const ORBIT_HEIGHT_GUIDE_MARKER_SIZE = 0.05;
@@ -51,7 +58,10 @@ const ORBIT_HEIGHT_GUIDE_ANGLES = [-0.82, 1.34, 2.58];
 const ORBIT_MOON_BASE_HEIGHT = ORBIT_TRACK_HEIGHT + 0.28;
 const ORBIT_MOON_HEIGHT_NORTH = ORBIT_MOON_BASE_HEIGHT + 0.16;
 const ORBIT_MOON_HEIGHT_SOUTH = ORBIT_MOON_BASE_HEIGHT - 0.26;
-const ORBIT_MOON_SIZE = 0.13;
+const ORBIT_MOON_SIZE = CELESTIAL_BODY_SIZE;
+const ORBIT_MOON_HALO_OPACITY = 0.24;
+const ORBIT_MOON_LIGHT_INTENSITY = 8.4;
+const ORBIT_MOON_BODY_EMISSIVE_INTENSITY = 1.8;
 const ORBIT_MOON_SPEED = 0.0048;
 const ORBIT_SURFACE_LINE_WIDTH = 0.0045;
 const SUN_TRAIL_MAX_POINTS = 720;
@@ -62,7 +72,7 @@ const DAY_NIGHT_TEXTURE_SIZE = 512;
 const DAY_NIGHT_UPDATE_EPSILON = 0.18;
 const ANALEMMA_SURFACE_OFFSET = 0.046;
 const SKY_ANALEMMA_RADIUS = 2.4;
-const MAP_TEXTURE_SIZE = 4096;
+const MAP_TEXTURE_SIZE = 8192;
 const CAMERA_DEFAULT_FOV = 42;
 const CAMERA_WALKER_FOV = 54;
 const CAMERA_TOPDOWN_DEFAULT_RADIUS = 8.2;
@@ -74,13 +84,19 @@ const FOG_DEFAULT_FAR = 28;
 const FOG_WALKER_NEAR = 36;
 const FOG_WALKER_FAR = 180;
 const FIRST_PERSON_STAGE_SCALE = 10;
+const FIRST_PERSON_WORLD_RADIUS = 240;
+const FIRST_PERSON_HORIZON_RADIUS = 228;
+const FIRST_PERSON_SKY_RADIUS = 300;
 const FIRST_PERSON_PREP_DURATION_MS = 1250;
 const FIRST_PERSON_RETURN_DURATION_MS = 420;
 const FIRST_PERSON_CELESTIAL_NEAR_RADIUS = 32;
 const FIRST_PERSON_CELESTIAL_FAR_RADIUS = 74;
 const FIRST_PERSON_CELESTIAL_FADE_RANGE = 5;
-const FIRST_PERSON_SUN_SCALE = 3.8;
-const FIRST_PERSON_MOON_SCALE = 4.4;
+const FIRST_PERSON_HORIZON_OCCLUSION_RANGE = 8;
+const FIRST_PERSON_HORIZON_SINK = 2.6;
+const FIRST_PERSON_CELESTIAL_SCALE = 4.4;
+const FIRST_PERSON_SUN_SCALE = FIRST_PERSON_CELESTIAL_SCALE;
+const FIRST_PERSON_MOON_SCALE = FIRST_PERSON_CELESTIAL_SCALE;
 const FIRST_PERSON_SUN_RAY_LENGTH = 13;
 const FIRST_PERSON_SUN_RAY_WIDTH = 1.5;
 const FIRST_PERSON_SUN_RAY_SHORT_LENGTH = 7.4;
@@ -502,7 +518,7 @@ const polarisCore = new THREE.Mesh(
   new THREE.MeshBasicMaterial({
     color: 0xf5fbff,
     transparent: true,
-    opacity: 0.98,
+    opacity: POLARIS_CORE_OPACITY,
     depthTest: false,
     depthWrite: false
   })
@@ -515,7 +531,7 @@ const polarisGlow = new THREE.Sprite(
     map: polarisGlowTexture,
     color: 0xbfe0ff,
     transparent: true,
-    opacity: 0.92,
+    opacity: POLARIS_GLOW_OPACITY,
     blending: THREE.AdditiveBlending,
     depthTest: false,
     depthWrite: false
@@ -530,7 +546,7 @@ const polarisHalo = new THREE.Sprite(
     map: polarisGlowTexture,
     color: 0x7ec6ff,
     transparent: true,
-    opacity: 0.34,
+    opacity: POLARIS_HALO_OPACITY,
     blending: THREE.AdditiveBlending,
     depthTest: false,
     depthWrite: false
@@ -540,7 +556,11 @@ polarisHalo.scale.setScalar(POLARIS_HALO_SIZE);
 polarisHalo.renderOrder = 24;
 polaris.add(polarisHalo);
 
-polaris.position.set(0, DOME_BASE_Y + (DOME_RADIUS * DOME_VERTICAL_SCALE) + POLARIS_ALTITUDE_OFFSET, 0);
+polaris.position.set(
+  0,
+  DOME_BASE_Y + (DOME_RADIUS * DOME_VERTICAL_SCALE) + POLARIS_ALTITUDE_OFFSET - CELESTIAL_HEIGHT_DROP,
+  0
+);
 scalableStage.add(polaris);
 
 const glow = new THREE.Mesh(
@@ -760,7 +780,7 @@ const orbitMoonBody = new THREE.Mesh(
   new THREE.MeshStandardMaterial({
     color: 0xd8deea,
     emissive: 0xa8b6d4,
-    emissiveIntensity: 1.2,
+    emissiveIntensity: ORBIT_MOON_BODY_EMISSIVE_INTENSITY,
     roughness: 0.42,
     metalness: 0.82,
     transparent: true,
@@ -774,13 +794,13 @@ const orbitMoonHalo = new THREE.Mesh(
   new THREE.MeshBasicMaterial({
     color: 0xcfd8f7,
     transparent: true,
-    opacity: 0.15,
+    opacity: ORBIT_MOON_HALO_OPACITY,
     side: THREE.DoubleSide
   })
 );
 orbitMoon.add(orbitMoonHalo);
 
-const orbitMoonLight = new THREE.PointLight(0xdbe4ff, 5.6, 5.5, 1.9);
+const orbitMoonLight = new THREE.PointLight(0xdbe4ff, ORBIT_MOON_LIGHT_INTENSITY, 5.5, 1.9);
 orbitMoon.add(orbitMoonLight);
 scalableStage.add(orbitMoon);
 
@@ -929,7 +949,7 @@ const seasonalMoonState = {
   selectedYear: astronomyState.selectedDate.getFullYear()
 };
 const skyAnalemmaState = {
-  enabled: true,
+  enabled: false,
   lastProjectionKey: "",
   lastVisibleSamples: 0,
   lastTotalSamples: 0
@@ -993,6 +1013,7 @@ const constants = {
   CAMERA_TOPDOWN_MAX_RADIUS,
   CAMERA_TOPDOWN_MIN_RADIUS,
   CAMERA_WALKER_FOV,
+  DAY_NIGHT_TEXTURE_SIZE,
   DAY_NIGHT_UPDATE_EPSILON,
   ANALEMMA_SURFACE_OFFSET,
   SKY_ANALEMMA_RADIUS,
@@ -1009,6 +1030,11 @@ const constants = {
   FOG_DEFAULT_NEAR,
   FOG_WALKER_FAR,
   FOG_WALKER_NEAR,
+  FIRST_PERSON_HORIZON_RADIUS,
+  FIRST_PERSON_HORIZON_OCCLUSION_RANGE,
+  FIRST_PERSON_HORIZON_SINK,
+  FIRST_PERSON_SKY_RADIUS,
+  FIRST_PERSON_WORLD_RADIUS,
   ORBIT_MOON_BASE_HEIGHT,
   ORBIT_MOON_HEIGHT_NORTH,
   ORBIT_MOON_HEIGHT_SOUTH,
@@ -1040,7 +1066,8 @@ const constants = {
   WALKER_SPEED,
   WALKER_START_LATITUDE,
   WALKER_START_LONGITUDE,
-  WALKER_SURFACE_OFFSET
+  WALKER_SURFACE_OFFSET,
+  CELESTIAL_ALTITUDE_DROP_DEGREES
 };
 
 const ui = {
@@ -1077,11 +1104,30 @@ const ui = {
   walkerSummaryEl
 };
 
+let astronomyApi;
 const textureApi = createTextureManager({
   constants,
   renderer,
   topMaterial,
-  statusEl
+  statusEl,
+  onTextureUpdated() {
+    dayNightState.lastLatitudeDegrees = null;
+    dayNightState.lastLongitudeDegrees = null;
+
+    if (!astronomyApi) {
+      return;
+    }
+
+    if (astronomyState.enabled) {
+      const observationDate = astronomyState.live ? new Date() : astronomyState.selectedDate;
+      const snapshot = astronomyApi.getAstronomySnapshot(observationDate);
+      astronomyApi.updateDayNightOverlayFromSun(snapshot.sun.latitudeDegrees, snapshot.sun.longitudeDegrees, true);
+      return;
+    }
+
+    const demoSunGeo = getGeoFromProjectedPosition(orbitSun.position, DISC_RADIUS);
+    astronomyApi.updateDayNightOverlayFromSun(demoSunGeo.latitudeDegrees, demoSunGeo.longitudeDegrees, true);
+  }
 });
 
 const cameraApi = createCameraController({
@@ -1093,7 +1139,7 @@ const cameraApi = createCameraController({
   walkerState
 });
 
-const astronomyApi = createAstronomyController({
+astronomyApi = createAstronomyController({
   constants,
   ui,
   astronomyState,
@@ -1121,7 +1167,8 @@ const astronomyApi = createAstronomyController({
   moonTrailGeometry,
   moonTrailPointsGeometry,
   northSeasonOverlay,
-  southSeasonOverlay
+  southSeasonOverlay,
+  getNightLightsData: textureApi.getNightLightsData
 });
 
 const walkerApi = createWalkerController({
@@ -1138,6 +1185,17 @@ const walkerApi = createWalkerController({
   ambient,
   keyLight,
   rimLight
+});
+
+const firstPersonWorldApi = createFirstPersonWorldController({
+  scene,
+  constants,
+  walkerState,
+  renderState,
+  ambient,
+  keyLight,
+  rimLight,
+  topDownBackground: skyTexture
 });
 
 const routeSimulationApi = createRouteSimulationController({
@@ -1245,6 +1303,20 @@ function getObserverSkyDistance(altitudeDegrees) {
   );
 }
 
+function applyCelestialAltitudeOffset(horizontal) {
+  const altitudeDegrees = THREE.MathUtils.clamp(
+    horizontal.altitudeDegrees - CELESTIAL_ALTITUDE_DROP_DEGREES,
+    -89.9,
+    89.9
+  );
+
+  return {
+    ...horizontal,
+    altitudeDegrees,
+    altitudeRadians: THREE.MathUtils.degToRad(altitudeDegrees)
+  };
+}
+
 function positionBodyInObserverSky(body, horizontal, observerGeo) {
   const skyDistance = getObserverSkyDistance(horizontal.altitudeDegrees);
   const horizontalRadius = Math.cos(horizontal.altitudeRadians) * skyDistance;
@@ -1309,13 +1381,13 @@ function updateObserverCelestialPerspective(snapshot) {
     moonTrail.visible = true;
     moonTrailPointsCloud.visible = true;
     orbitMoonBody.material.opacity = 1;
-    orbitMoonBody.material.emissiveIntensity = 1.2;
+    orbitMoonBody.material.emissiveIntensity = ORBIT_MOON_BODY_EMISSIVE_INTENSITY;
     orbitMoonBody.material.depthTest = false;
     orbitMoonBody.material.depthWrite = false;
-    orbitMoonHalo.material.opacity = 0.15;
+    orbitMoonHalo.material.opacity = ORBIT_MOON_HALO_OPACITY;
     orbitMoonHalo.material.depthTest = true;
     orbitMoonHalo.material.depthWrite = false;
-    orbitMoonLight.intensity = 5.6;
+    orbitMoonLight.intensity = ORBIT_MOON_LIGHT_INTENSITY;
     return;
   }
 
@@ -1334,6 +1406,12 @@ function updateObserverCelestialPerspective(snapshot) {
       observerGeo.longitudeDegrees
     )
     : getHorizontalFromWorldPosition(orbitMoon.getWorldPosition(tempDemoMoonSourceWorld), observerGeo);
+  const adjustedSunHorizontal = astronomyState.enabled
+    ? applyCelestialAltitudeOffset(sunHorizontal)
+    : sunHorizontal;
+  const adjustedMoonHorizontal = astronomyState.enabled
+    ? applyCelestialAltitudeOffset(moonHorizontal)
+    : moonHorizontal;
   const solarFactor = getSolarAltitudeFactor(
     observerGeo.latitudeDegrees,
     observerGeo.longitudeDegrees,
@@ -1341,18 +1419,32 @@ function updateObserverCelestialPerspective(snapshot) {
     snapshot.sun.longitudeDegrees
   );
   const sunTargetVisibility = THREE.MathUtils.clamp(
-    (sunHorizontal.altitudeDegrees + FIRST_PERSON_CELESTIAL_FADE_RANGE) / (FIRST_PERSON_CELESTIAL_FADE_RANGE * 2),
+    (adjustedSunHorizontal.altitudeDegrees + FIRST_PERSON_CELESTIAL_FADE_RANGE) / (FIRST_PERSON_CELESTIAL_FADE_RANGE * 2),
     0,
     1
   );
   const moonTargetVisibility = THREE.MathUtils.clamp(
-    (moonHorizontal.altitudeDegrees + FIRST_PERSON_CELESTIAL_FADE_RANGE) / (FIRST_PERSON_CELESTIAL_FADE_RANGE * 2),
+    (adjustedMoonHorizontal.altitudeDegrees + FIRST_PERSON_CELESTIAL_FADE_RANGE) / (FIRST_PERSON_CELESTIAL_FADE_RANGE * 2),
     0,
     1
   );
+  const sunHorizonLift = THREE.MathUtils.clamp(
+    adjustedSunHorizontal.altitudeDegrees / constants.FIRST_PERSON_HORIZON_OCCLUSION_RANGE,
+    0,
+    1
+  );
+  const moonHorizonLift = THREE.MathUtils.clamp(
+    adjustedMoonHorizontal.altitudeDegrees / constants.FIRST_PERSON_HORIZON_OCCLUSION_RANGE,
+    0,
+    1
+  );
+  const sunOcclusionVisibility = sunTargetVisibility * sunHorizonLift;
+  const moonOcclusionVisibility = moonTargetVisibility * moonHorizonLift;
 
-  positionBodyInObserverSky(observerSun, sunHorizontal, observerGeo);
-  positionBodyInObserverSky(observerMoon, moonHorizontal, observerGeo);
+  positionBodyInObserverSky(observerSun, adjustedSunHorizontal, observerGeo);
+  positionBodyInObserverSky(observerMoon, adjustedMoonHorizontal, observerGeo);
+  observerSun.position.y -= (1 - sunHorizonLift) * constants.FIRST_PERSON_HORIZON_SINK;
+  observerMoon.position.y -= (1 - moonHorizonLift) * (constants.FIRST_PERSON_HORIZON_SINK * 0.65);
   observerSun.scale.setScalar(FIRST_PERSON_SUN_SCALE);
   observerMoon.scale.setScalar(FIRST_PERSON_MOON_SCALE);
 
@@ -1360,20 +1452,20 @@ function updateObserverCelestialPerspective(snapshot) {
   sunTrail.visible = false;
   sunTrailPointsCloud.visible = false;
   observerSun.renderOrder = 24;
-  observerSun.visible = sunTargetVisibility > 0.01;
+  observerSun.visible = sunOcclusionVisibility > 0.01;
   observerSunBody.material.depthTest = false;
   observerSunBody.material.depthWrite = false;
-  observerSunBody.material.opacity += (sunTargetVisibility - observerSunBody.material.opacity) * 0.18;
+  observerSunBody.material.opacity += (sunOcclusionVisibility - observerSunBody.material.opacity) * 0.18;
   observerSunBody.material.emissiveIntensity += (
-    (ORBIT_SUN_BODY_EMISSIVE_INTENSITY * sunTargetVisibility) - observerSunBody.material.emissiveIntensity
+    (ORBIT_SUN_BODY_EMISSIVE_INTENSITY * sunOcclusionVisibility) - observerSunBody.material.emissiveIntensity
   ) * 0.18;
   observerSunHalo.material.depthTest = false;
   observerSunHalo.material.depthWrite = false;
   observerSunHalo.material.opacity += (
-    (ORBIT_SUN_HALO_OPACITY * sunTargetVisibility) - observerSunHalo.material.opacity
+    (ORBIT_SUN_HALO_OPACITY * sunOcclusionVisibility) - observerSunHalo.material.opacity
   ) * 0.18;
   observerSunLight.intensity += (
-    (ORBIT_SUN_LIGHT_INTENSITY * sunTargetVisibility) - observerSunLight.intensity
+    (ORBIT_SUN_LIGHT_INTENSITY * sunOcclusionVisibility) - observerSunLight.intensity
   ) * 0.18;
   tempSunWorldPosition.copy(observerSun.position);
   tempSunViewDirection.copy(observerSun.position).sub(camera.position);
@@ -1386,8 +1478,12 @@ function updateObserverCelestialPerspective(snapshot) {
     0,
     1
   );
-  const lowSunBoost = THREE.MathUtils.lerp(1.18, 0.62, THREE.MathUtils.clamp(sunHorizontal.altitudeDegrees / 65, 0, 1));
-  const rayStrength = sunTargetVisibility * lookAlignment * lowSunBoost;
+  const lowSunBoost = THREE.MathUtils.lerp(
+    1.18,
+    0.62,
+    THREE.MathUtils.clamp(adjustedSunHorizontal.altitudeDegrees / 65, 0, 1)
+  );
+  const rayStrength = sunOcclusionVisibility * lookAlignment * lowSunBoost;
 
   firstPersonSunRayGroup.visible = rayStrength > 0.015;
   if (firstPersonSunRayGroup.visible) {
@@ -1408,17 +1504,24 @@ function updateObserverCelestialPerspective(snapshot) {
   moonTrail.visible = false;
   moonTrailPointsCloud.visible = false;
   observerMoon.renderOrder = 23;
-  observerMoon.visible = moonTargetVisibility > 0.01;
+  observerMoon.visible = moonOcclusionVisibility > 0.01;
   observerMoonBody.material.depthTest = false;
   observerMoonBody.material.depthWrite = false;
-  observerMoonBody.material.opacity += (moonTargetVisibility - observerMoonBody.material.opacity) * 0.18;
+  observerMoonBody.material.opacity += (moonOcclusionVisibility - observerMoonBody.material.opacity) * 0.18;
   observerMoonBody.material.emissiveIntensity += (
-    ((0.55 + (solarFactor * 0.12) + moonTargetVisibility) * 0.7) - observerMoonBody.material.emissiveIntensity
+    (
+      (ORBIT_MOON_BODY_EMISSIVE_INTENSITY + (solarFactor * 0.18) + (moonOcclusionVisibility * 0.9)) -
+      observerMoonBody.material.emissiveIntensity
+    )
   ) * 0.12;
   observerMoonHalo.material.depthTest = false;
   observerMoonHalo.material.depthWrite = false;
-  observerMoonHalo.material.opacity += ((0.15 * moonTargetVisibility) - observerMoonHalo.material.opacity) * 0.18;
-  observerMoonLight.intensity += ((5.6 * moonTargetVisibility) - observerMoonLight.intensity) * 0.18;
+  observerMoonHalo.material.opacity += (
+    (ORBIT_MOON_HALO_OPACITY * moonOcclusionVisibility) - observerMoonHalo.material.opacity
+  ) * 0.18;
+  observerMoonLight.intensity += (
+    (ORBIT_MOON_LIGHT_INTENSITY * moonOcclusionVisibility) - observerMoonLight.intensity
+  ) * 0.18;
 }
 
 function configurePreparationCamera(targetCamera) {
@@ -1795,9 +1898,9 @@ function animate() {
   let projectionDate = astronomyState.selectedDate;
   stage.rotation.y = 0;
   const polarisPulse = 0.5 + (Math.sin(performance.now() * 0.0032) * 0.5);
-  polarisCore.material.opacity = THREE.MathUtils.lerp(0.84, 1, polarisPulse);
-  polarisGlow.material.opacity = THREE.MathUtils.lerp(0.72, 0.98, polarisPulse);
-  polarisHalo.material.opacity = THREE.MathUtils.lerp(0.2, 0.42, polarisPulse);
+  polarisCore.material.opacity = THREE.MathUtils.lerp(0.9, POLARIS_CORE_OPACITY, polarisPulse);
+  polarisGlow.material.opacity = THREE.MathUtils.lerp(0.82, POLARIS_GLOW_OPACITY, polarisPulse);
+  polarisHalo.material.opacity = THREE.MathUtils.lerp(0.28, POLARIS_HALO_OPACITY, polarisPulse);
 
   if (astronomyState.enabled) {
     const observationDate = astronomyState.live ? new Date() : astronomyState.selectedDate;
@@ -1839,13 +1942,13 @@ function animate() {
   walkerApi.updateFirstPersonOverlay();
   routeSimulationApi.update(deltaSeconds);
   astronomyApi.syncSeasonalSunUi();
-  astronomyApi.syncSkyAnalemmaUi(projectionDate);
   if (snapshot) {
     walkerApi.updateWalkerUi(snapshot);
   }
   updateRenderState();
   syncPreparationPresentation();
   cameraApi.updateCamera();
+  firstPersonWorldApi.update(snapshot);
   if (snapshot) {
     updateObserverCelestialPerspective(snapshot);
   }
@@ -1860,7 +1963,6 @@ setControlTab("astronomy");
 astronomyApi.setObservationInputValue(astronomyState.selectedDate);
 astronomyApi.syncDayNightOverlayUi();
 astronomyApi.syncAnalemmaUi(astronomyState.selectedDate, true);
-astronomyApi.syncSkyAnalemmaUi(astronomyState.selectedDate, true);
 astronomyApi.syncSeasonalMoonUi();
 astronomyApi.syncSeasonalSunUi(true);
 walkerApi.syncWalkerUi();

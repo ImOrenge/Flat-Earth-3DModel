@@ -14,6 +14,7 @@ import {
   getSeasonalEventMoments,
   getSeasonalMoonAudit,
   getSeasonalSunAudit,
+  getMoonHorizontalCoordinates,
   getSunHorizontalCoordinates,
   SEASONAL_EVENT_DEFINITIONS
 } from "./astronomy-utils.js";
@@ -46,7 +47,8 @@ export function createAstronomyController({
   moonTrailGeometry,
   moonTrailPointsGeometry,
   northSeasonOverlay,
-  southSeasonOverlay
+  southSeasonOverlay,
+  getNightLightsData
 }) {
   const observationTimeFormatter = new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium",
@@ -91,6 +93,20 @@ export function createAstronomyController({
   function formatAltitude(value) {
     const prefix = value > 0 ? "+" : "";
     return `${prefix}${value.toFixed(1)}deg`;
+  }
+
+  function applyCelestialAltitudeOffset(horizontal) {
+    const altitudeDegrees = THREE.MathUtils.clamp(
+      horizontal.altitudeDegrees - constants.CELESTIAL_ALTITUDE_DROP_DEGREES,
+      -89.9,
+      89.9
+    );
+
+    return {
+      ...horizontal,
+      altitudeDegrees,
+      altitudeRadians: THREE.MathUtils.degToRad(altitudeDegrees)
+    };
   }
 
   function getSeasonalEventLabel(key) {
@@ -150,6 +166,8 @@ export function createAstronomyController({
     const { width, height } = dayNightCanvas;
     const image = dayNightCtx.createImageData(width, height);
     const { data } = image;
+    const nightLights = typeof getNightLightsData === "function" ? getNightLightsData() : null;
+    const hasNightLights = Boolean(nightLights && nightLights.length === (width * height));
 
     for (let y = 0; y < height; y += 1) {
       for (let x = 0; x < width; x += 1) {
@@ -175,15 +193,22 @@ export function createAstronomyController({
         const nightStrength = THREE.MathUtils.clamp((-solarFactor + 0.02) / 0.18, 0, 1);
         const twilightStrength = 1 - THREE.MathUtils.clamp(Math.abs(solarFactor) / 0.06, 0, 1);
         const twilightMix = THREE.MathUtils.clamp(twilightStrength * (1 - (nightStrength * 0.35)), 0, 1);
-        const red = THREE.MathUtils.lerp(12, 96, twilightMix);
-        const green = THREE.MathUtils.lerp(20, 128, twilightMix);
-        const blue = THREE.MathUtils.lerp(34, 196, twilightMix);
-        const alpha = Math.round((nightStrength * 172) + (twilightMix * 52));
+        const deepNight = THREE.MathUtils.clamp((nightStrength - 0.14) / 0.86, 0, 1);
+        const baseRed = THREE.MathUtils.lerp(12, 96, twilightMix);
+        const baseGreen = THREE.MathUtils.lerp(20, 128, twilightMix);
+        const baseBlue = THREE.MathUtils.lerp(34, 196, twilightMix);
+        const lightSampleIndex = ((height - 1 - y) * width) + x;
+        const lightStrength = hasNightLights ? (nightLights[lightSampleIndex] * deepNight) : 0;
+        const lightBoost = lightStrength * (0.82 + (deepNight * 0.68));
+        const red = baseRed + (lightBoost * 255);
+        const green = baseGreen + (lightBoost * 208);
+        const blue = baseBlue + (lightBoost * 108);
+        const alpha = Math.round((nightStrength * 172) + (twilightMix * 52) + (lightBoost * 42));
 
-        data[index] = Math.round(red);
-        data[index + 1] = Math.round(green);
-        data[index + 2] = Math.round(blue);
-        data[index + 3] = THREE.MathUtils.clamp(alpha, 0, 210);
+        data[index] = THREE.MathUtils.clamp(Math.round(red), 0, 255);
+        data[index + 1] = THREE.MathUtils.clamp(Math.round(green), 0, 255);
+        data[index + 2] = THREE.MathUtils.clamp(Math.round(blue), 0, 255);
+        data[index + 3] = THREE.MathUtils.clamp(alpha, 0, 232);
       }
     }
 
@@ -316,7 +341,11 @@ export function createAstronomyController({
     seasonalMoonState.selectedYear = year;
     ui.seasonalYearEl.value = String(year);
 
-    const audits = getSeasonalSunAudit(year, observerGeo.latitudeDegrees, observerGeo.longitudeDegrees);
+    const audits = getSeasonalSunAudit(year, observerGeo.latitudeDegrees, observerGeo.longitudeDegrees)
+      .map((audit) => ({
+        ...audit,
+        horizontal: applyCelestialAltitudeOffset(audit.horizontal)
+      }));
     const auditsByKey = Object.fromEntries(audits.map((audit) => [audit.key, audit]));
     const highestAudit = audits.reduce((best, audit) => (
       audit.horizontal.altitudeDegrees > best.horizontal.altitudeDegrees ? audit : best
@@ -335,7 +364,7 @@ export function createAstronomyController({
             <strong class="seasonal-sun-value">${formatLatitude(audit.sun.latitudeDegrees)}</strong>
           </div>
           <div>
-            <span class="seasonal-sun-label">Observer altitude</span>
+            <span class="seasonal-sun-label">Model altitude</span>
             <strong class="seasonal-sun-value">${formatAltitude(audit.horizontal.altitudeDegrees)}</strong>
           </div>
         </div>
@@ -349,7 +378,7 @@ export function createAstronomyController({
       `${formatLatitude(auditsByKey.autumnEquinox.sun.latitudeDegrees)}, while solstices reach ` +
       `${formatLatitude(auditsByKey.summerSolstice.sun.latitudeDegrees)} and ` +
       `${formatLatitude(auditsByKey.winterSolstice.sun.latitudeDegrees)}. ` +
-      `Highest event altitude here: ${getSeasonalEventLabel(highestAudit.key)} ` +
+      `Highest modeled altitude here: ${getSeasonalEventLabel(highestAudit.key)} ` +
       `${formatAltitude(highestAudit.horizontal.altitudeDegrees)}. Lowest: ` +
       `${getSeasonalEventLabel(lowestAudit.key)} ${formatAltitude(lowestAudit.horizontal.altitudeDegrees)}.`;
 
@@ -444,10 +473,12 @@ export function createAstronomyController({
   function getSkyAnalemmaProjectionKey(date, observerGeo) {
     return [
       date.getFullYear(),
+      date.getMonth(),
+      date.getDate(),
       date.getHours(),
       date.getMinutes(),
-      observerGeo.latitudeDegrees.toFixed(1),
-      observerGeo.longitudeDegrees.toFixed(1)
+      observerGeo.latitudeDegrees.toFixed(2),
+      observerGeo.longitudeDegrees.toFixed(2)
     ].join(":");
   }
 
@@ -484,40 +515,63 @@ export function createAstronomyController({
     const samplePoints = [];
     const segmentPoints = [];
     const observerGeo = getGeoFromProjectedPosition(walkerState.position, constants.DISC_RADIUS);
-    const year = date.getFullYear();
-    const sampleHours = date.getHours();
-    const sampleMinutes = date.getMinutes();
-    let previousPoint = null;
+    const orbitDate = new Date(
+      date.getFullYear(),
+      date.getMonth(),
+      date.getDate(),
+      0,
+      0,
+      0,
+      0
+    );
+    const sampleStepMinutes = 10;
+    const totalSteps = Math.floor((24 * 60) / sampleStepMinutes);
+    const pathDefinitions = [
+      {
+        getHorizontal(sampleDate) {
+          return getSunHorizontalCoordinates(
+            sampleDate,
+            observerGeo.latitudeDegrees,
+            observerGeo.longitudeDegrees
+          );
+        }
+      },
+      {
+        getHorizontal(sampleDate) {
+          return getMoonHorizontalCoordinates(
+            sampleDate,
+            observerGeo.latitudeDegrees,
+            observerGeo.longitudeDegrees
+          );
+        }
+      }
+    ];
     let visibleSamples = 0;
     let totalSamples = 0;
 
-    for (let dayIndex = 0; dayIndex < 367; dayIndex += 1) {
-      const sampleDate = new Date(year, 0, 1 + dayIndex, sampleHours, sampleMinutes, 0, 0);
-      if (sampleDate.getFullYear() !== year) {
-        break;
+    for (const pathDefinition of pathDefinitions) {
+      let previousPoint = null;
+
+      for (let stepIndex = 0; stepIndex <= totalSteps; stepIndex += 1) {
+        const sampleDate = new Date(orbitDate.getTime() + (stepIndex * sampleStepMinutes * 60_000));
+        totalSamples += 1;
+
+        const horizontal = applyCelestialAltitudeOffset(pathDefinition.getHorizontal(sampleDate));
+        if (horizontal.altitudeDegrees <= 0) {
+          previousPoint = null;
+          continue;
+        }
+
+        const point = getSkyAnalemmaPoint(horizontal, walkerState.position, observerGeo.longitudeDegrees);
+        samplePoints.push(point);
+        visibleSamples += 1;
+
+        if (previousPoint) {
+          segmentPoints.push(previousPoint.clone(), point.clone());
+        }
+
+        previousPoint = point;
       }
-      totalSamples += 1;
-
-      const horizontal = getSunHorizontalCoordinates(
-        sampleDate,
-        observerGeo.latitudeDegrees,
-        observerGeo.longitudeDegrees
-      );
-
-      if (horizontal.altitudeDegrees <= 0) {
-        previousPoint = null;
-        continue;
-      }
-
-      const point = getSkyAnalemmaPoint(horizontal, walkerState.position, observerGeo.longitudeDegrees);
-      samplePoints.push(point);
-      visibleSamples += 1;
-
-      if (previousPoint) {
-        segmentPoints.push(previousPoint.clone(), point.clone());
-      }
-
-      previousPoint = point;
     }
 
     setTrailPoints(skyAnalemmaPoints, skyAnalemmaGeometry, skyAnalemmaPointsGeometry, samplePoints);
@@ -536,7 +590,7 @@ export function createAstronomyController({
 
     if (!skyAnalemmaState.enabled) {
       clearSkyAnalemma();
-      ui.skyAnalemmaSummaryEl.textContent = "Walker-based sky analemma is hidden.";
+      ui.skyAnalemmaSummaryEl.textContent = "Observer sky orbit is hidden.";
       return;
     }
 
@@ -549,8 +603,8 @@ export function createAstronomyController({
       ? ` ${hiddenSamples} daily samples are below the horizon and omitted.`
       : "";
     ui.skyAnalemmaSummaryEl.textContent =
-      `Walker sky analemma from ${formatGeoPair(observerGeo.latitudeDegrees, observerGeo.longitudeDegrees)} ` +
-      `at ${analemmaTimeFormatter.format(date)} local time.${hiddenCopy}`;
+      `Observer sky orbit from ${formatGeoPair(observerGeo.latitudeDegrees, observerGeo.longitudeDegrees)} ` +
+      `on ${date.toLocaleDateString()} shows the selected day's solar and lunar arcs above the horizon.${hiddenCopy}`;
   }
 
   function rebuildAstronomyTrails(snapshot) {
