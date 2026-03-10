@@ -21,6 +21,7 @@ import {
 
 export function createAstronomyController({
   constants,
+  i18n,
   ui,
   astronomyState,
   seasonalMoonState,
@@ -50,18 +51,6 @@ export function createAstronomyController({
   southSeasonOverlay,
   getNightLightsData
 }) {
-  const observationTimeFormatter = new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "medium"
-  });
-  const seasonalEventFormatter = new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short"
-  });
-  const analemmaTimeFormatter = new Intl.DateTimeFormat(undefined, {
-    hour: "2-digit",
-    minute: "2-digit"
-  });
   const seasonalEventMap = new Map(
     SEASONAL_EVENT_DEFINITIONS.map((definition) => [definition.key, definition])
   );
@@ -95,6 +84,33 @@ export function createAstronomyController({
     return `${prefix}${value.toFixed(1)}deg`;
   }
 
+  function formatObservationTime(date) {
+    return i18n.formatDate(date, {
+      dateStyle: "medium",
+      timeStyle: "medium"
+    });
+  }
+
+  function formatSeasonalEventTime(date) {
+    return i18n.formatDate(date, {
+      dateStyle: "medium",
+      timeStyle: "short"
+    });
+  }
+
+  function formatAnalemmaTime(date) {
+    return i18n.formatDate(date, {
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  }
+
+  const seasonalEventFormatter = {
+    format(date) {
+      return formatSeasonalEventTime(date);
+    }
+  };
+
   function applyCelestialAltitudeOffset(horizontal) {
     const altitudeDegrees = THREE.MathUtils.clamp(
       horizontal.altitudeDegrees - constants.CELESTIAL_ALTITUDE_DROP_DEGREES,
@@ -112,13 +128,13 @@ export function createAstronomyController({
   function getSeasonalEventLabel(key) {
     switch (key) {
       case "springEquinox":
-        return "Spring Equinox";
+        return i18n.t("seasonalEventSpringEquinox");
       case "summerSolstice":
-        return "Summer Solstice";
+        return i18n.t("seasonalEventSummerSolstice");
       case "autumnEquinox":
-        return "Autumn Equinox";
+        return i18n.t("seasonalEventAutumnEquinox");
       case "winterSolstice":
-        return "Winter Solstice";
+        return i18n.t("seasonalEventWinterSolstice");
       default:
         return key;
     }
@@ -126,12 +142,12 @@ export function createAstronomyController({
 
   function getAltitudeSummary(value) {
     if (value > 0.5) {
-      return "Above horizon";
+      return i18n.t("altitudeSummaryAbove");
     }
     if (value < -0.5) {
-      return "Below horizon";
+      return i18n.t("altitudeSummaryBelow");
     }
-    return "On horizon";
+    return i18n.t("altitudeSummaryOn");
   }
 
   function getObserverGeo() {
@@ -220,8 +236,8 @@ export function createAstronomyController({
     ui.dayNightOverlayEl.checked = dayNightState.enabled;
     dayNightOverlay.visible = dayNightState.enabled;
     ui.dayNightSummaryEl.textContent = dayNightState.enabled
-      ? "Night side overlay is active."
-      : "Night side overlay is hidden.";
+      ? i18n.t("dayNightSummaryActive")
+      : i18n.t("dayNightSummaryHidden");
   }
 
   function updateDayNightOverlayFromSun(sunLatitudeDegrees, sunLongitudeDegrees, force = false) {
@@ -297,26 +313,31 @@ export function createAstronomyController({
   function syncSeasonalMoonUi() {
     const audit = getSelectedSeasonalAudit();
     const definition = seasonalEventMap.get(audit.key);
+    const seasonalLabel = getSeasonalEventLabel(audit.key);
     ui.seasonalYearEl.value = String(seasonalMoonState.selectedYear);
     syncSeasonalEventButtons();
     ui.seasonalEventTimeEl.textContent =
       `${seasonalMoonState.selectedYear} ${definition.label} · ${seasonalEventFormatter.format(audit.date)}`;
     ui.seasonalMoonAnchorEl.textContent = formatGeoPair(audit.moon.latitudeDegrees, audit.moon.longitudeDegrees);
-    ui.seasonalMoonDriftEl.textContent =
-      `dLat ${formatSignedDegrees(audit.motion.netLatitudeDeltaDegrees)} / ` +
-      `dLon ${formatSignedDegrees(audit.motion.netLongitudeDeltaDegrees)}`;
+    ui.seasonalMoonDriftEl.textContent = i18n.t("seasonalMoonDrift", {
+      latitudeDelta: formatSignedDegrees(audit.motion.netLatitudeDeltaDegrees),
+      longitudeDelta: formatSignedDegrees(audit.motion.netLongitudeDeltaDegrees)
+    });
     ui.seasonalMoonSummaryEl.textContent =
       `${definition.label} 기준 ±12시간 달 궤적: 위도 ${formatLatitude(audit.motion.latitudeMinDegrees)}~` +
       `${formatLatitude(audit.motion.latitudeMaxDegrees)}, 경도 누적 이동 ${audit.motion.longitudeSweepDegrees.toFixed(1)}deg.`;
 
-    const seasonalLabel = getSeasonalEventLabel(audit.key);
-    ui.seasonalEventTimeEl.textContent =
-      `Shared seasonal anchor: ${seasonalMoonState.selectedYear} ${seasonalLabel} ` +
-      `at ${seasonalEventFormatter.format(audit.date)}`;
-    ui.seasonalMoonSummaryEl.textContent =
-      `${seasonalLabel} anchor with a 24-hour moon swing from ` +
-      `${formatLatitude(audit.motion.latitudeMinDegrees)} to ${formatLatitude(audit.motion.latitudeMaxDegrees)} ` +
-      `and a ${audit.motion.longitudeSweepDegrees.toFixed(1)}deg longitude sweep.`;
+    ui.seasonalEventTimeEl.textContent = i18n.t("seasonalEventTime", {
+      year: seasonalMoonState.selectedYear,
+      eventLabel: seasonalLabel,
+      date: formatSeasonalEventTime(audit.date)
+    });
+    ui.seasonalMoonSummaryEl.textContent = i18n.t("seasonalMoonSummary", {
+      eventLabel: seasonalLabel,
+      latitudeMin: formatLatitude(audit.motion.latitudeMinDegrees),
+      latitudeMax: formatLatitude(audit.motion.latitudeMaxDegrees),
+      longitudeSweep: audit.motion.longitudeSweepDegrees.toFixed(1)
+    });
 
     return audit;
   }
@@ -357,14 +378,14 @@ export function createAstronomyController({
     ui.seasonalSunGridEl.innerHTML = audits.map((audit) => `
       <article class="seasonal-sun-card">
         <p class="seasonal-sun-heading">${getSeasonalEventLabel(audit.key)}</p>
-        <p class="seasonal-sun-meta">${seasonalEventFormatter.format(audit.date)}</p>
+        <p class="seasonal-sun-meta">${formatSeasonalEventTime(audit.date)}</p>
         <div class="seasonal-sun-values">
           <div>
-            <span class="seasonal-sun-label">Solar latitude</span>
+            <span class="seasonal-sun-label">${i18n.t("seasonalSunCardSolarLatitude")}</span>
             <strong class="seasonal-sun-value">${formatLatitude(audit.sun.latitudeDegrees)}</strong>
           </div>
           <div>
-            <span class="seasonal-sun-label">Model altitude</span>
+            <span class="seasonal-sun-label">${i18n.t("seasonalSunCardModelAltitude")}</span>
             <strong class="seasonal-sun-value">${formatAltitude(audit.horizontal.altitudeDegrees)}</strong>
           </div>
         </div>
@@ -372,15 +393,17 @@ export function createAstronomyController({
       </article>
     `).join("");
 
-    ui.seasonalSunSummaryEl.textContent =
-      `Observer ${formatGeoPair(observerGeo.latitudeDegrees, observerGeo.longitudeDegrees)}. ` +
-      `Equinoxes stay near ${formatLatitude(auditsByKey.springEquinox.sun.latitudeDegrees)} and ` +
-      `${formatLatitude(auditsByKey.autumnEquinox.sun.latitudeDegrees)}, while solstices reach ` +
-      `${formatLatitude(auditsByKey.summerSolstice.sun.latitudeDegrees)} and ` +
-      `${formatLatitude(auditsByKey.winterSolstice.sun.latitudeDegrees)}. ` +
-      `Highest modeled altitude here: ${getSeasonalEventLabel(highestAudit.key)} ` +
-      `${formatAltitude(highestAudit.horizontal.altitudeDegrees)}. Lowest: ` +
-      `${getSeasonalEventLabel(lowestAudit.key)} ${formatAltitude(lowestAudit.horizontal.altitudeDegrees)}.`;
+    ui.seasonalSunSummaryEl.textContent = i18n.t("seasonalSunSummary", {
+      observerGeo: formatGeoPair(observerGeo.latitudeDegrees, observerGeo.longitudeDegrees),
+      springLatitude: formatLatitude(auditsByKey.springEquinox.sun.latitudeDegrees),
+      autumnLatitude: formatLatitude(auditsByKey.autumnEquinox.sun.latitudeDegrees),
+      summerLatitude: formatLatitude(auditsByKey.summerSolstice.sun.latitudeDegrees),
+      winterLatitude: formatLatitude(auditsByKey.winterSolstice.sun.latitudeDegrees),
+      highestLabel: getSeasonalEventLabel(highestAudit.key),
+      highestAltitude: formatAltitude(highestAudit.horizontal.altitudeDegrees),
+      lowestLabel: getSeasonalEventLabel(lowestAudit.key),
+      lowestAltitude: formatAltitude(lowestAudit.horizontal.altitudeDegrees)
+    });
 
     lastSeasonalSunKey = uiKey;
   }
@@ -446,7 +469,7 @@ export function createAstronomyController({
 
     if (!analemmaState.enabled) {
       clearAnalemmaProjection();
-      ui.analemmaSummaryEl.textContent = "Ground analemma is hidden.";
+      ui.analemmaSummaryEl.textContent = i18n.t("analemmaSummaryHidden");
       return;
     }
 
@@ -455,9 +478,10 @@ export function createAstronomyController({
       rebuildAnalemmaProjection(date);
     }
 
-    ui.analemmaSummaryEl.textContent =
-      `Ground projection for ${date.getFullYear()} at ${analemmaTimeFormatter.format(date)} local time. ` +
-      "One solar subpoint is sampled per day on the disc surface.";
+    ui.analemmaSummaryEl.textContent = i18n.t("analemmaSummary", {
+      year: date.getFullYear(),
+      time: formatAnalemmaTime(date)
+    });
   }
 
   function clearSkyAnalemma() {
@@ -590,7 +614,7 @@ export function createAstronomyController({
 
     if (!skyAnalemmaState.enabled) {
       clearSkyAnalemma();
-      ui.skyAnalemmaSummaryEl.textContent = "Observer sky orbit is hidden.";
+      ui.skyAnalemmaSummaryEl.textContent = i18n.t("skyAnalemmaSummaryHidden");
       return;
     }
 
@@ -600,11 +624,13 @@ export function createAstronomyController({
 
     const hiddenSamples = Math.max(0, skyAnalemmaState.lastTotalSamples - skyAnalemmaState.lastVisibleSamples);
     const hiddenCopy = hiddenSamples > 0
-      ? ` ${hiddenSamples} daily samples are below the horizon and omitted.`
+      ? i18n.t("skyAnalemmaHiddenSamples", { count: hiddenSamples })
       : "";
-    ui.skyAnalemmaSummaryEl.textContent =
-      `Observer sky orbit from ${formatGeoPair(observerGeo.latitudeDegrees, observerGeo.longitudeDegrees)} ` +
-      `on ${date.toLocaleDateString()} shows the selected day's solar and lunar arcs above the horizon.${hiddenCopy}`;
+    ui.skyAnalemmaSummaryEl.textContent = i18n.t("skyAnalemmaSummary", {
+      observerGeo: formatGeoPair(observerGeo.latitudeDegrees, observerGeo.longitudeDegrees),
+      date: i18n.formatDate(date, { dateStyle: "medium" }),
+      hiddenCopy
+    });
   }
 
   function rebuildAstronomyTrails(snapshot) {
@@ -629,13 +655,13 @@ export function createAstronomyController({
 
   function updateAstronomyUi(snapshot) {
     ui.timeSummaryEl.textContent = astronomyState.live
-      ? `Live sync: ${observationTimeFormatter.format(snapshot.date)}`
-      : `Preview time: ${observationTimeFormatter.format(snapshot.date)}`;
+      ? i18n.t("timeSummaryLive", { date: formatObservationTime(snapshot.date) })
+      : i18n.t("timeSummaryPreview", { date: formatObservationTime(snapshot.date) });
     ui.sunCoordinatesEl.textContent = formatGeoPair(snapshot.sun.latitudeDegrees, snapshot.sun.longitudeDegrees);
     ui.moonCoordinatesEl.textContent = formatGeoPair(snapshot.moon.latitudeDegrees, snapshot.moon.longitudeDegrees);
     ui.orbitLabelEl.textContent = astronomyState.enabled
-      ? "Reality sync is active. Demo orbit buttons are paused."
-      : orbitModes[simulationState.orbitMode].label;
+      ? i18n.t("orbitLabelRealitySync")
+      : i18n.t(orbitModes[simulationState.orbitMode].labelKey);
   }
 
   function updateSeasonPresentation(radius) {
@@ -661,19 +687,19 @@ export function createAstronomyController({
     ui.seasonLatitudeEl.textContent = formatLatitude(latitude);
 
     if (Math.abs(latitude) < 1.2) {
-      ui.seasonSummaryEl.textContent = "Both hemispheres / equinox crossing";
-      ui.seasonDetailEl.textContent = "The sun is near the equatorial ring, so the model balances illumination between north and south.";
+      ui.seasonSummaryEl.textContent = i18n.t("seasonSummaryEquinox");
+      ui.seasonDetailEl.textContent = i18n.t("seasonDetailEquinox");
       return;
     }
 
     if (latitude > 0) {
-      ui.seasonSummaryEl.textContent = "Northern summer / Southern winter";
-      ui.seasonDetailEl.textContent = "The sun is closer to the northern tropic, so the north receives more direct illumination in this model.";
+      ui.seasonSummaryEl.textContent = i18n.t("seasonSummaryNorth");
+      ui.seasonDetailEl.textContent = i18n.t("seasonDetailNorth");
       return;
     }
 
-    ui.seasonSummaryEl.textContent = "Northern winter / Southern summer";
-    ui.seasonDetailEl.textContent = "The sun is closer to the southern tropic, so the south receives more direct illumination in this model.";
+    ui.seasonSummaryEl.textContent = i18n.t("seasonSummarySouth");
+    ui.seasonDetailEl.textContent = i18n.t("seasonDetailSouth");
   }
 
   function applyAstronomySnapshot(snapshot) {
@@ -728,8 +754,8 @@ export function createAstronomyController({
     }
     syncAstronomyControls();
     ui.orbitLabelEl.textContent = astronomyState.enabled
-      ? "Reality sync is active. Demo orbit buttons are paused."
-      : orbitModes[simulationState.orbitMode].label;
+      ? i18n.t("orbitLabelRealitySync")
+      : i18n.t(orbitModes[simulationState.orbitMode].labelKey);
   }
 
   function getCurrentOrbitRadius() {
@@ -791,10 +817,29 @@ export function createAstronomyController({
     astronomyState.live = false;
     resetSunTrail();
     resetMoonTrail();
-    ui.timeSummaryEl.textContent = "Demo orbit mode is active.";
+    ui.timeSummaryEl.textContent = i18n.t("demoOrbitModeActive");
     syncSeasonalSunUi(true);
     syncAnalemmaUi(astronomyState.selectedDate, true);
     syncSkyAnalemmaUi(astronomyState.selectedDate, true);
+    updateOrbitModeUi();
+  }
+
+  function refreshLocalizedUi() {
+    const activeDate = astronomyState.live ? new Date() : astronomyState.selectedDate;
+    syncDayNightOverlayUi();
+    syncAstronomyControls();
+    syncSeasonalMoonUi();
+    syncSeasonalSunUi(true);
+    syncAnalemmaUi(activeDate, true);
+    syncSkyAnalemmaUi(activeDate, true);
+
+    if (astronomyState.enabled) {
+      updateAstronomyUi(getAstronomySnapshot(activeDate));
+      return;
+    }
+
+    updateSeasonPresentation(getCurrentOrbitRadius());
+    ui.timeSummaryEl.textContent = i18n.t("demoOrbitModeActive");
     updateOrbitModeUi();
   }
 
@@ -833,6 +878,7 @@ export function createAstronomyController({
     getMoonBaseHeight,
     getSunOrbitHeight,
     rebuildAstronomyTrails,
+    refreshLocalizedUi,
     resetMoonTrail,
     resetSunTrail,
     setObservationInputValue,

@@ -4,13 +4,12 @@ import {
   projectedRadiusFromLatitude
 } from "./modules/geo-utils.js";
 import {
-  getMoonHorizontalCoordinates,
   getSolarAltitudeFactor,
-  getSunHorizontalCoordinates
 } from "./modules/astronomy-utils.js";
 import { createAstronomyController } from "./modules/astronomy-controller.js";
 import { createCameraController } from "./modules/camera-controller.js";
 import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js";
+import { createI18n } from "./modules/i18n.js";
 import { createRouteSimulationController } from "./modules/route-simulation-controller.js";
 import { createTextureManager } from "./modules/texture-manager.js";
 import { createWalkerController } from "./modules/walker-controller.js";
@@ -137,10 +136,15 @@ const firstPersonPrepCopyEl = document.getElementById("first-person-prep-copy");
 const firstPersonPrepBarFillEl = document.getElementById("first-person-prep-bar-fill");
 const firstPersonPrepProgressEl = document.getElementById("first-person-prep-progress");
 const statusEl = document.getElementById("status");
+const languageToggleEl = document.getElementById("language-toggle");
+const languageToggleTextEl = document.getElementById("language-toggle-text");
 const uploadInput = document.getElementById("map-upload");
 const resetButton = document.getElementById("reset-camera");
+const detailTabsEl = document.getElementById("detail-tabs");
 const controlTabButtons = [...document.querySelectorAll("[data-control-tab]")];
 const controlTabPanels = [...document.querySelectorAll("[data-control-panel]")];
+const translatableTextEls = [...document.querySelectorAll("[data-i18n]")];
+const translatableHtmlEls = [...document.querySelectorAll("[data-i18n-html]")];
 const orbitLabelEl = document.getElementById("orbit-label");
 const orbitModeButtons = [...document.querySelectorAll("[data-orbit-mode]")];
 const seasonLatitudeEl = document.getElementById("season-latitude");
@@ -188,35 +192,63 @@ const routeCountriesEl = document.getElementById("route-countries");
 const routeDurationEl = document.getElementById("route-duration");
 const routeProgressEl = document.getElementById("route-progress");
 const routeGeoSummaryEl = document.getElementById("route-geo-summary");
+const i18n = createI18n();
+
+function applyStaticTranslations() {
+  document.documentElement.lang = i18n.getLanguage();
+  document.title = i18n.t("documentTitle");
+  detailTabsEl.setAttribute("aria-label", i18n.t("detailTabsAria"));
+  languageToggleEl.checked = i18n.getLanguage() === "en";
+  languageToggleEl.setAttribute("aria-label", i18n.t("languageToggleAria"));
+  languageToggleTextEl.textContent = i18n.getLanguage() === "en"
+    ? i18n.t("languageNameEn")
+    : i18n.t("languageNameKo");
+
+  for (const element of translatableTextEls) {
+    element.textContent = i18n.t(element.dataset.i18n);
+  }
+
+  for (const element of translatableHtmlEls) {
+    element.innerHTML = i18n.t(element.dataset.i18nHtml);
+  }
+}
 
 const orbitModes = {
   auto: {
-    label: "Auto mode: the sun sweeps between the northern tropic, equator, and southern tropic."
+    labelKey: "orbitLabelAuto"
   },
   north: {
     radius: TROPIC_CANCER_RADIUS,
-    label: "North tropic mode: the sun follows only the northern tropic ring."
+    labelKey: "orbitLabelNorth"
   },
   equator: {
     radius: EQUATOR_RADIUS,
-    label: "Equator mode: the sun follows only the equatorial ring."
+    labelKey: "orbitLabelEquator"
   },
   south: {
     radius: TROPIC_CAPRICORN_RADIUS,
-    label: "South tropic mode: the sun follows only the southern tropic ring."
+    labelKey: "orbitLabelSouth"
   }
 };
 
-const seasonalEventButtonLabels = {
-  springEquinox: "Spring Equinox",
-  summerSolstice: "Summer Solstice",
-  autumnEquinox: "Autumn Equinox",
-  winterSolstice: "Winter Solstice"
+const seasonalEventButtonLabelKeys = {
+  springEquinox: "seasonalEventSpringEquinox",
+  summerSolstice: "seasonalEventSummerSolstice",
+  autumnEquinox: "seasonalEventAutumnEquinox",
+  winterSolstice: "seasonalEventWinterSolstice"
 };
 
-for (const button of seasonalEventButtons) {
-  button.textContent = seasonalEventButtonLabels[button.dataset.seasonalEvent] ?? button.textContent;
+function syncSeasonalEventButtonLabels() {
+  for (const button of seasonalEventButtons) {
+    const translationKey = seasonalEventButtonLabelKeys[button.dataset.seasonalEvent];
+    if (translationKey) {
+      button.textContent = i18n.t(translationKey);
+    }
+  }
 }
+
+applyStaticTranslations();
+syncSeasonalEventButtonLabels();
 
 function setControlTab(tabKey) {
   for (const button of controlTabButtons) {
@@ -240,6 +272,8 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0x06101d, FOG_DEFAULT_NEAR, FOG_DEFAULT_FAR);
+const firstPersonScene = new THREE.Scene();
+firstPersonScene.fog = new THREE.Fog(0x06101d, FOG_WALKER_NEAR, FOG_WALKER_FAR);
 
 const camera = new THREE.PerspectiveCamera(CAMERA_DEFAULT_FOV, 1, 0.1, 100);
 
@@ -657,6 +691,17 @@ const rimLight = new THREE.DirectionalLight(0x8fd9ff, 0.42);
 rimLight.position.set(-7, 4, -5);
 scene.add(rimLight);
 
+const firstPersonAmbient = new THREE.AmbientLight(0xc5d7ff, 0.9);
+firstPersonScene.add(firstPersonAmbient);
+
+const firstPersonKeyLight = new THREE.DirectionalLight(0xeaf4ff, 1.35);
+firstPersonKeyLight.position.set(5, 7, 6);
+firstPersonScene.add(firstPersonKeyLight);
+
+const firstPersonRimLight = new THREE.DirectionalLight(0x8fd9ff, 0.42);
+firstPersonRimLight.position.set(-7, 4, -5);
+firstPersonScene.add(firstPersonRimLight);
+
 const orbitSun = new THREE.Group();
 const orbitSunBody = new THREE.Mesh(
   new THREE.SphereGeometry(ORBIT_SUN_SIZE, 32, 24),
@@ -696,7 +741,7 @@ const observerSunHalo = observerSun.children[1];
 observerSunHalo.material = observerSunHalo.material.clone();
 const observerSunLight = observerSun.children[2];
 observerSun.visible = false;
-scene.add(observerSun);
+firstPersonScene.add(observerSun);
 
 function createSunRayTexture() {
   const width = 256;
@@ -741,7 +786,7 @@ function createSunRayTexture() {
 const sunRayTexture = createSunRayTexture();
 const firstPersonSunRayGroup = new THREE.Group();
 firstPersonSunRayGroup.visible = false;
-scene.add(firstPersonSunRayGroup);
+firstPersonScene.add(firstPersonSunRayGroup);
 
 function createSunRayMesh(width, length, rotationZ, opacity, pulseOffset) {
   const geometry = new THREE.PlaneGeometry(width, length);
@@ -811,7 +856,7 @@ const observerMoonHalo = observerMoon.children[1];
 observerMoonHalo.material = observerMoonHalo.material.clone();
 const observerMoonLight = observerMoon.children[2];
 observerMoon.visible = false;
-scene.add(observerMoon);
+firstPersonScene.add(observerMoon);
 
 const sunTrailGeometry = new THREE.BufferGeometry();
 const sunTrailMaterial = new THREE.LineBasicMaterial({
@@ -1005,6 +1050,7 @@ for (let i = 0; i < 500; i += 1) {
 const skyTexture = new THREE.CanvasTexture(starCanvas);
 skyTexture.colorSpace = THREE.SRGBColorSpace;
 scene.background = skyTexture;
+firstPersonScene.background = null;
 const clock = new THREE.Clock();
 
 const constants = {
@@ -1107,6 +1153,7 @@ const ui = {
 let astronomyApi;
 const textureApi = createTextureManager({
   constants,
+  i18n,
   renderer,
   topMaterial,
   statusEl,
@@ -1141,6 +1188,7 @@ const cameraApi = createCameraController({
 
 astronomyApi = createAstronomyController({
   constants,
+  i18n,
   ui,
   astronomyState,
   seasonalMoonState,
@@ -1173,6 +1221,7 @@ astronomyApi = createAstronomyController({
 
 const walkerApi = createWalkerController({
   constants,
+  i18n,
   renderState,
   walkerState,
   movementState,
@@ -1182,24 +1231,25 @@ const walkerApi = createWalkerController({
   walkerGuideLeft,
   walkerGuideRight,
   walkerGuideCenter,
-  ambient,
-  keyLight,
-  rimLight
+  ambient: firstPersonAmbient,
+  keyLight: firstPersonKeyLight,
+  rimLight: firstPersonRimLight
 });
 
 const firstPersonWorldApi = createFirstPersonWorldController({
-  scene,
+  scene: firstPersonScene,
   constants,
   walkerState,
   renderState,
-  ambient,
-  keyLight,
-  rimLight,
+  ambient: firstPersonAmbient,
+  keyLight: firstPersonKeyLight,
+  rimLight: firstPersonRimLight,
   topDownBackground: skyTexture
 });
 
 const routeSimulationApi = createRouteSimulationController({
   constants,
+  i18n,
   scalableStage,
   ui: {
     routeAircraftEl,
@@ -1218,6 +1268,29 @@ const routeSimulationApi = createRouteSimulationController({
     routeSpeedValueEl,
     routeSummaryEl
   }
+});
+
+function getCurrentUiSnapshot() {
+  if (astronomyState.enabled) {
+    const observationDate = astronomyState.live ? new Date() : astronomyState.selectedDate;
+    return astronomyApi.getAstronomySnapshot(observationDate);
+  }
+
+  return {
+    date: astronomyState.selectedDate,
+    sun: getGeoFromProjectedPosition(orbitSun.position, DISC_RADIUS),
+    moon: getGeoFromProjectedPosition(orbitMoon.position, DISC_RADIUS)
+  };
+}
+
+i18n.subscribe(() => {
+  applyStaticTranslations();
+  syncSeasonalEventButtonLabels();
+  textureApi.refreshLocalizedUi?.();
+  astronomyApi.refreshLocalizedUi?.();
+  walkerApi.refreshLocalizedUi?.(getCurrentUiSnapshot());
+  routeSimulationApi.refreshLocalizedUi?.();
+  syncPreparationPresentation();
 });
 
 const tempPreparationLookTarget = new THREE.Vector3();
@@ -1246,20 +1319,20 @@ function syncPreparationPresentation() {
   const displayProgress = renderState.compileReady
     ? timelineProgress
     : Math.min(timelineProgress, 0.88);
-  let title = "Preparing observer render";
-  let copy = "Scaling the disc and extending the horizon for first-person mode.";
+  let title = i18n.t("prepTitlePreparingObserver");
+  let copy = i18n.t("prepCopyPreparingObserver");
 
   if (displayProgress >= 0.72 && !renderState.compileReady) {
-    title = "Compiling first-person shaders";
-    copy = "Warming the render path so the observer camera can enter without a hitch.";
+    title = i18n.t("prepTitleCompilingShaders");
+    copy = i18n.t("prepCopyCompilingShaders");
   } else if (displayProgress >= 0.42) {
-    title = "Shifting atmosphere and horizon";
-    copy = "Applying the first-person fog range and long-distance scale pass.";
+    title = i18n.t("prepTitleShiftingAtmosphere");
+    copy = i18n.t("prepCopyShiftingAtmosphere");
   }
 
   if (renderState.compileReady && displayProgress >= 0.92) {
-    title = "Locking observer camera";
-    copy = "Finalizing the horizon alignment before the first-person view opens.";
+    title = i18n.t("prepTitleLockingCamera");
+    copy = i18n.t("prepCopyLockingCamera");
   }
 
   renderState.progress = displayProgress;
@@ -1274,8 +1347,8 @@ function syncPreparationPresentation() {
 function updateRenderState() {
   renderState.stageScale += (renderState.targetStageScale - renderState.stageScale) * 0.08;
   renderState.visualScale += (renderState.targetVisualScale - renderState.visualScale) * 0.08;
-  scene.fog.near += (renderState.targetFogNear - scene.fog.near) * 0.08;
-  scene.fog.far += (renderState.targetFogFar - scene.fog.far) * 0.08;
+  firstPersonScene.fog.near += (renderState.targetFogNear - firstPersonScene.fog.near) * 0.08;
+  firstPersonScene.fog.far += (renderState.targetFogFar - firstPersonScene.fog.far) * 0.08;
   stage.scale.setScalar(renderState.stageScale);
   scalableStage.scale.set(renderState.visualScale, 1, renderState.visualScale);
 }
@@ -1392,26 +1465,16 @@ function updateObserverCelestialPerspective(snapshot) {
   }
 
   const observerGeo = getGeoFromProjectedPosition(walkerState.position, constants.DISC_RADIUS);
-  const sunHorizontal = astronomyState.enabled
-    ? getSunHorizontalCoordinates(
-      snapshot.date,
-      observerGeo.latitudeDegrees,
-      observerGeo.longitudeDegrees
-    )
-    : getHorizontalFromWorldPosition(orbitSun.getWorldPosition(tempDemoSunSourceWorld), observerGeo);
-  const moonHorizontal = astronomyState.enabled
-    ? getMoonHorizontalCoordinates(
-      snapshot.date,
-      observerGeo.latitudeDegrees,
-      observerGeo.longitudeDegrees
-    )
-    : getHorizontalFromWorldPosition(orbitMoon.getWorldPosition(tempDemoMoonSourceWorld), observerGeo);
-  const adjustedSunHorizontal = astronomyState.enabled
-    ? applyCelestialAltitudeOffset(sunHorizontal)
-    : sunHorizontal;
-  const adjustedMoonHorizontal = astronomyState.enabled
-    ? applyCelestialAltitudeOffset(moonHorizontal)
-    : moonHorizontal;
+  const sunHorizontal = getHorizontalFromWorldPosition(
+    orbitSun.getWorldPosition(tempDemoSunSourceWorld),
+    observerGeo
+  );
+  const moonHorizontal = getHorizontalFromWorldPosition(
+    orbitMoon.getWorldPosition(tempDemoMoonSourceWorld),
+    observerGeo
+  );
+  const adjustedSunHorizontal = applyCelestialAltitudeOffset(sunHorizontal);
+  const adjustedMoonHorizontal = applyCelestialAltitudeOffset(moonHorizontal);
   const solarFactor = getSolarAltitudeFactor(
     observerGeo.latitudeDegrees,
     observerGeo.longitudeDegrees,
@@ -1595,7 +1658,7 @@ async function enterFirstPersonMode() {
 
   const compilePromise = renderState.compiledFirstPerson
     ? Promise.resolve()
-    : renderer.compileAsync(scene, configurePreparationCamera(camera.clone())).catch(() => null);
+    : renderer.compileAsync(firstPersonScene, configurePreparationCamera(camera.clone())).catch(() => null);
 
   compilePromise.then(() => {
     if (renderState.transitionToken !== transitionToken) {
@@ -1689,6 +1752,10 @@ for (const button of controlTabButtons) {
     setControlTab(button.dataset.controlTab);
   });
 }
+
+languageToggleEl.addEventListener("change", () => {
+  i18n.setLanguage(languageToggleEl.checked ? "en" : "ko");
+});
 
 uploadInput.addEventListener("change", (event) => {
   const file = event.target.files[0];
@@ -1952,7 +2019,7 @@ function animate() {
   if (snapshot) {
     updateObserverCelestialPerspective(snapshot);
   }
-  renderer.render(scene, camera);
+  renderer.render(walkerState.enabled ? firstPersonScene : scene, camera);
 }
 
 cameraApi.resize();

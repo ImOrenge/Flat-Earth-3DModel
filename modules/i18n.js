@@ -1,0 +1,375 @@
+const STORAGE_KEY = "flat-earth-language";
+
+const LOCALES = {
+  en: "en-US",
+  ko: "ko-KR"
+};
+
+const TRANSLATIONS = {
+  en: {
+    documentTitle: "Flat Earth 3D Model",
+    firstPersonPrepLabel: "FIRST PERSON",
+    summaryEyebrow: "3D MODEL",
+    summaryTitle: "Flat Earth Disc",
+    summaryCopy: "Flat map texture based 3D preview. Drop a custom map into <code>assets/flat-earth-map.png</code> or upload one here for an immediate update.",
+    languageLabel: "Language",
+    uploadMapButton: "Upload Map",
+    resetCameraButton: "Reset Camera",
+    seasonSolarLatitude: "Solar Latitude",
+    seasonState: "Season State",
+    statModel: "Model",
+    statModelValue: "Disc + Ice Rim",
+    statOutput: "Output",
+    statOutputValue: "OBJ / MTL",
+    stepGenerateMesh: "Generate the mesh with <code>scripts/generate-flat-earth-obj.ps1</code>.",
+    stepOpenObj: "Open <code>models/flat-earth-disc.obj</code> in Blender or another DCC tool.",
+    stepSwapTexture: "Swap the top texture with <code>assets/flat-earth-map.png</code> when needed.",
+    detailEyebrow: "DETAIL CONTROLS",
+    detailTabsAria: "Detail control sections",
+    tabAstronomy: "Astronomy",
+    tabRoutes: "Route Control",
+    realitySyncTitle: "Reality Sync",
+    toggleOn: "On",
+    useCurrentTimeTitle: "Use Current Time",
+    toggleLive: "Live",
+    observationTimeLabel: "Observation Time",
+    previewTimeButton: "Preview Time",
+    backToNowButton: "Back To Now",
+    coordSun: "Sun",
+    coordMoon: "Moon",
+    dayNightOverlayTitle: "Day/Night Overlay",
+    toggleClear: "Clear",
+    groundAnalemmaTitle: "Ground Analemma",
+    toggleYearlyPath: "Yearly Path",
+    skyOrbitTitle: "Sky Orbit",
+    toggleObserverArc: "Observer Arc",
+    walkerViewTitle: "Walker View",
+    toggleFirstPerson: "First Person",
+    coordObserver: "Observer",
+    coordLocalLight: "Local Light",
+    resetWalkerButton: "Reset Walker",
+    seasonalAuditControlsTitle: "Seasonal Audit Controls",
+    auditYearLabel: "Audit Year",
+    moonAuditTitle: "Moon Audit",
+    moonAnchorLabel: "Moon Anchor",
+    moonDriftLabel: "24h Drift",
+    sunAuditTitle: "Sun Audit",
+    solarOrbitTitle: "Solar Orbit",
+    orbitModeAuto: "Auto",
+    orbitModeNorth: "North Tropic",
+    orbitModeEquator: "Equator",
+    orbitModeSouth: "South Tropic",
+    orbitAltitudeProfile: "Altitude profile: north tropic highest, equator mid, south tropic lowest.",
+    offlineRouteLibraryTitle: "Offline Route Library",
+    routeLabel: "Route",
+    playbackSpeedLabel: "Playback Speed",
+    cycleRateTitle: "Cycle Rate",
+    routePauseButton: "Pause",
+    routePlayButton: "Play",
+    routeResetLegButton: "Reset Leg",
+    activeRouteTitle: "Active Route",
+    routeLegLabel: "Leg",
+    routeAircraftLabel: "Aircraft",
+    routeOriginLabel: "Origin",
+    routeDestinationLabel: "Destination",
+    routeCountriesLabel: "Countries",
+    routePlannedBlockLabel: "Planned Block",
+    routeProgressLabel: "Progress",
+    routeGeoPathLabel: "Geo Path",
+    languageToggleAria: "Switch language",
+    languageNameEn: "English",
+    languageNameKo: "Korean",
+    seasonalEventSpringEquinox: "Spring Equinox",
+    seasonalEventSummerSolstice: "Summer Solstice",
+    seasonalEventAutumnEquinox: "Autumn Equinox",
+    seasonalEventWinterSolstice: "Winter Solstice",
+    orbitLabelAuto: "Auto mode: the sun sweeps between the northern tropic, equator, and southern tropic.",
+    orbitLabelNorth: "North tropic mode: the sun follows only the northern tropic ring.",
+    orbitLabelEquator: "Equator mode: the sun follows only the equatorial ring.",
+    orbitLabelSouth: "South tropic mode: the sun follows only the southern tropic ring.",
+    orbitLabelRealitySync: "Reality sync is active. Demo orbit buttons are paused.",
+    prepTitlePreparingObserver: "Preparing observer render",
+    prepCopyPreparingObserver: "Scaling the disc and extending the horizon for first-person mode.",
+    prepTitleCompilingShaders: "Compiling first-person shaders",
+    prepCopyCompilingShaders: "Warming the render path so the observer camera can enter without a hitch.",
+    prepTitleShiftingAtmosphere: "Shifting atmosphere and horizon",
+    prepCopyShiftingAtmosphere: "Applying the first-person fog range and long-distance scale pass.",
+    prepTitleLockingCamera: "Locking observer camera",
+    prepCopyLockingCamera: "Finalizing the horizon alignment before the first-person view opens.",
+    dayNightSummaryActive: "Night side overlay is active.",
+    dayNightSummaryHidden: "Night side overlay is hidden.",
+    analemmaSummaryHidden: "Ground analemma is hidden.",
+    analemmaSummary: "Ground projection for {year} at {time} local time. One solar subpoint is sampled per day on the disc surface.",
+    skyAnalemmaSummaryHidden: "Observer sky orbit is hidden.",
+    skyAnalemmaHiddenSamples: " {count} daily samples are below the horizon and omitted.",
+    skyAnalemmaSummary: "Observer sky orbit from {observerGeo} on {date} shows the selected day's solar and lunar arcs above the horizon.{hiddenCopy}",
+    timeSummaryLive: "Live sync: {date}",
+    timeSummaryPreview: "Preview time: {date}",
+    seasonSummaryEquinox: "Both hemispheres / equinox crossing",
+    seasonDetailEquinox: "The sun is near the equatorial ring, so the model balances illumination between north and south.",
+    seasonSummaryNorth: "Northern summer / Southern winter",
+    seasonDetailNorth: "The sun is closer to the northern tropic, so the north receives more direct illumination in this model.",
+    seasonSummarySouth: "Northern winter / Southern summer",
+    seasonDetailSouth: "The sun is closer to the southern tropic, so the south receives more direct illumination in this model.",
+    demoOrbitModeActive: "Demo orbit mode is active.",
+    seasonalEventTime: "Shared seasonal anchor: {year} {eventLabel} at {date}",
+    seasonalMoonDrift: "dLat {latitudeDelta} / dLon {longitudeDelta}",
+    seasonalMoonSummary: "{eventLabel} anchor with a 24-hour moon swing from {latitudeMin} to {latitudeMax} and a {longitudeSweep}deg longitude sweep.",
+    seasonalSunCardSolarLatitude: "Solar latitude",
+    seasonalSunCardModelAltitude: "Model altitude",
+    altitudeSummaryAbove: "Above horizon",
+    altitudeSummaryBelow: "Below horizon",
+    altitudeSummaryOn: "On horizon",
+    seasonalSunSummary: "Observer {observerGeo}. Equinoxes stay near {springLatitude} and {autumnLatitude}, while solstices reach {summerLatitude} and {winterLatitude}. Highest modeled altitude here: {highestLabel} {highestAltitude}. Lowest: {lowestLabel} {lowestAltitude}.",
+    walkerSummaryPreparing: "Preparing first-person render. The disc is scaling up and the observer camera is being aligned.",
+    walkerSummaryActive: "First-person view is active. Use WASD or arrow keys to walk, drag to look around, and follow the center vanishing point.",
+    walkerSummaryInactive: "Walk on the map with WASD or the arrow keys and judge day or night from the observer position.",
+    lightDay: "Day",
+    lightLowSun: "Low Sun",
+    lightTwilight: "Twilight",
+    lightNight: "Night",
+    routeSpeedValue: "{speed}x | {cycle}s cycle",
+    routeSummaryNone: "No offline route is active.",
+    routeSelectPrompt: "Select a route",
+    routeGeoSummaryPlaceholder: "Origin and destination coordinates will appear here.",
+    routeProgressSummary: "{percent}% | {elapsed} elapsed / {remaining} remaining",
+    routeSummaryActiveText: "{origin} to {destination} with a planned block time of {duration}.",
+    routeCountriesValue: "{originCountry} -> {destinationCountry}",
+    routeGeoPathValue: "{originGeo} -> {destinationGeo}",
+    routeDatasetLoading: "Loading offline route library...",
+    routeDatasetNoRoutes: "Offline route library loaded, but no valid routes were found.",
+    routeDatasetLoaded: "Loaded {routes} routes, {airports} airports, and {aircraftTypes} aircraft types.",
+    routeDatasetFailed: "Failed to load offline route library.",
+    routeMissingMetadata: "Route {routeId} is missing airport metadata.",
+    durationMinutesOnly: "{minutes}m",
+    durationHoursOnly: "{hours}h",
+    durationHoursMinutes: "{hours}h {minutes}m",
+    statusDefaultTextureLoaded: "{label} texture loaded into the square top surface.",
+    statusFallbackTexture: "Fallback texture is active until a map image is loaded.",
+    statusOnlySvgAllowed: "Only SVG map uploads are allowed.",
+    statusUserTextureLoaded: "{fileName} texture loaded into the square top surface.",
+    statusSvgLoadFailed: "Could not load the SVG image. Try another .svg file.",
+    fallbackTextureTitle: "DROP A FLAT MAP",
+    fallbackTextureSubtitle: "or place assets/flat-earth-map-square.svg"
+  },
+  ko: {
+    documentTitle: "평면 지구 3D 모델",
+    firstPersonPrepLabel: "1인칭",
+    summaryEyebrow: "3D 모델",
+    summaryTitle: "평면 지구 원반",
+    summaryCopy: "평면 지도 텍스처 기반 3D 미리보기입니다. 사용자 지도를 <code>assets/flat-earth-map.png</code>에 넣거나 여기에서 업로드하면 바로 반영됩니다.",
+    languageLabel: "언어",
+    uploadMapButton: "지도 업로드",
+    resetCameraButton: "카메라 초기화",
+    seasonSolarLatitude: "태양 위도",
+    seasonState: "계절 상태",
+    statModel: "모델",
+    statModelValue: "원반 + 빙벽",
+    statOutput: "출력",
+    statOutputValue: "OBJ / MTL",
+    stepGenerateMesh: "<code>scripts/generate-flat-earth-obj.ps1</code>로 메시를 생성합니다.",
+    stepOpenObj: "<code>models/flat-earth-disc.obj</code>를 Blender 또는 다른 DCC 도구에서 엽니다.",
+    stepSwapTexture: "필요하면 상단 텍스처를 <code>assets/flat-earth-map.png</code>로 교체합니다.",
+    detailEyebrow: "세부 제어",
+    detailTabsAria: "세부 제어 섹션",
+    tabAstronomy: "천문",
+    tabRoutes: "경로 제어",
+    realitySyncTitle: "현실 동기화",
+    toggleOn: "켜짐",
+    useCurrentTimeTitle: "현재 시간 사용",
+    toggleLive: "실시간",
+    observationTimeLabel: "관측 시간",
+    previewTimeButton: "시간 미리보기",
+    backToNowButton: "현재로 복귀",
+    coordSun: "태양",
+    coordMoon: "달",
+    dayNightOverlayTitle: "주야 오버레이",
+    toggleClear: "표시",
+    groundAnalemmaTitle: "지면 아날렘마",
+    toggleYearlyPath: "연간 경로",
+    skyOrbitTitle: "하늘 궤도",
+    toggleObserverArc: "관측자 궤적",
+    walkerViewTitle: "워커 시점",
+    toggleFirstPerson: "1인칭",
+    coordObserver: "관측자",
+    coordLocalLight: "현지 광량",
+    resetWalkerButton: "워커 초기화",
+    seasonalAuditControlsTitle: "계절 점검 제어",
+    auditYearLabel: "점검 연도",
+    moonAuditTitle: "달 점검",
+    moonAnchorLabel: "달 기준점",
+    moonDriftLabel: "24시간 변화",
+    sunAuditTitle: "태양 점검",
+    solarOrbitTitle: "태양 공전",
+    orbitModeAuto: "자동",
+    orbitModeNorth: "북회귀선",
+    orbitModeEquator: "적도",
+    orbitModeSouth: "남회귀선",
+    orbitAltitudeProfile: "고도 프로필: 북회귀선이 가장 높고, 적도는 중간, 남회귀선이 가장 낮습니다.",
+    offlineRouteLibraryTitle: "오프라인 경로 라이브러리",
+    routeLabel: "경로",
+    playbackSpeedLabel: "재생 속도",
+    cycleRateTitle: "주기 속도",
+    routePauseButton: "일시 정지",
+    routePlayButton: "재생",
+    routeResetLegButton: "구간 초기화",
+    activeRouteTitle: "활성 경로",
+    routeLegLabel: "구간",
+    routeAircraftLabel: "항공기",
+    routeOriginLabel: "출발지",
+    routeDestinationLabel: "도착지",
+    routeCountriesLabel: "국가",
+    routePlannedBlockLabel: "계획 블록 타임",
+    routeProgressLabel: "진행률",
+    routeGeoPathLabel: "지리 경로",
+    languageToggleAria: "언어 전환",
+    languageNameEn: "English",
+    languageNameKo: "한국어",
+    seasonalEventSpringEquinox: "춘분",
+    seasonalEventSummerSolstice: "하지",
+    seasonalEventAutumnEquinox: "추분",
+    seasonalEventWinterSolstice: "동지",
+    orbitLabelAuto: "자동 모드: 태양이 북회귀선, 적도, 남회귀선 사이를 오갑니다.",
+    orbitLabelNorth: "북회귀선 모드: 태양이 북회귀선 고리만 따라 움직입니다.",
+    orbitLabelEquator: "적도 모드: 태양이 적도 고리만 따라 움직입니다.",
+    orbitLabelSouth: "남회귀선 모드: 태양이 남회귀선 고리만 따라 움직입니다.",
+    orbitLabelRealitySync: "현실 동기화가 활성화되어 데모 공전 버튼이 일시 정지됩니다.",
+    prepTitlePreparingObserver: "관측자 렌더 준비 중",
+    prepCopyPreparingObserver: "1인칭 모드를 위해 원반 크기와 지평선 범위를 조정하고 있습니다.",
+    prepTitleCompilingShaders: "1인칭 셰이더 컴파일 중",
+    prepCopyCompilingShaders: "관측자 카메라가 끊김 없이 진입하도록 렌더 경로를 예열하고 있습니다.",
+    prepTitleShiftingAtmosphere: "대기와 지평선 전환 중",
+    prepCopyShiftingAtmosphere: "1인칭 안개 범위와 장거리 스케일 패스를 적용하고 있습니다.",
+    prepTitleLockingCamera: "관측자 카메라 고정 중",
+    prepCopyLockingCamera: "1인칭 시점이 열리기 전에 지평선 정렬을 마무리하고 있습니다.",
+    dayNightSummaryActive: "밤 영역 오버레이가 활성화되어 있습니다.",
+    dayNightSummaryHidden: "밤 영역 오버레이가 숨겨져 있습니다.",
+    analemmaSummaryHidden: "지면 아날렘마가 숨겨져 있습니다.",
+    analemmaSummary: "{year}년 {time} 현지 시각 기준 지면 투영입니다. 원반 표면에 하루당 하나의 태양 하점을 샘플링합니다.",
+    skyAnalemmaSummaryHidden: "관측자 하늘 궤도가 숨겨져 있습니다.",
+    skyAnalemmaHiddenSamples: " 하루 샘플 {count}개는 지평선 아래라서 제외되었습니다.",
+    skyAnalemmaSummary: "{date} 기준 {observerGeo} 관측자 하늘 궤도입니다. 선택한 날짜의 태양과 달 경로를 지평선 위에서 보여줍니다.{hiddenCopy}",
+    timeSummaryLive: "실시간 동기화: {date}",
+    timeSummaryPreview: "미리보기 시간: {date}",
+    seasonSummaryEquinox: "양반구 / 분점 통과",
+    seasonDetailEquinox: "태양이 적도 고리 근처에 있어 이 모델에서는 남북 반구에 비교적 균형 있게 빛이 들어갑니다.",
+    seasonSummaryNorth: "북반구 여름 / 남반구 겨울",
+    seasonDetailNorth: "태양이 북회귀선에 더 가까워 이 모델에서는 북반구가 더 직접적인 조명을 받습니다.",
+    seasonSummarySouth: "북반구 겨울 / 남반구 여름",
+    seasonDetailSouth: "태양이 남회귀선에 더 가까워 이 모델에서는 남반구가 더 직접적인 조명을 받습니다.",
+    demoOrbitModeActive: "데모 공전 모드가 활성화되어 있습니다.",
+    seasonalEventTime: "공유 계절 기준점: {year}년 {eventLabel} {date}",
+    seasonalMoonDrift: "위도 변화 {latitudeDelta} / 경도 변화 {longitudeDelta}",
+    seasonalMoonSummary: "{eventLabel} 기준으로 24시간 동안 달 하점이 {latitudeMin}에서 {latitudeMax}까지 움직이고, 경도는 {longitudeSweep}deg 범위로 이동합니다.",
+    seasonalSunCardSolarLatitude: "태양 위도",
+    seasonalSunCardModelAltitude: "모델 고도",
+    altitudeSummaryAbove: "지평선 위",
+    altitudeSummaryBelow: "지평선 아래",
+    altitudeSummaryOn: "지평선 위",
+    seasonalSunSummary: "관측자 위치 {observerGeo}. 분점은 {springLatitude}와 {autumnLatitude} 부근을 유지하고, 지점은 {summerLatitude}와 {winterLatitude}에 도달합니다. 이 위치의 최고 모델 고도는 {highestLabel} {highestAltitude}, 최저는 {lowestLabel} {lowestAltitude}입니다.",
+    walkerSummaryPreparing: "1인칭 렌더를 준비 중입니다. 원반을 확대하고 관측자 카메라를 정렬하고 있습니다.",
+    walkerSummaryActive: "1인칭 시점이 활성화되었습니다. WASD 또는 방향키로 이동하고, 드래그로 시야를 돌리며, 중앙 소실점을 참고하세요.",
+    walkerSummaryInactive: "WASD 또는 방향키로 지도를 걸어 다니며 관측자 위치 기준의 낮과 밤을 확인할 수 있습니다.",
+    lightDay: "낮",
+    lightLowSun: "저고도 태양",
+    lightTwilight: "박명",
+    lightNight: "밤",
+    routeSpeedValue: "{speed}x | {cycle}초 주기",
+    routeSummaryNone: "활성화된 오프라인 경로가 없습니다.",
+    routeSelectPrompt: "경로를 선택하세요",
+    routeGeoSummaryPlaceholder: "출발지와 도착지 좌표가 여기에 표시됩니다.",
+    routeProgressSummary: "{percent}% | 경과 {elapsed} / 남은 {remaining}",
+    routeSummaryActiveText: "{origin}에서 {destination}까지, 계획 블록 타임은 {duration}입니다.",
+    routeCountriesValue: "{originCountry} -> {destinationCountry}",
+    routeGeoPathValue: "{originGeo} -> {destinationGeo}",
+    routeDatasetLoading: "오프라인 경로 라이브러리를 불러오는 중...",
+    routeDatasetNoRoutes: "오프라인 경로 라이브러리는 불러왔지만 유효한 경로를 찾지 못했습니다.",
+    routeDatasetLoaded: "경로 {routes}개, 공항 {airports}개, 항공기 형식 {aircraftTypes}개를 불러왔습니다.",
+    routeDatasetFailed: "오프라인 경로 라이브러리를 불러오지 못했습니다.",
+    routeMissingMetadata: "경로 {routeId}에 공항 메타데이터가 없습니다.",
+    durationMinutesOnly: "{minutes}분",
+    durationHoursOnly: "{hours}시간",
+    durationHoursMinutes: "{hours}시간 {minutes}분",
+    statusDefaultTextureLoaded: "{label} 텍스처를 상단 정사각 표면에 불러왔습니다.",
+    statusFallbackTexture: "지도 이미지를 불러오기 전까지 대체 텍스처를 사용합니다.",
+    statusOnlySvgAllowed: "SVG 지도 업로드만 허용됩니다.",
+    statusUserTextureLoaded: "{fileName} 텍스처를 상단 정사각 표면에 불러왔습니다.",
+    statusSvgLoadFailed: "SVG 이미지를 불러오지 못했습니다. 다른 .svg 파일을 시도하세요.",
+    fallbackTextureTitle: "평면 지도를 넣으세요",
+    fallbackTextureSubtitle: "또는 assets/flat-earth-map-square.svg 파일을 배치하세요"
+  }
+};
+
+function interpolate(template, params) {
+  return template.replace(/\{(\w+)\}/g, (_, key) => String(params[key] ?? ""));
+}
+
+function getInitialLanguage(preferredLanguage) {
+  if (preferredLanguage && TRANSLATIONS[preferredLanguage]) {
+    return preferredLanguage;
+  }
+
+  try {
+    const storedLanguage = window.localStorage.getItem(STORAGE_KEY);
+    if (storedLanguage && TRANSLATIONS[storedLanguage]) {
+      return storedLanguage;
+    }
+  } catch {}
+
+  if (typeof navigator !== "undefined" && navigator.language?.toLowerCase().startsWith("ko")) {
+    return "ko";
+  }
+
+  return "en";
+}
+
+export function createI18n({ preferredLanguage } = {}) {
+  let language = getInitialLanguage(preferredLanguage);
+  const listeners = new Set();
+
+  function getLocale() {
+    return LOCALES[language] ?? LOCALES.en;
+  }
+
+  function t(key, params = {}) {
+    const dictionary = TRANSLATIONS[language] ?? TRANSLATIONS.en;
+    const template = dictionary[key] ?? TRANSLATIONS.en[key] ?? key;
+    return typeof template === "string" ? interpolate(template, params) : String(template);
+  }
+
+  function setLanguage(nextLanguage) {
+    if (!TRANSLATIONS[nextLanguage] || nextLanguage === language) {
+      return;
+    }
+
+    language = nextLanguage;
+
+    try {
+      window.localStorage.setItem(STORAGE_KEY, nextLanguage);
+    } catch {}
+
+    for (const listener of listeners) {
+      listener(nextLanguage);
+    }
+  }
+
+  function subscribe(listener) {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  }
+
+  function formatDate(date, options) {
+    return new Intl.DateTimeFormat(getLocale(), options).format(date);
+  }
+
+  return {
+    formatDate,
+    getLanguage() {
+      return language;
+    },
+    getLocale,
+    setLanguage,
+    subscribe,
+    t
+  };
+}

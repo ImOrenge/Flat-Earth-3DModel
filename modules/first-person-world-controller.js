@@ -1,6 +1,6 @@
 import * as THREE from "../vendor/three.module.js";
 import { getGeoFromProjectedPosition } from "./geo-utils.js";
-import { getSolarAltitudeFactor, getSunHorizontalCoordinates } from "./astronomy-utils.js";
+import { getSolarAltitudeFactor } from "./astronomy-utils.js";
 
 const DEFAULT_FOG_COLOR = new THREE.Color(0x06101d);
 
@@ -463,8 +463,7 @@ export function createFirstPersonWorldController({
   horizonVeil.renderOrder = 26;
   root.add(horizonVeil);
 
-  const tempObserverNorthAxis = new THREE.Vector3();
-  const tempObserverEastAxis = new THREE.Vector3();
+  const tempObserverModelPosition = new THREE.Vector3();
   const tempSunDirection = new THREE.Vector3();
   const tempLightPosition = new THREE.Vector3();
   const topColor = new THREE.Color();
@@ -478,20 +477,6 @@ export function createFirstPersonWorldController({
   const seaTargetColor = new THREE.Color();
   const shallowsTargetColor = new THREE.Color();
   const seaSheenColor = new THREE.Color();
-
-  function getObserverSkyAxes(observerPosition, observerLongitudeDegrees) {
-    const planarLength = Math.hypot(observerPosition.x, observerPosition.z);
-
-    if (planarLength > 0.0001) {
-      tempObserverNorthAxis.set(-observerPosition.x / planarLength, 0, -observerPosition.z / planarLength);
-      tempObserverEastAxis.set(-tempObserverNorthAxis.z, 0, tempObserverNorthAxis.x);
-      return;
-    }
-
-    const longitudeRadians = observerLongitudeDegrees * Math.PI / 180;
-    tempObserverNorthAxis.set(Math.cos(longitudeRadians), 0, -Math.sin(longitudeRadians));
-    tempObserverEastAxis.set(Math.sin(longitudeRadians), 0, Math.cos(longitudeRadians));
-  }
 
   function syncSkyShader(dayFactor, twilightFactor, nightFactor) {
     topColor
@@ -555,12 +540,14 @@ export function createFirstPersonWorldController({
     );
 
     const observerGeo = getGeoFromProjectedPosition(walkerState.position, constants.DISC_RADIUS);
-    const sunHorizontal = getSunHorizontalCoordinates(
-      snapshot.date,
-      observerGeo.latitudeDegrees,
-      observerGeo.longitudeDegrees
+    tempObserverModelPosition.set(
+      walkerState.position.x,
+      constants.WALKER_EYE_HEIGHT,
+      walkerState.position.z
     );
-    const sunAltitudeDegrees = sunHorizontal.altitudeDegrees - constants.CELESTIAL_ALTITUDE_DROP_DEGREES;
+    tempSunDirection.copy(snapshot.sunPosition).sub(tempObserverModelPosition).normalize();
+    const sunAltitudeDegrees = THREE.MathUtils.radToDeg(Math.asin(tempSunDirection.y)) -
+      constants.CELESTIAL_ALTITUDE_DROP_DEGREES;
     const sunAltitudeRadians = THREE.MathUtils.degToRad(sunAltitudeDegrees);
     const solarFactor = getSolarAltitudeFactor(
       observerGeo.latitudeDegrees,
@@ -662,13 +649,6 @@ export function createFirstPersonWorldController({
     );
     horizonGlow.material.opacity = THREE.MathUtils.lerp(0.05, 0.34, twilightFactor + (dayFactor * 0.22));
 
-    getObserverSkyAxes(walkerState.position, observerGeo.longitudeDegrees);
-    tempSunDirection
-      .copy(tempObserverNorthAxis)
-      .multiplyScalar(Math.cos(sunHorizontal.azimuthRadians) * Math.cos(sunAltitudeRadians))
-      .addScaledVector(tempObserverEastAxis, Math.sin(sunHorizontal.azimuthRadians) * Math.cos(sunAltitudeRadians))
-      .addScaledVector(THREE.Object3D.DEFAULT_UP, Math.sin(sunAltitudeRadians))
-      .normalize();
     syncSkyShader(dayFactor, twilightFactor, nightFactor);
     skyDome.material.uniforms.uSunDirection.value.copy(tempSunDirection);
 

@@ -17,18 +17,18 @@ const ROUTE_ALTITUDE_BASE = 0.2;
 const ROUTE_ALTITUDE_SCALE = 0.55;
 const ROUTE_SEGMENTS = 96;
 
-function formatDurationHours(hours) {
+function formatDurationHours(hours, i18n) {
   const totalMinutes = Math.max(0, Math.round(hours * 60));
   const wholeHours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
 
   if (wholeHours === 0) {
-    return `${minutes}m`;
+    return i18n.t("durationMinutesOnly", { minutes });
   }
   if (minutes === 0) {
-    return `${wholeHours}h`;
+    return i18n.t("durationHoursOnly", { hours: wholeHours });
   }
-  return `${wholeHours}h ${minutes}m`;
+  return i18n.t("durationHoursMinutes", { hours: wholeHours, minutes });
 }
 
 function createAirportLabel(airport) {
@@ -85,7 +85,7 @@ async function loadJson(path) {
   return response.json();
 }
 
-export function createRouteSimulationController({ constants, scalableStage, ui }) {
+export function createRouteSimulationController({ constants, i18n, scalableStage, ui }) {
   const routeLayer = new THREE.Group();
   routeLayer.visible = false;
   scalableStage.add(routeLayer);
@@ -158,6 +158,9 @@ export function createRouteSimulationController({ constants, scalableStage, ui }
 
   const routeState = {
     curve: null,
+    datasetStatusError: false,
+    datasetStatusKey: "routeDatasetLoading",
+    datasetStatusParams: {},
     loading: true,
     playing: true,
     progress: 0,
@@ -171,8 +174,11 @@ export function createRouteSimulationController({ constants, scalableStage, ui }
   const tempTangent = new THREE.Vector3();
   const tempTarget = new THREE.Vector3();
 
-  function setDatasetStatus(message, error = false) {
-    ui.routeDatasetStatusEl.textContent = message;
+  function setDatasetStatus(key, params = {}, error = false) {
+    routeState.datasetStatusKey = key;
+    routeState.datasetStatusParams = params;
+    routeState.datasetStatusError = error;
+    ui.routeDatasetStatusEl.textContent = i18n.t(key, params);
     ui.routeDatasetStatusEl.classList.toggle("error", error);
   }
 
@@ -273,38 +279,57 @@ export function createRouteSimulationController({ constants, scalableStage, ui }
   function syncRouteUi() {
     const route = routeState.selectedRoute;
     const cycleSeconds = BASE_ROUTE_CYCLE_SECONDS / Math.max(routeState.speedMultiplier, 1);
-    ui.routeSpeedValueEl.textContent = `${routeState.speedMultiplier}x | ${cycleSeconds.toFixed(1)}s cycle`;
-    ui.routePlaybackButton.textContent = routeState.playing ? "Pause" : "Play";
+    ui.routeSpeedValueEl.textContent = i18n.t("routeSpeedValue", {
+      speed: routeState.speedMultiplier,
+      cycle: cycleSeconds.toFixed(1)
+    });
+    ui.routePlaybackButton.textContent = routeState.playing
+      ? i18n.t("routePauseButton")
+      : i18n.t("routePlayButton");
 
     if (!route) {
-      ui.routeSummaryEl.textContent = "No offline route is active.";
-      ui.routeLegEl.textContent = "Select a route";
+      ui.routeSummaryEl.textContent = i18n.t("routeSummaryNone");
+      ui.routeLegEl.textContent = i18n.t("routeSelectPrompt");
       ui.routeOriginEl.textContent = "-";
       ui.routeDestinationEl.textContent = "-";
       ui.routeCountriesEl.textContent = "-";
       ui.routeAircraftEl.textContent = "-";
       ui.routeProgressEl.textContent = "-";
       ui.routeDurationEl.textContent = "-";
-      ui.routeGeoSummaryEl.textContent = "Origin and destination coordinates will appear here.";
+      ui.routeGeoSummaryEl.textContent = i18n.t("routeGeoSummaryPlaceholder");
       return;
     }
 
     const elapsedHours = route.durationHours * routeState.progress;
     const remainingHours = Math.max(route.durationHours - elapsedHours, 0);
-    const progressLabel = `${Math.round(routeState.progress * 100)}% | ${formatDurationHours(elapsedHours)} elapsed / ${formatDurationHours(remainingHours)} remaining`;
+    const progressLabel = i18n.t("routeProgressSummary", {
+      percent: Math.round(routeState.progress * 100),
+      elapsed: formatDurationHours(elapsedHours, i18n),
+      remaining: formatDurationHours(remainingHours, i18n)
+    });
     const aircraftLabel = route.aircraftType
       ? `${route.aircraftType.name} (${route.aircraftType.icaoCode})`
       : route.aircraftTypeCode;
 
-    ui.routeSummaryEl.textContent = `${createAirportLabel(route.origin)} to ${createAirportLabel(route.destination)} with a planned block time of ${formatDurationHours(route.durationHours)}.`;
+    ui.routeSummaryEl.textContent = i18n.t("routeSummaryActiveText", {
+      origin: createAirportLabel(route.origin),
+      destination: createAirportLabel(route.destination),
+      duration: formatDurationHours(route.durationHours, i18n)
+    });
     ui.routeLegEl.textContent = `${route.origin.iata} -> ${route.destination.iata}`;
     ui.routeOriginEl.textContent = createAirportLabel(route.origin);
     ui.routeDestinationEl.textContent = createAirportLabel(route.destination);
-    ui.routeCountriesEl.textContent = `${route.originCountryName} -> ${route.destinationCountryName}`;
+    ui.routeCountriesEl.textContent = i18n.t("routeCountriesValue", {
+      originCountry: route.originCountryName,
+      destinationCountry: route.destinationCountryName
+    });
     ui.routeAircraftEl.textContent = aircraftLabel;
     ui.routeProgressEl.textContent = progressLabel;
-    ui.routeDurationEl.textContent = formatDurationHours(route.durationHours);
-    ui.routeGeoSummaryEl.textContent = `${formatGeoPair(route.origin.latitude, route.origin.longitude)} -> ${formatGeoPair(route.destination.latitude, route.destination.longitude)}`;
+    ui.routeDurationEl.textContent = formatDurationHours(route.durationHours, i18n);
+    ui.routeGeoSummaryEl.textContent = i18n.t("routeGeoPathValue", {
+      originGeo: formatGeoPair(route.origin.latitude, route.origin.longitude),
+      destinationGeo: formatGeoPair(route.destination.latitude, route.destination.longitude)
+    });
   }
 
   function populateRouteOptions() {
@@ -324,7 +349,7 @@ export function createRouteSimulationController({ constants, scalableStage, ui }
   }
 
   async function initialize() {
-    setDatasetStatus("Loading offline route library...");
+    setDatasetStatus("routeDatasetLoading");
     syncControlAvailability();
 
     try {
@@ -358,19 +383,23 @@ export function createRouteSimulationController({ constants, scalableStage, ui }
       syncControlAvailability();
 
       if (!routeState.ready) {
-        setDatasetStatus("Offline route library loaded, but no valid routes were found.", true);
+        setDatasetStatus("routeDatasetNoRoutes", {}, true);
         syncRouteUi();
         return;
       }
 
-      setDatasetStatus(`Loaded ${routes.length} routes, ${airports.length} airports, and ${aircraftTypes.length} aircraft types.`);
+      setDatasetStatus("routeDatasetLoaded", {
+        routes: routes.length,
+        airports: airports.length,
+        aircraftTypes: aircraftTypes.length
+      });
       selectRoute(ui.routeSelectEl.value || routes[0].id);
     } catch (error) {
       routeState.loading = false;
       routeState.ready = false;
       routeState.playing = false;
       syncControlAvailability();
-      setDatasetStatus(error instanceof Error ? error.message : "Failed to load offline route library.", true);
+      setDatasetStatus("routeDatasetFailed", {}, true);
       syncRouteUi();
     }
   }
@@ -382,7 +411,7 @@ export function createRouteSimulationController({ constants, scalableStage, ui }
 
     const route = resolveRoute(routeLibrary.routeById.get(routeId));
     if (!route) {
-      setDatasetStatus(`Route ${routeId} is missing airport metadata.`, true);
+      setDatasetStatus("routeMissingMetadata", { routeId }, true);
       return;
     }
 
@@ -427,10 +456,16 @@ export function createRouteSimulationController({ constants, scalableStage, ui }
     syncRouteUi();
   }
 
+  function refreshLocalizedUi() {
+    setDatasetStatus(routeState.datasetStatusKey, routeState.datasetStatusParams, routeState.datasetStatusError);
+    syncRouteUi();
+  }
+
   syncRouteUi();
 
   return {
     initialize,
+    refreshLocalizedUi,
     resetProgress,
     selectRoute,
     setSpeedMultiplier,

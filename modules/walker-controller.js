@@ -9,6 +9,7 @@ import {
 
 export function createWalkerController({
   constants,
+  i18n,
   walkerState,
   renderState,
   movementState,
@@ -113,10 +114,10 @@ export function createWalkerController({
     ui.walkerModeEl.checked = walkerState.enabled || renderState.preparing;
     ui.walkerModeEl.disabled = renderState.preparing;
     ui.walkerSummaryEl.textContent = renderState.preparing
-      ? "Preparing first-person render. The disc is scaling up and the observer camera is being aligned."
+      ? i18n.t("walkerSummaryPreparing")
       : walkerState.enabled
-        ? "First-person view is active. Use WASD or arrow keys to walk, drag to look around, and follow the center vanishing point."
-        : "Walk on the map with WASD or the arrow keys and judge day or night from the observer position.";
+        ? i18n.t("walkerSummaryActive")
+        : i18n.t("walkerSummaryInactive");
     updateFirstPersonOverlay();
   }
 
@@ -139,7 +140,14 @@ export function createWalkerController({
       snapshot.sun.longitudeDegrees
     );
     const coordinatesLabel = formatGeoPair(observerGeo.latitudeDegrees, observerGeo.longitudeDegrees);
-    const lightLabel = getLocalLightSummary(solarFactor);
+    const lightSummary = getLocalLightSummary(solarFactor);
+    const lightLabel = lightSummary === "Day"
+      ? i18n.t("lightDay")
+      : lightSummary === "Low Sun"
+        ? i18n.t("lightLowSun")
+        : lightSummary === "Twilight"
+          ? i18n.t("lightTwilight")
+          : i18n.t("lightNight");
 
     if (walkerState.lastCoordinatesLabel !== coordinatesLabel) {
       ui.walkerCoordinatesEl.textContent = coordinatesLabel;
@@ -205,7 +213,16 @@ export function createWalkerController({
     walkerState.position.copy(tempWalkerPosition);
   }
 
+  function refreshLocalizedUi(snapshot) {
+    walkerState.lastLightLabel = "";
+    syncWalkerUi();
+    if (snapshot) {
+      updateWalkerUi(snapshot);
+    }
+  }
+
   return {
+    refreshLocalizedUi,
     resetWalkerPosition,
     syncWalkerUi,
     updateFirstPersonOverlay,

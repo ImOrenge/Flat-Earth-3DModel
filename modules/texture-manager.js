@@ -2,6 +2,7 @@ import * as THREE from "../vendor/three.module.js";
 
 export function createTextureManager({
   constants,
+  i18n,
   renderer,
   topMaterial,
   statusEl,
@@ -16,6 +17,13 @@ export function createTextureManager({
   nightLightsCanvas.height = constants.DAY_NIGHT_TEXTURE_SIZE;
   const nightLightsCtx = nightLightsCanvas.getContext("2d", { willReadFrequently: true });
   const nightLightsData = new Float32Array(constants.DAY_NIGHT_TEXTURE_SIZE * constants.DAY_NIGHT_TEXTURE_SIZE);
+  const textureState = {
+    mode: "default"
+  };
+  const statusState = {
+    key: "statusFallbackTexture",
+    params: {}
+  };
 
   function clamp01(value) {
     return Math.min(Math.max(value, 0), 1);
@@ -26,8 +34,10 @@ export function createTextureManager({
     return t * t * (3 - (2 * t));
   }
 
-  function setStatus(message) {
-    statusEl.textContent = message;
+  function setStatus(key, params = {}) {
+    statusState.key = key;
+    statusState.params = params;
+    statusEl.textContent = i18n.t(key, params);
   }
 
   function drawOrbitCircle(ctx, size, radius, strokeStyle) {
@@ -372,11 +382,12 @@ export function createTextureManager({
     return texture;
   }
 
-  function loadSquareTexture(url, successMessage, errorHandler, finalize) {
+  function loadSquareTexture(url, successKey, successParams, errorHandler, finalize, mode = "default") {
     const image = new Image();
     image.onload = () => {
+      textureState.mode = mode;
       configureTexture(createSquareTextureFromImage(image));
-      setStatus(successMessage);
+      setStatus(successKey, successParams);
       onTextureUpdated?.();
       if (finalize) {
         finalize();
@@ -425,10 +436,10 @@ export function createTextureManager({
     ctx.fillStyle = "rgba(255,255,255,0.85)";
     ctx.font = `bold ${Math.round(size * 0.055)}px Space Grotesk, sans-serif`;
     ctx.textAlign = "center";
-    ctx.fillText("DROP A FLAT MAP", center, center - (size * 0.022));
+    ctx.fillText(i18n.t("fallbackTextureTitle"), center, center - (size * 0.022));
     ctx.font = `${Math.round(size * 0.02)}px Space Grotesk, sans-serif`;
     ctx.fillStyle = "rgba(235,245,255,0.9)";
-    ctx.fillText("or place assets/flat-earth-map-square.svg", center, center + (size * 0.017));
+    ctx.fillText(i18n.t("fallbackTextureSubtitle"), center, center + (size * 0.017));
     drawSurfaceOrbitGuides(ctx, size);
 
     clearNightLights();
@@ -439,18 +450,22 @@ export function createTextureManager({
   }
 
   function applyFallback() {
+    textureState.mode = "fallback";
     configureTexture(createFallbackTexture());
-    setStatus("Fallback texture is active until a map image is loaded.");
+    setStatus("statusFallbackTexture");
     onTextureUpdated?.();
   }
 
   function loadDefaultTexture() {
     loadSquareTexture(
       constants.DEFAULT_MAP_PATH,
-      `${constants.DEFAULT_MAP_LABEL} texture loaded into the square top surface.`,
+      "statusDefaultTextureLoaded",
+      { label: constants.DEFAULT_MAP_LABEL },
       () => {
         applyFallback();
-      }
+      },
+      undefined,
+      "default"
     );
   }
 
@@ -461,21 +476,32 @@ export function createTextureManager({
 
     const isSvg = file.type === "image/svg+xml" || file.name.toLowerCase().endsWith(".svg");
     if (!isSvg) {
-      setStatus("Only SVG map uploads are allowed.");
+      setStatus("statusOnlySvgAllowed");
       return;
     }
 
     const objectUrl = URL.createObjectURL(file);
     loadSquareTexture(
       objectUrl,
-      `${file.name} texture loaded into the square top surface.`,
+      "statusUserTextureLoaded",
+      { fileName: file.name },
       () => {
-        setStatus("Could not load the SVG image. Try another .svg file.");
+        setStatus("statusSvgLoadFailed");
       },
       () => {
         URL.revokeObjectURL(objectUrl);
-      }
+      },
+      "user"
     );
+  }
+
+  function refreshLocalizedUi() {
+    if (textureState.mode === "fallback") {
+      applyFallback();
+      return;
+    }
+
+    setStatus(statusState.key, statusState.params);
   }
 
   return {
@@ -483,6 +509,7 @@ export function createTextureManager({
       return nightLightsData;
     },
     loadDefaultTexture,
-    loadUserTexture
+    loadUserTexture,
+    refreshLocalizedUi
   };
 }
