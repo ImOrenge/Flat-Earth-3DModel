@@ -157,6 +157,7 @@ export function createFirstPersonWorldController({
   rimLight,
   topDownBackground
 }) {
+  const scaleDimension = (value) => value * (constants.MODEL_SCALE ?? 1);
   const root = new THREE.Group();
   root.visible = false;
   scene.add(root);
@@ -195,7 +196,7 @@ export function createFirstPersonWorldController({
     })
   );
   ground.rotation.x = -Math.PI / 2;
-  ground.position.y = constants.SURFACE_Y + 0.004;
+  ground.position.y = constants.SURFACE_Y + scaleDimension(0.004);
   root.add(ground);
 
   const distantSea = new THREE.Mesh(
@@ -213,7 +214,7 @@ export function createFirstPersonWorldController({
     })
   );
   distantSea.rotation.x = -Math.PI / 2;
-  distantSea.position.y = constants.SURFACE_Y + 0.008;
+  distantSea.position.y = constants.SURFACE_Y + scaleDimension(0.008);
   root.add(distantSea);
 
   const distantShallows = new THREE.Mesh(
@@ -231,7 +232,7 @@ export function createFirstPersonWorldController({
     })
   );
   distantShallows.rotation.x = -Math.PI / 2;
-  distantShallows.position.y = constants.SURFACE_Y + 0.012;
+  distantShallows.position.y = constants.SURFACE_Y + scaleDimension(0.012);
   root.add(distantShallows);
 
   const seaSheen = new THREE.Mesh(
@@ -245,7 +246,7 @@ export function createFirstPersonWorldController({
     })
   );
   seaSheen.rotation.x = -Math.PI / 2;
-  seaSheen.position.y = constants.SURFACE_Y + 0.018;
+  seaSheen.position.y = constants.SURFACE_Y + scaleDimension(0.018);
   root.add(seaSheen);
 
   const distantLandMaterial = new THREE.MeshStandardMaterial({
@@ -269,9 +270,9 @@ export function createFirstPersonWorldController({
       constants.FIRST_PERSON_WORLD_RADIUS * 0.93,
       nextRandom()
     );
-    const width = THREE.MathUtils.lerp(12, 38, nextRandom());
-    const depth = THREE.MathUtils.lerp(5, 15, nextRandom());
-    const height = THREE.MathUtils.lerp(0.6, 2.2, nextRandom());
+    const width = THREE.MathUtils.lerp(scaleDimension(12), scaleDimension(38), nextRandom());
+    const depth = THREE.MathUtils.lerp(scaleDimension(5), scaleDimension(15), nextRandom());
+    const height = THREE.MathUtils.lerp(scaleDimension(0.6), scaleDimension(2.2), nextRandom());
     const landMass = new THREE.Mesh(
       new THREE.CylinderGeometry(1, 1, 1, 18, 1, false),
       distantLandMaterial
@@ -292,7 +293,7 @@ export function createFirstPersonWorldController({
     beach.scale.set(width * 0.82, height * 0.18, depth * 0.82);
     beach.position.set(
       landMass.position.x,
-      constants.SURFACE_Y + 0.08,
+      constants.SURFACE_Y + scaleDimension(0.08),
       landMass.position.z
     );
     beach.rotation.y = landMass.rotation.y;
@@ -305,7 +306,7 @@ export function createFirstPersonWorldController({
     new THREE.CylinderGeometry(
       constants.FIRST_PERSON_HORIZON_RADIUS,
       constants.FIRST_PERSON_HORIZON_RADIUS,
-      20,
+      scaleDimension(20),
       96,
       1,
       true
@@ -318,11 +319,11 @@ export function createFirstPersonWorldController({
       depthWrite: false
     })
   );
-  horizonWall.position.y = constants.SURFACE_Y + 10.5;
+  horizonWall.position.y = constants.SURFACE_Y + scaleDimension(10.5);
   root.add(horizonWall);
 
   const horizonGlow = new THREE.Mesh(
-    new THREE.TorusGeometry(constants.FIRST_PERSON_HORIZON_RADIUS * 0.98, 1.2, 16, 128),
+    new THREE.TorusGeometry(constants.FIRST_PERSON_HORIZON_RADIUS * 0.98, scaleDimension(1.2), 16, 128),
     new THREE.MeshBasicMaterial({
       color: 0xffb36f,
       transparent: true,
@@ -332,7 +333,7 @@ export function createFirstPersonWorldController({
     })
   );
   horizonGlow.rotation.x = Math.PI / 2;
-  horizonGlow.position.y = constants.SURFACE_Y + 0.8;
+  horizonGlow.position.y = constants.SURFACE_Y + scaleDimension(0.8);
   root.add(horizonGlow);
 
   const skyDome = new THREE.Mesh(
@@ -399,7 +400,7 @@ export function createFirstPersonWorldController({
       `
     })
   );
-  skyDome.position.y = constants.SURFACE_Y + 1.2;
+  skyDome.position.y = constants.SURFACE_Y + scaleDimension(1.2);
   root.add(skyDome);
 
   const glowTexture = createGlowTexture();
@@ -415,14 +416,14 @@ export function createFirstPersonWorldController({
       depthWrite: false
     })
   );
-  sunsetGlow.scale.set(30, 18, 1);
+  sunsetGlow.scale.set(scaleDimension(30), scaleDimension(18), 1);
   root.add(sunsetGlow);
 
   const horizonSilhouette = new THREE.Mesh(
     new THREE.CylinderGeometry(
       constants.FIRST_PERSON_HORIZON_RADIUS * 0.992,
       constants.FIRST_PERSON_HORIZON_RADIUS * 0.992,
-      12,
+      scaleDimension(12),
       160,
       1,
       true
@@ -436,7 +437,7 @@ export function createFirstPersonWorldController({
       depthWrite: false
     })
   );
-  horizonSilhouette.position.y = constants.SURFACE_Y + 5.6;
+  horizonSilhouette.position.y = constants.SURFACE_Y + scaleDimension(5.6);
   horizonSilhouette.renderOrder = 25;
   root.add(horizonSilhouette);
 
@@ -444,7 +445,7 @@ export function createFirstPersonWorldController({
     new THREE.CylinderGeometry(
       constants.FIRST_PERSON_HORIZON_RADIUS * 0.975,
       constants.FIRST_PERSON_HORIZON_RADIUS * 0.975,
-      16,
+      scaleDimension(16),
       128,
       1,
       true
@@ -459,7 +460,7 @@ export function createFirstPersonWorldController({
       blending: THREE.NormalBlending
     })
   );
-  horizonVeil.position.y = constants.SURFACE_Y + 6.8;
+  horizonVeil.position.y = constants.SURFACE_Y + scaleDimension(6.8);
   horizonVeil.renderOrder = 26;
   root.add(horizonVeil);
 
@@ -653,16 +654,16 @@ export function createFirstPersonWorldController({
     skyDome.material.uniforms.uSunDirection.value.copy(tempSunDirection);
 
     tempLightPosition.copy(root.position)
-      .addScaledVector(tempSunDirection, 56);
-    tempLightPosition.y = constants.WALKER_EYE_HEIGHT + (tempSunDirection.y * 42);
+      .addScaledVector(tempSunDirection, scaleDimension(56));
+    tempLightPosition.y = constants.WALKER_EYE_HEIGHT + (tempSunDirection.y * scaleDimension(42));
     keyLight.position.copy(tempLightPosition);
     keyLight.target.position.set(root.position.x, constants.SURFACE_Y, root.position.z);
 
     tempLightPosition.copy(root.position)
-      .addScaledVector(tempSunDirection, -34)
-      .addScaledVector(THREE.Object3D.DEFAULT_UP, 12);
+      .addScaledVector(tempSunDirection, scaleDimension(-34))
+      .addScaledVector(THREE.Object3D.DEFAULT_UP, scaleDimension(12));
     rimLight.position.copy(tempLightPosition);
-    rimLight.target.position.set(root.position.x, constants.SURFACE_Y + 2, root.position.z);
+    rimLight.target.position.set(root.position.x, constants.SURFACE_Y + scaleDimension(2), root.position.z);
 
     ambientTargetColor
       .setRGB(
@@ -695,7 +696,7 @@ export function createFirstPersonWorldController({
 
     const glowDistance = constants.FIRST_PERSON_HORIZON_RADIUS * 0.88;
     sunsetGlow.position.copy(tempSunDirection).multiplyScalar(glowDistance);
-    sunsetGlow.position.y = constants.SURFACE_Y + 6 + (Math.sin(sunAltitudeRadians) * 12);
+    sunsetGlow.position.y = constants.SURFACE_Y + scaleDimension(6) + (Math.sin(sunAltitudeRadians) * scaleDimension(12));
     sunsetGlow.material.opacity = Math.max(0, (twilightFactor * 0.72) + (Math.max(solarFactor, 0) * 0.08));
     sunsetGlow.visible = sunsetGlow.material.opacity > 0.01;
   }

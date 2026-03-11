@@ -51,6 +51,7 @@ export function createAstronomyController({
   southSeasonOverlay,
   getNightLightsData
 }) {
+  const scaleDimension = (value) => value * (constants.MODEL_SCALE ?? 1);
   const seasonalEventMap = new Map(
     SEASONAL_EVENT_DEFINITIONS.map((definition) => [definition.key, definition])
   );
@@ -768,8 +769,8 @@ export function createAstronomyController({
   function updateMoonOrbit(seasonRadius) {
     const orbitRadius = THREE.MathUtils.clamp(
       seasonRadius,
-      constants.TROPIC_CANCER_RADIUS - 0.15,
-      constants.DOME_RADIUS - 0.24
+      constants.TROPIC_CANCER_RADIUS - scaleDimension(0.15),
+      constants.DOME_RADIUS - scaleDimension(0.24)
     );
     const height = getMoonBaseHeight(seasonRadius);
     const safeDomeRadius = constants.DOME_RADIUS - (constants.ORBIT_MOON_SIZE * 1.6);

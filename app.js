@@ -16,34 +16,45 @@ import { createWalkerController } from "./modules/walker-controller.js";
 
 const DEFAULT_MAP_PATH = "./assets/flat-earth-map-square.svg";
 const DEFAULT_MAP_LABEL = "assets/flat-earth-map-square.svg";
-const DISC_RADIUS = 5;
-const DISC_HEIGHT = 0.36;
-const RIM_THICKNESS = 0.28;
-const RIM_CLEARANCE = 0.08;
+const MODEL_SCALE = 2;
+const scaleDimension = (value) => value * MODEL_SCALE;
+const CELESTIAL_SIZE_SCALE = 0.6;
+const DISC_RADIUS = scaleDimension(5);
+const DISC_HEIGHT = scaleDimension(0.36);
+const CELESTIAL_ALTITUDE_SCALE = 0.5;
+const CELESTIAL_ALTITUDE_BASE_Y = DISC_HEIGHT / 2;
+const scaleCelestialAltitude = (value) =>
+  CELESTIAL_ALTITUDE_BASE_Y + ((value - CELESTIAL_ALTITUDE_BASE_Y) * CELESTIAL_ALTITUDE_SCALE);
+const RIM_THICKNESS = scaleDimension(0.28);
+const RIM_CLEARANCE = scaleDimension(0.08);
 const RIM_OUTER_RADIUS = DISC_RADIUS + RIM_CLEARANCE;
 const RIM_INNER_RADIUS = DISC_RADIUS - RIM_THICKNESS;
-const RIM_HEIGHT = 0.62;
-const RIM_CENTER_Y = 0.11;
+const RIM_HEIGHT = scaleDimension(0.62);
+const RIM_CENTER_Y = scaleDimension(0.11);
 const RIM_TOP_Y = RIM_CENTER_Y + (RIM_HEIGHT / 2);
 const RIM_BOTTOM_Y = RIM_CENTER_Y - (RIM_HEIGHT / 2);
-const DOME_RADIUS = RIM_INNER_RADIUS - 0.14;
-const DOME_BASE_Y = 0.46;
+const DOME_RADIUS = RIM_INNER_RADIUS - scaleDimension(0.14);
+const DOME_BASE_Y = scaleDimension(0.46);
 const DOME_VERTICAL_SCALE = 0.78;
-const CELESTIAL_HEIGHT_DROP = 0.42;
+const CELESTIAL_HEIGHT_DROP = scaleDimension(0.42);
 const CELESTIAL_ALTITUDE_DROP_DEGREES = 6;
-const POLARIS_ALTITUDE_OFFSET = 0.08;
-const POLARIS_CORE_RADIUS = 0.07;
-const POLARIS_GLOW_SIZE = 0.42;
-const POLARIS_HALO_SIZE = 0.78;
+const POLARIS_ALTITUDE_OFFSET = scaleDimension(0.08);
+const POLARIS_CORE_RADIUS = scaleDimension(0.07);
+const POLARIS_GLOW_SIZE = scaleDimension(0.42);
+const POLARIS_HALO_SIZE = scaleDimension(0.78);
 const POLARIS_CORE_OPACITY = 1;
 const POLARIS_GLOW_OPACITY = 1;
 const POLARIS_HALO_OPACITY = 0.48;
 const TROPIC_LATITUDE = 23.44;
-const ORBIT_TRACK_HEIGHT = DOME_BASE_Y + 2.01 - CELESTIAL_HEIGHT_DROP;
-const ORBIT_SUN_HEIGHT = ORBIT_TRACK_HEIGHT + 0.12;
-const ORBIT_SUN_HEIGHT_NORTH = ORBIT_SUN_HEIGHT + 0.52;
-const ORBIT_SUN_HEIGHT_SOUTH = ORBIT_SUN_HEIGHT - 0.56;
-const CELESTIAL_BODY_SIZE = 0.13;
+const RAW_ORBIT_TRACK_HEIGHT = DOME_BASE_Y + scaleDimension(2.01) - CELESTIAL_HEIGHT_DROP;
+const RAW_ORBIT_SUN_HEIGHT = RAW_ORBIT_TRACK_HEIGHT + scaleDimension(0.12);
+const RAW_ORBIT_SUN_HEIGHT_NORTH = RAW_ORBIT_SUN_HEIGHT + scaleDimension(0.52);
+const RAW_ORBIT_SUN_HEIGHT_SOUTH = RAW_ORBIT_SUN_HEIGHT - scaleDimension(0.56);
+const ORBIT_TRACK_HEIGHT = scaleCelestialAltitude(RAW_ORBIT_TRACK_HEIGHT);
+const ORBIT_SUN_HEIGHT = scaleCelestialAltitude(RAW_ORBIT_SUN_HEIGHT);
+const ORBIT_SUN_HEIGHT_NORTH = scaleCelestialAltitude(RAW_ORBIT_SUN_HEIGHT_NORTH);
+const ORBIT_SUN_HEIGHT_SOUTH = scaleCelestialAltitude(RAW_ORBIT_SUN_HEIGHT_SOUTH);
+const CELESTIAL_BODY_SIZE = scaleDimension(0.13) * CELESTIAL_SIZE_SCALE;
 const ORBIT_SUN_SIZE = CELESTIAL_BODY_SIZE;
 const ORBIT_SUN_SPEED = 0.011;
 const ORBIT_SUN_SEASON_SPEED = 0.0026;
@@ -55,76 +66,82 @@ const ORBIT_SUN_AUREOLE_SCALE = ORBIT_SUN_SIZE * 18.5;
 const ORBIT_SUN_CORONA_OPACITY = 0.52;
 const ORBIT_SUN_AUREOLE_OPACITY = 0.24;
 const ORBIT_SUN_PULSE_SPEED = 0.0031;
-const ORBIT_TRACK_TUBE_RADIUS = 0.045;
-const ORBIT_HEIGHT_GUIDE_RADIUS = 0.018;
-const ORBIT_HEIGHT_GUIDE_MARKER_SIZE = 0.05;
+const ORBIT_TRACK_TUBE_RADIUS = scaleDimension(0.045);
+const ORBIT_HEIGHT_GUIDE_RADIUS = scaleDimension(0.018);
+const ORBIT_HEIGHT_GUIDE_MARKER_SIZE = scaleDimension(0.05);
 const ORBIT_HEIGHT_GUIDE_ANGLES = [-0.82, 1.34, 2.58];
-const ORBIT_MOON_BASE_HEIGHT = ORBIT_TRACK_HEIGHT + 0.28;
-const ORBIT_MOON_HEIGHT_NORTH = ORBIT_MOON_BASE_HEIGHT + 0.16;
-const ORBIT_MOON_HEIGHT_SOUTH = ORBIT_MOON_BASE_HEIGHT - 0.26;
+const RAW_ORBIT_MOON_BASE_HEIGHT = RAW_ORBIT_TRACK_HEIGHT + scaleDimension(0.28);
+const RAW_ORBIT_MOON_HEIGHT_NORTH = RAW_ORBIT_MOON_BASE_HEIGHT + scaleDimension(0.16);
+const RAW_ORBIT_MOON_HEIGHT_SOUTH = RAW_ORBIT_MOON_BASE_HEIGHT - scaleDimension(0.26);
+const ORBIT_MOON_BASE_HEIGHT = scaleCelestialAltitude(RAW_ORBIT_MOON_BASE_HEIGHT);
+const ORBIT_MOON_HEIGHT_NORTH = scaleCelestialAltitude(RAW_ORBIT_MOON_HEIGHT_NORTH);
+const ORBIT_MOON_HEIGHT_SOUTH = scaleCelestialAltitude(RAW_ORBIT_MOON_HEIGHT_SOUTH);
 const ORBIT_MOON_SIZE = CELESTIAL_BODY_SIZE;
 const ORBIT_MOON_HALO_OPACITY = 0.24;
 const ORBIT_MOON_LIGHT_INTENSITY = 8.4;
 const ORBIT_MOON_BODY_EMISSIVE_INTENSITY = 1.8;
 const ORBIT_MOON_SPEED = 0.0048;
-const ORBIT_SURFACE_LINE_WIDTH = 0.0045;
+const ORBIT_SURFACE_LINE_WIDTH = scaleDimension(0.0045);
 const SUN_TRAIL_MAX_POINTS = 720;
 const MOON_TRAIL_MAX_POINTS = 600;
 const REALITY_TRAIL_WINDOW_MS = 12 * 60 * 60 * 1000;
 const REALITY_TRAIL_REFRESH_MS = 60 * 1000;
 const DAY_NIGHT_TEXTURE_SIZE = 512;
 const DAY_NIGHT_UPDATE_EPSILON = 0.18;
-const ANALEMMA_SURFACE_OFFSET = 0.046;
-const SKY_ANALEMMA_RADIUS = 2.4;
+const ANALEMMA_SURFACE_OFFSET = scaleDimension(0.046);
+const SKY_ANALEMMA_RADIUS = scaleDimension(2.4);
 const MAP_TEXTURE_SIZE = 8192;
 const CAMERA_DEFAULT_FOV = 42;
 const CAMERA_WALKER_FOV = 54;
-const CAMERA_TOPDOWN_DEFAULT_RADIUS = 8.2;
-const CAMERA_TOPDOWN_MIN_RADIUS = 5.9;
-const CAMERA_TOPDOWN_MAX_RADIUS = 18.5;
+const CAMERA_TOPDOWN_DEFAULT_RADIUS = scaleDimension(8.2);
+const CAMERA_TOPDOWN_MIN_RADIUS = scaleDimension(5.9);
+const CAMERA_TOPDOWN_MAX_RADIUS = scaleDimension(18.5);
 const TOPDOWN_STAGE_SCALE = 1.32;
-const FOG_DEFAULT_NEAR = 14;
-const FOG_DEFAULT_FAR = 28;
-const FOG_WALKER_NEAR = 36;
-const FOG_WALKER_FAR = 180;
+const FOG_DEFAULT_NEAR = scaleDimension(14);
+const FOG_DEFAULT_FAR = scaleDimension(28);
+const FOG_WALKER_NEAR = scaleDimension(36);
+const FOG_WALKER_FAR = scaleDimension(180);
 const FIRST_PERSON_STAGE_SCALE = 10;
-const FIRST_PERSON_WORLD_RADIUS = 240;
-const FIRST_PERSON_HORIZON_RADIUS = 228;
-const FIRST_PERSON_SKY_RADIUS = 300;
+const FIRST_PERSON_WORLD_RADIUS = scaleDimension(240);
+const FIRST_PERSON_HORIZON_RADIUS = scaleDimension(228);
+const FIRST_PERSON_SKY_RADIUS = scaleDimension(300);
 const FIRST_PERSON_PREP_DURATION_MS = 1250;
 const FIRST_PERSON_RETURN_DURATION_MS = 420;
-const FIRST_PERSON_CELESTIAL_NEAR_RADIUS = 32;
-const FIRST_PERSON_CELESTIAL_FAR_RADIUS = 74;
+const FIRST_PERSON_CELESTIAL_NEAR_RADIUS = scaleDimension(32);
+const FIRST_PERSON_CELESTIAL_FAR_RADIUS = scaleDimension(74);
 const FIRST_PERSON_CELESTIAL_FADE_RANGE = 5;
 const FIRST_PERSON_HORIZON_OCCLUSION_RANGE = 8;
-const FIRST_PERSON_HORIZON_SINK = 2.6;
-const FIRST_PERSON_CELESTIAL_SCALE = 4.4;
+const FIRST_PERSON_HORIZON_SINK = scaleDimension(2.6);
+const FIRST_PERSON_CELESTIAL_SCALE = scaleDimension(4.4) * CELESTIAL_SIZE_SCALE;
 const FIRST_PERSON_SUN_SCALE = FIRST_PERSON_CELESTIAL_SCALE;
 const FIRST_PERSON_MOON_SCALE = FIRST_PERSON_CELESTIAL_SCALE;
-const FIRST_PERSON_SUN_RAY_LENGTH = 13;
-const FIRST_PERSON_SUN_RAY_WIDTH = 1.5;
-const FIRST_PERSON_SUN_RAY_SHORT_LENGTH = 7.4;
-const FIRST_PERSON_SUN_RAY_SHORT_WIDTH = 0.72;
+const FIRST_PERSON_SUN_RAY_LENGTH = scaleDimension(13);
+const FIRST_PERSON_SUN_RAY_WIDTH = scaleDimension(1.5);
+const FIRST_PERSON_SUN_RAY_SHORT_LENGTH = scaleDimension(7.4);
+const FIRST_PERSON_SUN_RAY_SHORT_WIDTH = scaleDimension(0.72);
 const FIRST_PERSON_SUN_RAY_ALIGNMENT_START = 0.72;
 const FIRST_PERSON_SUN_RAY_ALIGNMENT_END = 0.96;
 const SURFACE_Y = DISC_HEIGHT / 2;
-const WALKER_SURFACE_OFFSET = 0.045;
-const WALKER_EYE_HEIGHT = SURFACE_Y + 0.07;
-const WALKER_BODY_HEIGHT = 0.12;
-const WALKER_BODY_RADIUS = 0.045;
-const WALKER_SPEED = 0.82;
-const WALKER_LOOK_DISTANCE = 0.95;
+const WALKER_SURFACE_OFFSET = scaleDimension(0.045);
+const WALKER_EYE_HEIGHT = SURFACE_Y + scaleDimension(0.07);
+const WALKER_BODY_HEIGHT = scaleDimension(0.12);
+const WALKER_BODY_RADIUS = scaleDimension(0.045);
+const WALKER_SPEED = scaleDimension(0.82);
+const WALKER_LOOK_DISTANCE = scaleDimension(0.95);
 const WALKER_START_LATITUDE = 37.57;
 const WALKER_START_LONGITUDE = 126.98;
 const WALKER_PITCH_MAX = 0.72;
 const WALKER_PITCH_MIN = -1.08;
-const WALKER_GUIDE_Y = SURFACE_Y + 0.02;
-const WALKER_GUIDE_HALF_WIDTH = 0.28;
-const WALKER_GUIDE_START = 0.3;
-const WALKER_GUIDE_LENGTH = 3.7;
-const WALKER_GUIDE_MARK_SIZE = 0.1;
-const WALKER_GUIDE_MARK_GAP = 0.5;
+const WALKER_GUIDE_Y = SURFACE_Y + scaleDimension(0.02);
+const WALKER_GUIDE_HALF_WIDTH = scaleDimension(0.28);
+const WALKER_GUIDE_START = scaleDimension(0.3);
+const WALKER_GUIDE_LENGTH = scaleDimension(3.7);
+const WALKER_GUIDE_MARK_SIZE = scaleDimension(0.1);
+const WALKER_GUIDE_MARK_GAP = scaleDimension(0.5);
 const WALKER_HORIZON_SHIFT_PX = 240;
+const POLARIS_HEIGHT = scaleCelestialAltitude(
+  DOME_BASE_Y + (DOME_RADIUS * DOME_VERTICAL_SCALE) + POLARIS_ALTITUDE_OFFSET - CELESTIAL_HEIGHT_DROP
+);
 
 const TROPIC_CANCER_RADIUS = projectedRadiusFromLatitude(TROPIC_LATITUDE, DISC_RADIUS);
 const EQUATOR_RADIUS = projectedRadiusFromLatitude(0, DISC_RADIUS);
@@ -280,7 +297,7 @@ scene.fog = new THREE.Fog(0x06101d, FOG_DEFAULT_NEAR, FOG_DEFAULT_FAR);
 const firstPersonScene = new THREE.Scene();
 firstPersonScene.fog = new THREE.Fog(0x06101d, FOG_WALKER_NEAR, FOG_WALKER_FAR);
 
-const camera = new THREE.PerspectiveCamera(CAMERA_DEFAULT_FOV, 1, 0.1, 100);
+const camera = new THREE.PerspectiveCamera(CAMERA_DEFAULT_FOV, 1, 0.1, scaleDimension(100));
 
 const cameraState = {
   radius: CAMERA_TOPDOWN_DEFAULT_RADIUS,
@@ -346,10 +363,10 @@ const dayNightOverlayMaterial = new THREE.MeshBasicMaterial({
   side: THREE.DoubleSide
 });
 const dayNightOverlay = new THREE.Mesh(
-  new THREE.CylinderGeometry(DISC_RADIUS, DISC_RADIUS, 0.008, 128, 1, false),
+  new THREE.CylinderGeometry(DISC_RADIUS, DISC_RADIUS, scaleDimension(0.008), 128, 1, false),
   [transparentSurfaceMaterial, dayNightOverlayMaterial, transparentSurfaceMaterial]
 );
-dayNightOverlay.position.y = (DISC_HEIGHT / 2) + 0.03;
+dayNightOverlay.position.y = (DISC_HEIGHT / 2) + scaleDimension(0.03);
 dayNightOverlay.renderOrder = 12;
 scalableStage.add(dayNightOverlay);
 
@@ -363,7 +380,7 @@ const northSeasonOverlay = new THREE.Mesh(
   })
 );
 northSeasonOverlay.rotation.x = -Math.PI / 2;
-northSeasonOverlay.position.y = (DISC_HEIGHT / 2) + 0.012;
+northSeasonOverlay.position.y = (DISC_HEIGHT / 2) + scaleDimension(0.012);
 northSeasonOverlay.renderOrder = 8;
 scalableStage.add(northSeasonOverlay);
 
@@ -377,7 +394,7 @@ const southSeasonOverlay = new THREE.Mesh(
   })
 );
 southSeasonOverlay.rotation.x = -Math.PI / 2;
-southSeasonOverlay.position.y = (DISC_HEIGHT / 2) + 0.011;
+southSeasonOverlay.position.y = (DISC_HEIGHT / 2) + scaleDimension(0.011);
 southSeasonOverlay.renderOrder = 7;
 scalableStage.add(southSeasonOverlay);
 
@@ -396,7 +413,7 @@ scalableStage.add(analemmaProjection);
 const analemmaProjectionPointsGeometry = new THREE.BufferGeometry();
 const analemmaProjectionPointsMaterial = new THREE.PointsMaterial({
   color: 0xfff1be,
-  size: 0.048,
+  size: scaleDimension(0.048),
   sizeAttenuation: true,
   transparent: true,
   opacity: 0.92,
@@ -425,7 +442,7 @@ scalableStage.add(skyAnalemma);
 const skyAnalemmaPointsGeometry = new THREE.BufferGeometry();
 const skyAnalemmaPointsMaterial = new THREE.PointsMaterial({
   color: 0xe9f7ff,
-  size: 0.052,
+  size: scaleDimension(0.052),
   sizeAttenuation: true,
   transparent: true,
   opacity: 0.94,
@@ -492,7 +509,7 @@ iceBottomCap.position.y = RIM_BOTTOM_Y;
 scalableStage.add(iceBottomCap);
 
 const iceCrown = new THREE.Mesh(
-  new THREE.TorusGeometry((RIM_OUTER_RADIUS + RIM_INNER_RADIUS) / 2, 0.05, 12, 128),
+  new THREE.TorusGeometry((RIM_OUTER_RADIUS + RIM_INNER_RADIUS) / 2, scaleDimension(0.05), 12, 128),
   new THREE.MeshStandardMaterial({
     color: 0xffffff,
     emissive: 0x3a546f,
@@ -616,7 +633,7 @@ const dome = new THREE.Mesh(
     transmission: 0.72,
     transparent: true,
     opacity: 0.24,
-    thickness: 0.18,
+    thickness: scaleDimension(0.18),
     ior: 1.22,
     side: THREE.DoubleSide
   })
@@ -627,7 +644,7 @@ dome.position.y = DOME_BASE_Y;
 scalableStage.add(dome);
 
 const domeRing = new THREE.Mesh(
-  new THREE.TorusGeometry(DOME_RADIUS, 0.045, 12, 96),
+  new THREE.TorusGeometry(DOME_RADIUS, scaleDimension(0.045), 12, 96),
   new THREE.MeshStandardMaterial({
     color: 0xdff3ff,
     emissive: 0x23445e,
@@ -700,13 +717,13 @@ polaris.add(polarisHalo);
 
 polaris.position.set(
   0,
-  DOME_BASE_Y + (DOME_RADIUS * DOME_VERTICAL_SCALE) + POLARIS_ALTITUDE_OFFSET - CELESTIAL_HEIGHT_DROP,
+  POLARIS_HEIGHT,
   0
 );
 scalableStage.add(polaris);
 
 const glow = new THREE.Mesh(
-  new THREE.CircleGeometry(6.7, 96),
+  new THREE.CircleGeometry(scaleDimension(6.7), 96),
   new THREE.MeshBasicMaterial({
     color: 0x123a67,
     transparent: true,
@@ -714,7 +731,7 @@ const glow = new THREE.Mesh(
   })
 );
 glow.rotation.x = -Math.PI / 2;
-glow.position.y = -0.7;
+glow.position.y = scaleDimension(-0.7);
 scalableStage.add(glow);
 
 const walker = new THREE.Group();
@@ -728,11 +745,11 @@ const walkerBody = new THREE.Mesh(
     metalness: 0.08
   })
 );
-walkerBody.position.y = WALKER_SURFACE_OFFSET + 0.09;
+walkerBody.position.y = WALKER_SURFACE_OFFSET + scaleDimension(0.09);
 walker.add(walkerBody);
 
 const walkerHeading = new THREE.Mesh(
-  new THREE.ConeGeometry(0.045, 0.14, 18),
+  new THREE.ConeGeometry(scaleDimension(0.045), scaleDimension(0.14), 18),
   new THREE.MeshStandardMaterial({
     color: 0xffd06e,
     emissive: 0xffb84d,
@@ -742,11 +759,11 @@ const walkerHeading = new THREE.Mesh(
   })
 );
 walkerHeading.rotation.x = Math.PI / 2;
-walkerHeading.position.set(0, WALKER_SURFACE_OFFSET + 0.1, 0.13);
+walkerHeading.position.set(0, WALKER_SURFACE_OFFSET + scaleDimension(0.1), scaleDimension(0.13));
 walker.add(walkerHeading);
 
 const walkerRing = new THREE.Mesh(
-  new THREE.RingGeometry(0.09, 0.11, 32),
+  new THREE.RingGeometry(scaleDimension(0.09), scaleDimension(0.11), 32),
   new THREE.MeshBasicMaterial({
     color: 0xb5e8ff,
     transparent: true,
@@ -838,7 +855,7 @@ const orbitSunHalo = new THREE.Mesh(
 );
 orbitSun.add(orbitSunHalo);
 
-const orbitSunLight = new THREE.PointLight(0xffcf75, ORBIT_SUN_LIGHT_INTENSITY, 9.5, 1.4);
+const orbitSunLight = new THREE.PointLight(0xffcf75, ORBIT_SUN_LIGHT_INTENSITY, scaleDimension(9.5), 1.4);
 orbitSun.add(orbitSunLight);
 scalableStage.add(orbitSun);
 
@@ -981,7 +998,7 @@ const orbitMoonHalo = new THREE.Mesh(
 );
 orbitMoon.add(orbitMoonHalo);
 
-const orbitMoonLight = new THREE.PointLight(0xdbe4ff, ORBIT_MOON_LIGHT_INTENSITY, 5.5, 1.9);
+const orbitMoonLight = new THREE.PointLight(0xdbe4ff, ORBIT_MOON_LIGHT_INTENSITY, scaleDimension(5.5), 1.9);
 orbitMoon.add(orbitMoonLight);
 scalableStage.add(orbitMoon);
 
@@ -1008,7 +1025,7 @@ scalableStage.add(sunTrail);
 const sunTrailPointsGeometry = new THREE.BufferGeometry();
 const sunTrailPointsMaterial = new THREE.PointsMaterial({
   color: 0xffef9a,
-  size: 0.09,
+  size: scaleDimension(0.09),
   sizeAttenuation: true,
   transparent: true,
   opacity: 0.95,
@@ -1032,7 +1049,7 @@ scalableStage.add(moonTrail);
 const moonTrailPointsGeometry = new THREE.BufferGeometry();
 const moonTrailPointsMaterial = new THREE.PointsMaterial({
   color: 0xf4f7ff,
-  size: 0.07,
+  size: scaleDimension(0.07),
   sizeAttenuation: true,
   transparent: true,
   opacity: 0.78,
@@ -1060,7 +1077,7 @@ function createOrbitTrack(radius, color, opacity, height = ORBIT_TRACK_HEIGHT) {
   track.position.y = height;
   trackGroup.add(track);
 
-  if (Math.abs(height - ORBIT_TRACK_HEIGHT) > 0.02) {
+  if (Math.abs(height - ORBIT_TRACK_HEIGHT) > scaleDimension(0.02)) {
     for (const angle of ORBIT_HEIGHT_GUIDE_ANGLES) {
       const guideHeight = Math.abs(height - ORBIT_TRACK_HEIGHT);
       const guide = new THREE.Mesh(
@@ -1190,6 +1207,7 @@ firstPersonScene.background = null;
 const clock = new THREE.Clock();
 
 const constants = {
+  MODEL_SCALE,
   CAMERA_DEFAULT_FOV,
   CAMERA_TOPDOWN_DEFAULT_RADIUS,
   CAMERA_TOPDOWN_MAX_RADIUS,
@@ -1761,7 +1779,7 @@ function configurePreparationCamera(targetCamera) {
   targetCamera.fov = constants.CAMERA_WALKER_FOV;
   targetCamera.aspect = camera.aspect;
   targetCamera.near = 0.05;
-  targetCamera.far = 140;
+  targetCamera.far = scaleDimension(140);
   targetCamera.position.set(
     walkerState.position.x * visualScale,
     constants.WALKER_EYE_HEIGHT,

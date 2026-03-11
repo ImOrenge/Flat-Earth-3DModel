@@ -8,6 +8,7 @@ export function createCameraController({
   renderer,
   constants
 }) {
+  const modelScale = constants.MODEL_SCALE ?? 1;
   const tempCameraLookTarget = new THREE.Vector3();
 
   function clampCamera() {
@@ -21,7 +22,7 @@ export function createCameraController({
   function updateCamera() {
     const targetFov = walkerState.enabled ? constants.CAMERA_WALKER_FOV : constants.CAMERA_DEFAULT_FOV;
     const targetNear = walkerState.enabled ? 0.05 : 0.1;
-    const targetFar = walkerState.enabled ? 140 : 100;
+    const targetFar = (walkerState.enabled ? 140 : 100) * modelScale;
 
     if (Math.abs(camera.fov - targetFov) > 0.05) {
       camera.fov += (targetFov - camera.fov) * 0.12;
@@ -62,7 +63,7 @@ export function createCameraController({
       cameraState.radius * Math.cos(cameraState.phi),
       cameraState.radius * sinPhi * Math.cos(cameraState.theta)
     );
-    camera.lookAt(0, 0.15, 0);
+    camera.lookAt(0, constants.SURFACE_Y * (5 / 6), 0);
   }
 
   function resize() {

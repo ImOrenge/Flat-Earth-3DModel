@@ -35,7 +35,7 @@ function createAirportLabel(airport) {
   return `${airport.iata} / ${airport.icao} | ${airport.city}`;
 }
 
-function createAircraftModel() {
+function createAircraftModel(scaleDimension) {
   const aircraft = new THREE.Group();
   const material = new THREE.MeshStandardMaterial({
     color: 0xf4fbff,
@@ -45,25 +45,37 @@ function createAircraftModel() {
     metalness: 0.18
   });
 
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.028, 0.15, 4, 10), material);
+  const body = new THREE.Mesh(
+    new THREE.CapsuleGeometry(scaleDimension(0.028), scaleDimension(0.15), 4, 10),
+    material
+  );
   body.rotation.x = -Math.PI / 2;
   aircraft.add(body);
 
-  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.085, 18), material);
+  const nose = new THREE.Mesh(
+    new THREE.ConeGeometry(scaleDimension(0.03), scaleDimension(0.085), 18),
+    material
+  );
   nose.rotation.x = -Math.PI / 2;
-  nose.position.z = -0.11;
+  nose.position.z = scaleDimension(-0.11);
   aircraft.add(nose);
 
-  const wing = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.01, 0.042), material);
-  wing.position.z = -0.005;
+  const wing = new THREE.Mesh(
+    new THREE.BoxGeometry(scaleDimension(0.19), scaleDimension(0.01), scaleDimension(0.042)),
+    material
+  );
+  wing.position.z = scaleDimension(-0.005);
   aircraft.add(wing);
 
-  const tailWing = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.008, 0.025), material);
-  tailWing.position.set(0, 0.028, 0.08);
+  const tailWing = new THREE.Mesh(
+    new THREE.BoxGeometry(scaleDimension(0.08), scaleDimension(0.008), scaleDimension(0.025)),
+    material
+  );
+  tailWing.position.set(0, scaleDimension(0.028), scaleDimension(0.08));
   aircraft.add(tailWing);
 
   const trailGlow = new THREE.Mesh(
-    new THREE.SphereGeometry(0.06, 18, 14),
+    new THREE.SphereGeometry(scaleDimension(0.06), 18, 14),
     new THREE.MeshBasicMaterial({
       color: 0x86d6ff,
       transparent: true,
@@ -86,6 +98,10 @@ async function loadJson(path) {
 }
 
 export function createRouteSimulationController({ constants, i18n, scalableStage, ui }) {
+  const scaleDimension = (value) => value * (constants.MODEL_SCALE ?? 1);
+  const routeSurfaceOffset = scaleDimension(ROUTE_SURFACE_OFFSET);
+  const routeAltitudeBase = scaleDimension(ROUTE_ALTITUDE_BASE);
+  const routeAltitudeScale = scaleDimension(ROUTE_ALTITUDE_SCALE);
   const routeLayer = new THREE.Group();
   routeLayer.visible = false;
   scalableStage.add(routeLayer);
@@ -107,7 +123,7 @@ export function createRouteSimulationController({ constants, i18n, scalableStage
     new THREE.BufferGeometry(),
     new THREE.PointsMaterial({
       color: 0xeefaff,
-      size: 0.05,
+      size: scaleDimension(0.05),
       sizeAttenuation: true,
       transparent: true,
       opacity: 0.82,
@@ -119,7 +135,7 @@ export function createRouteSimulationController({ constants, i18n, scalableStage
   routeLayer.add(routePathPoints);
 
   const originMarker = new THREE.Mesh(
-    new THREE.SphereGeometry(0.055, 20, 16),
+    new THREE.SphereGeometry(scaleDimension(0.055), 20, 16),
     new THREE.MeshStandardMaterial({
       color: 0x8dffbc,
       emissive: 0x4fcf84,
@@ -131,7 +147,7 @@ export function createRouteSimulationController({ constants, i18n, scalableStage
   routeLayer.add(originMarker);
 
   const destinationMarker = new THREE.Mesh(
-    new THREE.SphereGeometry(0.055, 20, 16),
+    new THREE.SphereGeometry(scaleDimension(0.055), 20, 16),
     new THREE.MeshStandardMaterial({
       color: 0xffc882,
       emissive: 0xffa44d,
@@ -142,7 +158,7 @@ export function createRouteSimulationController({ constants, i18n, scalableStage
   );
   routeLayer.add(destinationMarker);
 
-  const aircraft = createAircraftModel();
+  const aircraft = createAircraftModel(scaleDimension);
   routeLayer.add(aircraft);
 
   const routeLibrary = {
@@ -222,20 +238,20 @@ export function createRouteSimulationController({ constants, i18n, scalableStage
       route.origin.latitude,
       route.origin.longitude,
       constants.DISC_RADIUS,
-      constants.SURFACE_Y + ROUTE_SURFACE_OFFSET
+      constants.SURFACE_Y + routeSurfaceOffset
     );
     const endData = getProjectedPositionFromGeo(
       route.destination.latitude,
       route.destination.longitude,
       constants.DISC_RADIUS,
-      constants.SURFACE_Y + ROUTE_SURFACE_OFFSET
+      constants.SURFACE_Y + routeSurfaceOffset
     );
 
     const start = new THREE.Vector3(startData.x, startData.y, startData.z);
     const end = new THREE.Vector3(endData.x, endData.y, endData.z);
     const control = start.clone().lerp(end, 0.5);
     const distance = start.distanceTo(end);
-    control.y += ROUTE_ALTITUDE_BASE + Math.min(distance * 0.14, ROUTE_ALTITUDE_SCALE);
+    control.y += routeAltitudeBase + Math.min(distance * 0.14, routeAltitudeScale);
 
     return new THREE.QuadraticBezierCurve3(start, control, end);
   }
