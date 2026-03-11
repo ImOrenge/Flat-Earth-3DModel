@@ -50,6 +50,11 @@ const ORBIT_SUN_SEASON_SPEED = 0.0026;
 const ORBIT_SUN_HALO_OPACITY = 0.2;
 const ORBIT_SUN_LIGHT_INTENSITY = 32;
 const ORBIT_SUN_BODY_EMISSIVE_INTENSITY = 5.4;
+const ORBIT_SUN_CORONA_SCALE = ORBIT_SUN_SIZE * 13.5;
+const ORBIT_SUN_AUREOLE_SCALE = ORBIT_SUN_SIZE * 18.5;
+const ORBIT_SUN_CORONA_OPACITY = 0.52;
+const ORBIT_SUN_AUREOLE_OPACITY = 0.24;
+const ORBIT_SUN_PULSE_SPEED = 0.0031;
 const ORBIT_TRACK_TUBE_RADIUS = 0.045;
 const ORBIT_HEIGHT_GUIDE_RADIUS = 0.018;
 const ORBIT_HEIGHT_GUIDE_MARKER_SIZE = 0.05;
@@ -500,6 +505,108 @@ iceCrown.rotation.x = Math.PI / 2;
 iceCrown.position.y = RIM_TOP_Y + 0.01;
 scalableStage.add(iceCrown);
 
+function enhanceDomeMaterialWithSunGlow(material) {
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.sunLocalPosition = {
+      value: new THREE.Vector3(0, DOME_RADIUS, 0)
+    };
+    shader.uniforms.sunPulse = { value: 0.5 };
+    material.userData.shader = shader;
+
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        "#include <common>",
+        `#include <common>
+varying vec3 vDomeLocalPosition;`
+      )
+      .replace(
+        "#include <begin_vertex>",
+        `#include <begin_vertex>
+vDomeLocalPosition = position;`
+      );
+
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        "#include <common>",
+        `#include <common>
+varying vec3 vDomeLocalPosition;
+uniform vec3 sunLocalPosition;
+uniform float sunPulse;`
+      )
+      .replace(
+        "#include <opaque_fragment>",
+        `vec3 domeSurfaceDirection = normalize(vDomeLocalPosition);
+vec3 sunDirection = normalize(sunLocalPosition);
+float sunArcDistance = distance(domeSurfaceDirection, sunDirection);
+float sunBloom = 1.0 - smoothstep(0.22, 0.84, sunArcDistance);
+float sunCore = 1.0 - smoothstep(0.06, 0.24, sunArcDistance);
+float upperDome = smoothstep(-0.04, 0.72, domeSurfaceDirection.y);
+float pulse = 0.92 + (sunPulse * 0.08);
+vec3 atmosphericBlue = mix(vec3(0.46, 0.76, 1.0), vec3(0.9, 0.97, 1.0), sunCore);
+outgoingLight += atmosphericBlue * ((sunBloom * 0.48) + (sunCore * 0.38)) * upperDome * pulse;
+diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.64, 0.84, 1.0), sunBloom * upperDome * 0.38);
+diffuseColor.a = min(0.82, diffuseColor.a + (sunBloom * 0.14) + (sunCore * 0.2));
+#include <opaque_fragment>`
+      );
+  };
+  material.customProgramCacheKey = () => "dome-sun-atmosphere-v1";
+}
+
+function createSunAuraTexture() {
+  const size = 512;
+  const canvasEl = document.createElement("canvas");
+  canvasEl.width = size;
+  canvasEl.height = size;
+  const ctx = canvasEl.getContext("2d");
+  const center = size / 2;
+  const radius = size / 2;
+
+  const baseGradient = ctx.createRadialGradient(center, center, 0, center, center, radius);
+  baseGradient.addColorStop(0, "rgba(255,255,255,1)");
+  baseGradient.addColorStop(0.08, "rgba(255,249,225,0.98)");
+  baseGradient.addColorStop(0.22, "rgba(255,223,138,0.82)");
+  baseGradient.addColorStop(0.42, "rgba(255,184,92,0.34)");
+  baseGradient.addColorStop(0.68, "rgba(136,212,255,0.18)");
+  baseGradient.addColorStop(1, "rgba(136,212,255,0)");
+  ctx.fillStyle = baseGradient;
+  ctx.fillRect(0, 0, size, size);
+
+  ctx.globalCompositeOperation = "lighter";
+
+  for (let i = 0; i < 16; i += 1) {
+    const angle = (i / 16) * Math.PI * 2;
+    const innerRadius = size * 0.1;
+    const outerRadius = size * (0.32 + ((i % 4) * 0.035));
+    const x0 = center + (Math.cos(angle) * innerRadius);
+    const y0 = center + (Math.sin(angle) * innerRadius);
+    const x1 = center + (Math.cos(angle) * outerRadius);
+    const y1 = center + (Math.sin(angle) * outerRadius);
+    const beamGradient = ctx.createLinearGradient(x0, y0, x1, y1);
+    beamGradient.addColorStop(0, "rgba(255,246,210,0.3)");
+    beamGradient.addColorStop(0.45, "rgba(255,208,118,0.16)");
+    beamGradient.addColorStop(1, "rgba(145,214,255,0)");
+    ctx.strokeStyle = beamGradient;
+    ctx.lineWidth = 5 + ((i % 3) * 1.8);
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.stroke();
+  }
+
+  for (let i = 0; i < 4; i += 1) {
+    ctx.strokeStyle = `rgba(154,220,255,${0.1 - (i * 0.018)})`;
+    ctx.lineWidth = 10 - (i * 2);
+    ctx.beginPath();
+    ctx.arc(center, center, size * (0.17 + (i * 0.07)), 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  const texture = new THREE.CanvasTexture(canvasEl);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.needsUpdate = true;
+  return texture;
+}
+
 const dome = new THREE.Mesh(
   new THREE.SphereGeometry(DOME_RADIUS, 96, 48, 0, Math.PI * 2, 0, Math.PI / 2),
   new THREE.MeshPhysicalMaterial({
@@ -514,6 +621,7 @@ const dome = new THREE.Mesh(
     side: THREE.DoubleSide
   })
 );
+enhanceDomeMaterialWithSunGlow(dome.material);
 dome.scale.y = DOME_VERTICAL_SCALE;
 dome.position.y = DOME_BASE_Y;
 scalableStage.add(dome);
@@ -743,6 +851,31 @@ const observerSunLight = observerSun.children[2];
 observerSun.visible = false;
 firstPersonScene.add(observerSun);
 
+const sunAuraTexture = createSunAuraTexture();
+
+function createSunAuraSprite(scale, color, opacity, rotation = 0) {
+  const sprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: sunAuraTexture,
+      color,
+      transparent: true,
+      opacity,
+      blending: THREE.AdditiveBlending,
+      depthTest: false,
+      depthWrite: false
+    })
+  );
+  sprite.material.rotation = rotation;
+  sprite.scale.setScalar(scale);
+  sprite.renderOrder = 22;
+  return sprite;
+}
+
+const orbitSunCorona = createSunAuraSprite(ORBIT_SUN_CORONA_SCALE, 0xffdc8d, ORBIT_SUN_CORONA_OPACITY);
+const orbitSunAureole = createSunAuraSprite(ORBIT_SUN_AUREOLE_SCALE, 0x8fddff, ORBIT_SUN_AUREOLE_OPACITY, Math.PI / 6);
+orbitSun.add(orbitSunCorona);
+orbitSun.add(orbitSunAureole);
+
 function createSunRayTexture() {
   const width = 256;
   const height = 1024;
@@ -757,21 +890,24 @@ function createSunRayTexture() {
     const progress = y / (height - 1);
     const verticalFade = (1 - progress) ** 1.8;
     const beamHalfWidth = (width * 0.08) + ((1 - progress) * width * 0.16);
+    const ripple = 0.84 + (Math.sin((progress * 17.5) + 0.35) * 0.16);
 
     for (let x = 0; x < width; x += 1) {
       const index = ((y * width) + x) * 4;
       const centeredX = Math.abs(x - (width / 2));
       const horizontalFade = Math.exp(-((centeredX / beamHalfWidth) ** 2) * 2.6);
       const glowBoost = Math.exp(-((centeredX / (width * 0.12)) ** 2) * 4.2);
+      const edgeFactor = Math.min(Math.max((centeredX / beamHalfWidth) - 0.38, 0), 1);
+      const coreFactor = Math.exp(-((centeredX / (width * 0.09)) ** 2) * 5.6);
       const alpha = THREE.MathUtils.clamp(
-        (verticalFade * horizontalFade * 255) + (glowBoost * verticalFade * 56),
+        (((verticalFade * horizontalFade * 255) + (glowBoost * verticalFade * 56)) * ripple),
         0,
         255
       );
 
-      data[index] = 255;
-      data[index + 1] = 245;
-      data[index + 2] = 214;
+      data[index] = Math.round((255 * (1 - (edgeFactor * 0.08))) + (242 * coreFactor * 0.08));
+      data[index + 1] = Math.round((239 * (1 - (edgeFactor * 0.22))) + (252 * coreFactor * 0.18));
+      data[index + 2] = Math.round((204 * (1 - (edgeFactor * 0.36))) + (255 * edgeFactor * 0.36));
       data[index + 3] = alpha;
     }
   }
@@ -1301,9 +1437,40 @@ const tempObserverSkyPoint = new THREE.Vector3();
 const tempObserverRelative = new THREE.Vector3();
 const tempDemoSunSourceWorld = new THREE.Vector3();
 const tempDemoMoonSourceWorld = new THREE.Vector3();
+const tempDomeSunLocalPosition = new THREE.Vector3();
 const tempSunWorldPosition = new THREE.Vector3();
 const tempSunViewDirection = new THREE.Vector3();
 const tempCameraForward = new THREE.Vector3();
+
+function updateSunVisualEffects() {
+  const pulse = 0.5 + (Math.sin(performance.now() * ORBIT_SUN_PULSE_SPEED) * 0.5);
+  const bodyScale = THREE.MathUtils.lerp(0.96, 1.2, pulse);
+  const haloScale = THREE.MathUtils.lerp(0.84, 1.34, pulse);
+  const lightScale = THREE.MathUtils.lerp(0.94, 1.14, pulse);
+
+  if (walkerState.enabled) {
+    observerSunBody.material.emissiveIntensity *= bodyScale;
+    observerSunHalo.material.opacity *= haloScale;
+    observerSunLight.intensity *= lightScale;
+  } else {
+    orbitSunBody.material.emissiveIntensity = ORBIT_SUN_BODY_EMISSIVE_INTENSITY * bodyScale;
+    orbitSunHalo.material.opacity = ORBIT_SUN_HALO_OPACITY * haloScale;
+    orbitSunLight.intensity = ORBIT_SUN_LIGHT_INTENSITY * lightScale;
+    orbitSunCorona.material.opacity = ORBIT_SUN_CORONA_OPACITY * THREE.MathUtils.lerp(0.88, 1.18, pulse);
+    orbitSunAureole.material.opacity = ORBIT_SUN_AUREOLE_OPACITY * THREE.MathUtils.lerp(0.82, 1.24, pulse);
+    orbitSunCorona.scale.setScalar(ORBIT_SUN_CORONA_SCALE * THREE.MathUtils.lerp(0.94, 1.08, pulse));
+    orbitSunAureole.scale.setScalar(ORBIT_SUN_AUREOLE_SCALE * THREE.MathUtils.lerp(0.96, 1.12, pulse));
+    orbitSunAureole.material.rotation += 0.0016;
+  }
+
+  orbitSun.getWorldPosition(tempSunWorldPosition);
+  tempDomeSunLocalPosition.copy(tempSunWorldPosition);
+  dome.worldToLocal(tempDomeSunLocalPosition);
+  if (dome.material.userData.shader) {
+    dome.material.userData.shader.uniforms.sunLocalPosition.value.copy(tempDomeSunLocalPosition);
+    dome.material.userData.shader.uniforms.sunPulse.value = pulse;
+  }
+}
 
 function syncPreparationPresentation() {
   if (!renderState.preparing) {
@@ -2019,6 +2186,7 @@ function animate() {
   if (snapshot) {
     updateObserverCelestialPerspective(snapshot);
   }
+  updateSunVisualEffects();
   renderer.render(walkerState.enabled ? firstPersonScene : scene, camera);
 }
 
