@@ -40,7 +40,7 @@ const DOME_BASE_Y = scaleDimension(0.46);
 const DOME_VERTICAL_SCALE = 0.78;
 const CELESTIAL_HEIGHT_DROP = scaleDimension(0.42);
 const CELESTIAL_ALTITUDE_DROP_DEGREES = 6;
-const POLARIS_ALTITUDE_OFFSET = scaleDimension(0.08);
+const POLARIS_ALTITUDE_OFFSET = 0;
 const POLARIS_CORE_RADIUS = scaleDimension(0.07);
 const POLARIS_GLOW_SIZE = scaleDimension(0.42);
 const POLARIS_HALO_SIZE = scaleDimension(0.78);
@@ -156,9 +156,7 @@ const WALKER_GUIDE_LENGTH = scaleDimension(3.7);
 const WALKER_GUIDE_MARK_SIZE = scaleDimension(0.1);
 const WALKER_GUIDE_MARK_GAP = scaleDimension(0.5);
 const WALKER_HORIZON_SHIFT_PX = 240;
-const POLARIS_HEIGHT = scaleCelestialAltitude(
-  DOME_BASE_Y + (DOME_RADIUS * DOME_VERTICAL_SCALE) + POLARIS_ALTITUDE_OFFSET - CELESTIAL_HEIGHT_DROP
-);
+const POLARIS_HEIGHT = DOME_BASE_Y + (DOME_RADIUS * DOME_VERTICAL_SCALE) + POLARIS_ALTITUDE_OFFSET;
 
 const TROPIC_CANCER_RADIUS = projectedRadiusFromLatitude(TROPIC_LATITUDE, DISC_RADIUS);
 const EQUATOR_RADIUS = projectedRadiusFromLatitude(0, DISC_RADIUS);
