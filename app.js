@@ -7,13 +7,14 @@ import {
   getMoonPhase,
   getSolarAltitudeFactor,
 } from "./modules/astronomy-utils.js?v=20260311-moon4";
-import { createAstronomyController } from "./modules/astronomy-controller.js?v=20260311-moon4";
+import { createAstronomyController } from "./modules/astronomy-controller.js?v=20260311-moon5";
 import { createCameraController } from "./modules/camera-controller.js";
 import { createCelestialTrackingCameraController } from "./modules/celestial-tracking-camera-controller.js";
 import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js";
-import { createI18n } from "./modules/i18n.js?v=20260311-moon4";
+import { createI18n } from "./modules/i18n.js?v=20260311-magnetic1";
+import { createMagneticFieldController } from "./modules/magnetic-field-controller.js?v=20260311-magnetic1";
 import { createRouteSimulationController } from "./modules/route-simulation-controller.js";
-import { createTextureManager } from "./modules/texture-manager.js";
+import { createTextureManager } from "./modules/texture-manager.js?v=20260311-gpu-daynight";
 import { createWalkerController } from "./modules/walker-controller.js";
 
 const DEFAULT_MAP_PATH = "./assets/flat-earth-map-square.svg";
@@ -210,6 +211,8 @@ const dayNightOverlayEl = document.getElementById("day-night-overlay");
 const dayNightSummaryEl = document.getElementById("day-night-summary");
 const analemmaOverlayEl = document.getElementById("analemma-overlay");
 const analemmaSummaryEl = document.getElementById("analemma-summary");
+const magneticFieldOverlayEl = document.getElementById("magnetic-field-overlay");
+const magneticFieldSummaryEl = document.getElementById("magnetic-field-summary");
 const skyAnalemmaOverlayEl = document.getElementById("sky-analemma-overlay");
 const skyAnalemmaSummaryEl = document.getElementById("sky-analemma-summary");
 const seasonalYearEl = document.getElementById("seasonal-year");
@@ -375,22 +378,76 @@ const transparentSurfaceMaterial = new THREE.MeshBasicMaterial({
   depthTest: false
 });
 
-const dayNightCanvas = document.createElement("canvas");
-dayNightCanvas.width = DAY_NIGHT_TEXTURE_SIZE;
-dayNightCanvas.height = DAY_NIGHT_TEXTURE_SIZE;
-const dayNightCtx = dayNightCanvas.getContext("2d");
-const dayNightTexture = new THREE.CanvasTexture(dayNightCanvas);
-dayNightTexture.colorSpace = THREE.SRGBColorSpace;
-dayNightTexture.wrapS = THREE.ClampToEdgeWrapping;
-dayNightTexture.wrapT = THREE.ClampToEdgeWrapping;
-dayNightTexture.flipY = false;
-const dayNightOverlayMaterial = new THREE.MeshBasicMaterial({
-  map: dayNightTexture,
+const dayNightOverlayMaterial = new THREE.ShaderMaterial({
+  uniforms: {
+    discRadius: { value: DISC_RADIUS },
+    overlayOpacity: { value: 0.88 },
+    sunLatitudeTrig: { value: new THREE.Vector2(0, 1) },
+    sunLongitudeRadians: { value: 0 },
+    nightLightsMap: { value: null }
+  },
+  vertexShader: `
+    varying vec2 vUv;
+
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform float discRadius;
+    uniform float overlayOpacity;
+    uniform vec2 sunLatitudeTrig;
+    uniform float sunLongitudeRadians;
+    uniform sampler2D nightLightsMap;
+    varying vec2 vUv;
+
+    void main() {
+      float worldZ = (vUv.x - 0.5) * discRadius * 2.0;
+      float worldX = (vUv.y - 0.5) * discRadius * 2.0;
+      float projectedRadius = length(vec2(worldX, worldZ));
+
+      if (projectedRadius > discRadius) {
+        discard;
+      }
+
+      float latitudeRadians = radians(90.0 - ((projectedRadius / discRadius) * 180.0));
+      float longitudeRadians = atan(worldZ, -worldX);
+      float solarFactor = (
+        (sin(latitudeRadians) * sunLatitudeTrig.x) +
+        (cos(latitudeRadians) * sunLatitudeTrig.y * cos(longitudeRadians - sunLongitudeRadians))
+      );
+      float nightStrength = clamp((-solarFactor + 0.02) / 0.18, 0.0, 1.0);
+      float twilightStrength = 1.0 - clamp(abs(solarFactor) / 0.06, 0.0, 1.0);
+      float twilightMix = clamp(twilightStrength * (1.0 - (nightStrength * 0.35)), 0.0, 1.0);
+      float deepNight = clamp((nightStrength - 0.14) / 0.86, 0.0, 1.0);
+      float nightLightStrength = texture2D(nightLightsMap, vec2(vUv.x, 1.0 - vUv.y)).r * deepNight;
+      float lightBoost = nightLightStrength * (0.82 + (deepNight * 0.68));
+      vec3 baseColor = vec3(
+        mix(12.0, 96.0, twilightMix),
+        mix(20.0, 128.0, twilightMix),
+        mix(34.0, 196.0, twilightMix)
+      ) / 255.0;
+      vec3 finalColor = clamp(baseColor + vec3(
+        lightBoost,
+        lightBoost * (208.0 / 255.0),
+        lightBoost * (108.0 / 255.0)
+      ), 0.0, 1.0);
+      float alpha = clamp(
+        ((nightStrength * 172.0) + (twilightMix * 52.0) + (lightBoost * 42.0)) / 255.0,
+        0.0,
+        232.0 / 255.0
+      );
+
+      gl_FragColor = vec4(finalColor, alpha * overlayOpacity);
+      #include <colorspace_fragment>
+    }
+  `,
   transparent: true,
-  opacity: 0.88,
   depthWrite: false,
   depthTest: false,
-  side: THREE.DoubleSide
+  side: THREE.DoubleSide,
+  toneMapped: false
 });
 const dayNightOverlay = new THREE.Mesh(
   new THREE.CylinderGeometry(DISC_RADIUS, DISC_RADIUS, scaleDimension(0.008), 128, 1, false),
@@ -1342,6 +1399,9 @@ const analemmaState = {
   enabled: true,
   lastProjectionKey: ""
 };
+const magneticFieldState = {
+  enabled: true
+};
 const seasonalMoonState = {
   selectedEventKey: null,
   selectedYear: astronomyState.selectedDate.getFullYear()
@@ -1423,6 +1483,7 @@ const constants = {
   DISC_RADIUS,
   DOME_BASE_Y,
   DOME_RADIUS,
+  DOME_VERTICAL_SCALE,
   EQUATOR_RADIUS,
   FIRST_PERSON_STAGE_SCALE,
   MOON_TRAIL_MAX_POINTS,
@@ -1441,6 +1502,7 @@ const constants = {
   ORBIT_MOON_SIZE,
   ORBIT_RADIUS_AMPLITUDE,
   ORBIT_RADIUS_MID,
+  RIM_INNER_RADIUS,
   SURFACE_Y,
   ORBIT_SUN_HEIGHT,
   ORBIT_SUN_HEIGHT_NORTH,
@@ -1478,6 +1540,8 @@ const ui = {
   dayNightSummaryEl,
   firstPersonHorizonEl,
   firstPersonOverlayEl,
+  magneticFieldOverlayEl,
+  magneticFieldSummaryEl,
   moonCoordinatesEl,
   moonPhaseDegreesEl,
   moonPhaseDirectionEl,
@@ -1510,6 +1574,15 @@ const ui = {
 };
 
 let astronomyApi;
+const magneticFieldApi = createMagneticFieldController({
+  constants,
+  i18n,
+  ui,
+  magneticFieldState,
+  orbitSun,
+  scalableStage,
+  walkerState
+});
 const textureApi = createTextureManager({
   constants,
   i18n,
@@ -1535,6 +1608,7 @@ const textureApi = createTextureManager({
     astronomyApi.updateDayNightOverlayFromSun(demoSunGeo.latitudeDegrees, demoSunGeo.longitudeDegrees, true);
   }
 });
+dayNightOverlayMaterial.uniforms.nightLightsMap.value = textureApi.getNightLightsTexture();
 
 const cameraApi = createCameraController({
   camera,
@@ -1559,9 +1633,7 @@ astronomyApi = createAstronomyController({
   orbitModes,
   orbitModeButtons,
   seasonalEventButtons,
-  dayNightCanvas,
-  dayNightCtx,
-  dayNightTexture,
+  dayNightOverlayMaterial,
   dayNightOverlay,
   analemmaProjectionGeometry,
   analemmaProjectionPointsGeometry,
@@ -1574,8 +1646,7 @@ astronomyApi = createAstronomyController({
   moonTrailGeometry,
   moonTrailPointsGeometry,
   northSeasonOverlay,
-  southSeasonOverlay,
-  getNightLightsData: textureApi.getNightLightsData
+  southSeasonOverlay
 });
 
 const walkerApi = createWalkerController({
@@ -1663,6 +1734,7 @@ i18n.subscribe(() => {
   celestialTrackingCameraApi.refreshLocalizedUi?.();
   textureApi.refreshLocalizedUi?.();
   astronomyApi.refreshLocalizedUi?.();
+  magneticFieldApi.refreshLocalizedUi?.();
   walkerApi.refreshLocalizedUi?.(getCurrentUiSnapshot());
   routeSimulationApi.refreshLocalizedUi?.();
   syncPreparationPresentation();
@@ -2441,6 +2513,13 @@ analemmaOverlayEl.addEventListener("change", () => {
   astronomyApi.syncAnalemmaUi(projectionDate, true);
 });
 
+if (magneticFieldOverlayEl) {
+  magneticFieldOverlayEl.addEventListener("change", () => {
+    magneticFieldState.enabled = magneticFieldOverlayEl.checked;
+    magneticFieldApi.syncUi();
+  });
+}
+
 skyAnalemmaOverlayEl.addEventListener("change", () => {
   skyAnalemmaState.enabled = skyAnalemmaOverlayEl.checked;
   const projectionDate = astronomyState.live ? new Date() : astronomyState.selectedDate;
@@ -2598,6 +2677,7 @@ function animate() {
     updateObserverCelestialPerspective(snapshot);
   }
   updateSunVisualEffects();
+  magneticFieldApi.update(performance.now());
   renderer.render(walkerState.enabled ? firstPersonScene : scene, camera);
 }
 
@@ -2609,6 +2689,7 @@ setControlTab("astronomy");
 astronomyApi.setObservationInputValue(astronomyState.selectedDate);
 astronomyApi.syncDayNightOverlayUi();
 astronomyApi.syncAnalemmaUi(astronomyState.selectedDate, true);
+magneticFieldApi.syncUi();
 astronomyApi.syncSeasonalMoonUi();
 astronomyApi.syncSeasonalSunUi(true);
 walkerApi.syncWalkerUi();

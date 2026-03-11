@@ -337,6 +337,10 @@ const TRANSLATIONS = {
 };
 
 Object.assign(TRANSLATIONS.en, {
+  magneticFieldTitle: "Magnetic Field",
+  toggleMagneticField: "Field Lines",
+  magneticFieldSummaryActive: "Magnetic field lines rise from the north polar center toward the top of the dome, then radiate outward toward the southern boundary.",
+  magneticFieldSummaryHidden: "Magnetic field overlay is hidden.",
   moonPhaseNew: "New Moon",
   moonPhaseEarlyWaxingCrescent: "Early Waxing Crescent",
   moonPhaseWaxingCrescent: "Waxing Crescent",
@@ -356,6 +360,10 @@ Object.assign(TRANSLATIONS.en, {
 });
 
 Object.assign(TRANSLATIONS.ko, {
+  magneticFieldTitle: "\uC790\uAE30\uC7A5",
+  toggleMagneticField: "\uC790\uAE30\uC7A5 \uC120",
+  magneticFieldSummaryActive: "\uBD81\uADF9 \uC911\uC2EC\uC5D0\uC11C \uB3D4 \uC0C1\uB2E8\uC744 \uD5A5\uD574 \uC19F\uC740 \uB4A4, \uB0A8\uADF9\uAD8C \uACBD\uACC4 \uBC29\uD5A5\uC73C\uB85C \uC790\uAE30\uC7A5 \uC120\uC774 \uBC29\uC0AC\uD569\uB2C8\uB2E4.",
+  magneticFieldSummaryHidden: "\uC790\uAE30\uC7A5 \uC624\uBC84\uB808\uC774\uAC00 \uC228\uACA8\uC838 \uC788\uC2B5\uB2C8\uB2E4.",
   moonPhaseNew: "\uC0AD",
   moonPhaseEarlyWaxingCrescent: "\uCD08\uAE30 \uCD08\uC2B9\uB2EC",
   moonPhaseWaxingCrescent: "\uCD08\uC2B9\uB2EC",

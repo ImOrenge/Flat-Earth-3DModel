@@ -5,8 +5,6 @@ import {
   getGeoFromProjectedPosition,
   projectedRadiusFromLatitude,
   toDatetimeLocalValue,
-  toDegrees,
-  normalizeDegrees,
   latitudeFromProjectedRadius
 } from "./geo-utils.js";
 import {
@@ -33,9 +31,7 @@ export function createAstronomyController({
   orbitModes,
   orbitModeButtons,
   seasonalEventButtons,
-  dayNightCanvas,
-  dayNightCtx,
-  dayNightTexture,
+  dayNightOverlayMaterial,
   dayNightOverlay,
   analemmaProjectionGeometry,
   analemmaProjectionPointsGeometry,
@@ -48,8 +44,7 @@ export function createAstronomyController({
   moonTrailGeometry,
   moonTrailPointsGeometry,
   northSeasonOverlay,
-  southSeasonOverlay,
-  getNightLightsData
+  southSeasonOverlay
 }) {
   const scaleDimension = (value) => value * (constants.MODEL_SCALE ?? 1);
   const seasonalEventMap = new Map(
@@ -214,58 +209,13 @@ export function createAstronomyController({
     });
   }
 
-  function drawDayNightOverlay(sunLatitudeDegrees, sunLongitudeDegrees) {
-    const { width, height } = dayNightCanvas;
-    const image = dayNightCtx.createImageData(width, height);
-    const { data } = image;
-    const nightLights = typeof getNightLightsData === "function" ? getNightLightsData() : null;
-    const hasNightLights = Boolean(nightLights && nightLights.length === (width * height));
-
-    for (let y = 0; y < height; y += 1) {
-      for (let x = 0; x < width; x += 1) {
-        const u = x / (width - 1);
-        const v = y / (height - 1);
-        const worldZ = (u - 0.5) * constants.DISC_RADIUS * 2;
-        const worldX = (v - 0.5) * constants.DISC_RADIUS * 2;
-        const projectedRadius = Math.hypot(worldX, worldZ);
-        const index = (y * width + x) * 4;
-
-        if (projectedRadius > constants.DISC_RADIUS) {
-          data[index + 3] = 0;
-          continue;
-        }
-
-        const latitudeDegrees = latitudeFromProjectedRadius(projectedRadius, constants.DISC_RADIUS);
-        const longitudeDegrees = normalizeDegrees(toDegrees(Math.atan2(worldZ, -worldX)));
-        const solarFactor = (
-          (Math.sin(latitudeDegrees * Math.PI / 180) * Math.sin(sunLatitudeDegrees * Math.PI / 180)) +
-          (Math.cos(latitudeDegrees * Math.PI / 180) * Math.cos(sunLatitudeDegrees * Math.PI / 180) *
-            Math.cos((longitudeDegrees - sunLongitudeDegrees) * Math.PI / 180))
-        );
-        const nightStrength = THREE.MathUtils.clamp((-solarFactor + 0.02) / 0.18, 0, 1);
-        const twilightStrength = 1 - THREE.MathUtils.clamp(Math.abs(solarFactor) / 0.06, 0, 1);
-        const twilightMix = THREE.MathUtils.clamp(twilightStrength * (1 - (nightStrength * 0.35)), 0, 1);
-        const deepNight = THREE.MathUtils.clamp((nightStrength - 0.14) / 0.86, 0, 1);
-        const baseRed = THREE.MathUtils.lerp(12, 96, twilightMix);
-        const baseGreen = THREE.MathUtils.lerp(20, 128, twilightMix);
-        const baseBlue = THREE.MathUtils.lerp(34, 196, twilightMix);
-        const lightSampleIndex = ((height - 1 - y) * width) + x;
-        const lightStrength = hasNightLights ? (nightLights[lightSampleIndex] * deepNight) : 0;
-        const lightBoost = lightStrength * (0.82 + (deepNight * 0.68));
-        const red = baseRed + (lightBoost * 255);
-        const green = baseGreen + (lightBoost * 208);
-        const blue = baseBlue + (lightBoost * 108);
-        const alpha = Math.round((nightStrength * 172) + (twilightMix * 52) + (lightBoost * 42));
-
-        data[index] = THREE.MathUtils.clamp(Math.round(red), 0, 255);
-        data[index + 1] = THREE.MathUtils.clamp(Math.round(green), 0, 255);
-        data[index + 2] = THREE.MathUtils.clamp(Math.round(blue), 0, 255);
-        data[index + 3] = THREE.MathUtils.clamp(alpha, 0, 232);
-      }
-    }
-
-    dayNightCtx.putImageData(image, 0, 0);
-    dayNightTexture.needsUpdate = true;
+  function syncDayNightOverlayMaterial(sunLatitudeDegrees, sunLongitudeDegrees) {
+    const sunLatitudeRadians = THREE.MathUtils.degToRad(sunLatitudeDegrees);
+    dayNightOverlayMaterial.uniforms.sunLatitudeTrig.value.set(
+      Math.sin(sunLatitudeRadians),
+      Math.cos(sunLatitudeRadians)
+    );
+    dayNightOverlayMaterial.uniforms.sunLongitudeRadians.value = THREE.MathUtils.degToRad(sunLongitudeDegrees);
   }
 
   function syncDayNightOverlayUi() {
@@ -290,7 +240,7 @@ export function createAstronomyController({
       return;
     }
 
-    drawDayNightOverlay(sunLatitudeDegrees, sunLongitudeDegrees);
+    syncDayNightOverlayMaterial(sunLatitudeDegrees, sunLongitudeDegrees);
     dayNightState.lastLatitudeDegrees = sunLatitudeDegrees;
     dayNightState.lastLongitudeDegrees = sunLongitudeDegrees;
     dayNightOverlay.visible = true;

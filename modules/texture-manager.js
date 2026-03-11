@@ -17,6 +17,21 @@ export function createTextureManager({
   nightLightsCanvas.height = constants.DAY_NIGHT_TEXTURE_SIZE;
   const nightLightsCtx = nightLightsCanvas.getContext("2d", { willReadFrequently: true });
   const nightLightsData = new Float32Array(constants.DAY_NIGHT_TEXTURE_SIZE * constants.DAY_NIGHT_TEXTURE_SIZE);
+  const nightLightsTextureData = new Uint8Array(constants.DAY_NIGHT_TEXTURE_SIZE * constants.DAY_NIGHT_TEXTURE_SIZE * 4);
+  const nightLightsTexture = new THREE.DataTexture(
+    nightLightsTextureData,
+    constants.DAY_NIGHT_TEXTURE_SIZE,
+    constants.DAY_NIGHT_TEXTURE_SIZE,
+    THREE.RGBAFormat,
+    THREE.UnsignedByteType
+  );
+  nightLightsTexture.wrapS = THREE.ClampToEdgeWrapping;
+  nightLightsTexture.wrapT = THREE.ClampToEdgeWrapping;
+  nightLightsTexture.magFilter = THREE.LinearFilter;
+  nightLightsTexture.minFilter = THREE.LinearFilter;
+  nightLightsTexture.generateMipmaps = false;
+  nightLightsTexture.flipY = false;
+  nightLightsTexture.needsUpdate = true;
   const textureState = {
     mode: "default"
   };
@@ -67,9 +82,23 @@ export function createTextureManager({
     topMaterial.needsUpdate = true;
   }
 
+  function syncNightLightsTexture() {
+    for (let index = 0; index < nightLightsData.length; index += 1) {
+      const value = Math.round(clamp01(nightLightsData[index]) * 255);
+      const textureIndex = index * 4;
+      nightLightsTextureData[textureIndex] = value;
+      nightLightsTextureData[textureIndex + 1] = value;
+      nightLightsTextureData[textureIndex + 2] = value;
+      nightLightsTextureData[textureIndex + 3] = 255;
+    }
+
+    nightLightsTexture.needsUpdate = true;
+  }
+
   function clearNightLights() {
     nightLightsData.fill(0);
     nightLightsCtx.clearRect(0, 0, nightLightsCanvas.width, nightLightsCanvas.height);
+    syncNightLightsTexture();
   }
 
   function estimateOceanColor(data, size) {
@@ -358,6 +387,8 @@ export function createTextureManager({
         antarcticaCutoff
       );
     }
+
+    syncNightLightsTexture();
   }
 
   function createSquareTextureFromImage(image) {
@@ -505,8 +536,8 @@ export function createTextureManager({
   }
 
   return {
-    getNightLightsData() {
-      return nightLightsData;
+    getNightLightsTexture() {
+      return nightLightsTexture;
     },
     loadDefaultTexture,
     loadUserTexture,
