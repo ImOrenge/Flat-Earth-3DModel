@@ -4,13 +4,14 @@ import {
   projectedRadiusFromLatitude
 } from "./modules/geo-utils.js";
 import {
+  getMoonPhase,
   getSolarAltitudeFactor,
-} from "./modules/astronomy-utils.js";
-import { createAstronomyController } from "./modules/astronomy-controller.js";
+} from "./modules/astronomy-utils.js?v=20260311-moon4";
+import { createAstronomyController } from "./modules/astronomy-controller.js?v=20260311-moon4";
 import { createCameraController } from "./modules/camera-controller.js";
 import { createCelestialTrackingCameraController } from "./modules/celestial-tracking-camera-controller.js";
 import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js";
-import { createI18n } from "./modules/i18n.js";
+import { createI18n } from "./modules/i18n.js?v=20260311-moon4";
 import { createRouteSimulationController } from "./modules/route-simulation-controller.js";
 import { createTextureManager } from "./modules/texture-manager.js";
 import { createWalkerController } from "./modules/walker-controller.js";
@@ -82,6 +83,21 @@ const ORBIT_MOON_HALO_OPACITY = 0.24;
 const ORBIT_MOON_LIGHT_INTENSITY = 8.4;
 const ORBIT_MOON_BODY_EMISSIVE_INTENSITY = 1.8;
 const ORBIT_MOON_SPEED = 0.0048;
+const ORBIT_MOON_CORONA_SCALE = ORBIT_MOON_SIZE * 7.2;
+const ORBIT_MOON_AUREOLE_SCALE = ORBIT_MOON_SIZE * 10.4;
+const ORBIT_MOON_WARM_FRINGE_SCALE = ORBIT_MOON_SIZE * 5.4;
+const ORBIT_MOON_CORONA_OPACITY = 0.12;
+const ORBIT_MOON_AUREOLE_OPACITY = 0.08;
+const ORBIT_MOON_WARM_FRINGE_OPACITY = 0.06;
+const ORBIT_MOON_PULSE_SPEED = 0.0015;
+const ORBIT_MOON_LIGHT_COLOR_DAY = new THREE.Color(0xffffff);
+const ORBIT_MOON_LIGHT_COLOR_NIGHT = new THREE.Color(0xffdf93);
+const ORBIT_MOON_HALO_COLOR_DAY = new THREE.Color(0xffffff);
+const ORBIT_MOON_HALO_COLOR_NIGHT = new THREE.Color(0xffd27a);
+const ORBIT_MOON_EMISSIVE_COLOR_DAY = new THREE.Color(0xf3f3f0);
+const ORBIT_MOON_EMISSIVE_COLOR_NIGHT = new THREE.Color(0xffca70);
+const ORBIT_MOON_COOL_GLOW_COLOR = new THREE.Color(0x8fcbff);
+const ORBIT_MOON_COOL_GLOW_SCALE = ORBIT_MOON_SIZE * 3.35;
 const ORBIT_SURFACE_LINE_WIDTH = scaleDimension(0.0045);
 const SUN_TRAIL_MAX_POINTS = 720;
 const MOON_TRAIL_MAX_POINTS = 600;
@@ -183,6 +199,12 @@ const setCurrentTimeButton = document.getElementById("set-current-time");
 const timeSummaryEl = document.getElementById("time-summary");
 const sunCoordinatesEl = document.getElementById("sun-coordinates");
 const moonCoordinatesEl = document.getElementById("moon-coordinates");
+const moonPhaseChartImageEl = document.getElementById("moon-phase-chart-image");
+const moonPhasePointerEl = document.getElementById("moon-phase-pointer");
+const moonPhaseLabelEl = document.getElementById("moon-phase-label");
+const moonPhaseDegreesEl = document.getElementById("moon-phase-degrees");
+const moonPhaseStepEl = document.getElementById("moon-phase-step");
+const moonPhaseDirectionEl = document.getElementById("moon-phase-direction");
 const dayNightOverlayEl = document.getElementById("day-night-overlay");
 const dayNightSummaryEl = document.getElementById("day-night-summary");
 const analemmaOverlayEl = document.getElementById("analemma-overlay");
@@ -228,6 +250,7 @@ function applyStaticTranslations() {
   languageToggleTextEl.textContent = i18n.getLanguage() === "en"
     ? i18n.t("languageNameEn")
     : i18n.t("languageNameKo");
+  moonPhaseChartImageEl.alt = i18n.t("moonPhaseChartAlt");
 
   for (const element of translatableTextEls) {
     element.textContent = i18n.t(element.dataset.i18n);
@@ -561,18 +584,123 @@ uniform float sunPulse;`
         `vec3 domeSurfaceDirection = normalize(vDomeLocalPosition);
 vec3 sunDirection = normalize(sunLocalPosition);
 float sunArcDistance = distance(domeSurfaceDirection, sunDirection);
-float sunBloom = 1.0 - smoothstep(0.22, 0.84, sunArcDistance);
+float sunHaze = 1.0 - smoothstep(0.34, 1.14, sunArcDistance);
+float sunBloom = 1.0 - smoothstep(0.18, 0.94, sunArcDistance);
 float sunCore = 1.0 - smoothstep(0.06, 0.24, sunArcDistance);
 float upperDome = smoothstep(-0.04, 0.72, domeSurfaceDirection.y);
 float pulse = 0.92 + (sunPulse * 0.08);
 vec3 atmosphericBlue = mix(vec3(0.46, 0.76, 1.0), vec3(0.9, 0.97, 1.0), sunCore);
-outgoingLight += atmosphericBlue * ((sunBloom * 0.48) + (sunCore * 0.38)) * upperDome * pulse;
-diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.64, 0.84, 1.0), sunBloom * upperDome * 0.38);
-diffuseColor.a = min(0.82, diffuseColor.a + (sunBloom * 0.14) + (sunCore * 0.2));
+outgoingLight += atmosphericBlue * ((sunHaze * 0.26) + (sunBloom * 0.44) + (sunCore * 0.38)) * upperDome * pulse;
+diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.64, 0.84, 1.0), ((sunHaze * 0.22) + (sunBloom * 0.18)) * upperDome);
+diffuseColor.a = min(0.82, diffuseColor.a + (sunHaze * 0.06) + (sunBloom * 0.12) + (sunCore * 0.2));
 #include <opaque_fragment>`
       );
   };
   material.customProgramCacheKey = () => "dome-sun-atmosphere-v1";
+}
+
+function enhanceMoonMaterialWithPhase(material) {
+  material.userData.moonPhaseState = {
+    coolGlowStrength: 0,
+    glowStrength: 1,
+    illuminationFraction: 1,
+    shadowAlpha: 0.08,
+    waxing: 1
+  };
+
+  material.onBeforeCompile = (shader) => {
+    const { moonPhaseState } = material.userData;
+    shader.uniforms.moonCoolGlowStrength = { value: moonPhaseState.coolGlowStrength };
+    shader.uniforms.moonGlowStrength = { value: moonPhaseState.glowStrength };
+    shader.uniforms.moonIlluminationFraction = { value: moonPhaseState.illuminationFraction };
+    shader.uniforms.moonShadowAlpha = { value: moonPhaseState.shadowAlpha };
+    shader.uniforms.moonWaxing = { value: moonPhaseState.waxing };
+    material.userData.phaseShader = shader;
+
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        "#include <common>",
+        `#include <common>
+varying vec3 vMoonViewNormal;`
+      )
+      .replace(
+        "#include <defaultnormal_vertex>",
+        `#include <defaultnormal_vertex>
+vMoonViewNormal = normalize(transformedNormal);`
+      );
+
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        "#include <common>",
+        `#include <common>
+varying vec3 vMoonViewNormal;
+uniform float moonCoolGlowStrength;
+uniform float moonGlowStrength;
+uniform float moonIlluminationFraction;
+uniform float moonShadowAlpha;
+uniform float moonWaxing;`
+      )
+      .replace(
+        "#include <opaque_fragment>",
+        `vec3 moonViewNormal = normalize(vMoonViewNormal);
+float phaseCos = clamp((moonIlluminationFraction * 2.0) - 1.0, -1.0, 1.0);
+float phaseSin = sqrt(max(0.0, 1.0 - (phaseCos * phaseCos)));
+float phaseDirection = mix(-1.0, 1.0, moonWaxing);
+vec3 phaseLightDirection = normalize(vec3(phaseDirection * phaseSin, 0.0, phaseCos));
+float phaseDot = dot(moonViewNormal, phaseLightDirection);
+float phaseMask = smoothstep(-0.004, 0.02, phaseDot);
+phaseMask = mix(phaseMask, 1.0, max(phaseCos, 0.0));
+float shadowShade = mix(0.0, 0.05, moonGlowStrength);
+float litShade = mix(1.04, 1.22, pow(max(moonViewNormal.z, 0.0), 0.35));
+float phaseShade = mix(shadowShade, litShade, phaseMask);
+float phaseShadow = pow(max(1.0 - phaseMask, 0.0), 1.05);
+float shadowAlpha = mix(1.0, moonShadowAlpha, phaseShadow);
+float terminatorBand = (1.0 - smoothstep(0.0, 0.42, abs(phaseDot))) * moonCoolGlowStrength;
+float coolScatter = pow(max(1.0 - phaseMask, 0.0), 1.35) * pow(max(moonViewNormal.z, 0.0), 0.8) * moonCoolGlowStrength;
+float earthshine = pow(max(1.0 - phaseMask, 0.0), 1.2) * (0.02 + (moonCoolGlowStrength * 0.05));
+float selfGlow = mix(0.14, 0.42, moonGlowStrength);
+vec3 moonSurfaceLight = diffuseColor.rgb * phaseShade;
+vec3 moonSelfGlow = totalEmissiveRadiance * selfGlow;
+outgoingLight = moonSurfaceLight + moonSelfGlow;
+outgoingLight += vec3(0.02, 0.03, 0.05) * earthshine;
+outgoingLight += vec3(0.28, 0.46, 0.88) * ((coolScatter * 0.24) + (terminatorBand * 0.12));
+diffuseColor.a *= shadowAlpha;
+#include <opaque_fragment>`
+      );
+  };
+
+  material.customProgramCacheKey = () => "moon-phase-v3";
+}
+
+function setMoonMaterialPhase(material, {
+  coolGlowStrength = 0,
+  illuminationFraction = 1,
+  shadowAlpha = 0.08,
+  waxing = true,
+  glowStrength = 1
+}) {
+  const phaseState = material.userData.moonPhaseState ?? {
+    coolGlowStrength: 0,
+    glowStrength: 1,
+    illuminationFraction: 1,
+    shadowAlpha: 0.08,
+    waxing: 1
+  };
+
+  phaseState.coolGlowStrength = THREE.MathUtils.clamp(coolGlowStrength, 0, 1);
+  phaseState.glowStrength = THREE.MathUtils.clamp(glowStrength, 0, 1);
+  phaseState.illuminationFraction = THREE.MathUtils.clamp(illuminationFraction, 0, 1);
+  phaseState.shadowAlpha = THREE.MathUtils.clamp(shadowAlpha, 0.01, 1);
+  phaseState.waxing = waxing ? 1 : 0;
+  material.userData.moonPhaseState = phaseState;
+
+  if (material.userData.phaseShader) {
+    material.userData.phaseShader.uniforms.moonCoolGlowStrength.value = phaseState.coolGlowStrength;
+    material.userData.phaseShader.uniforms.moonGlowStrength.value = phaseState.glowStrength;
+    material.userData.phaseShader.uniforms.moonIlluminationFraction.value = phaseState.illuminationFraction;
+    material.userData.phaseShader.uniforms.moonShadowAlpha.value = phaseState.shadowAlpha;
+    material.userData.phaseShader.uniforms.moonWaxing.value = phaseState.waxing;
+  }
 }
 
 function createSunAuraTexture() {
@@ -894,6 +1022,24 @@ function createSunAuraSprite(scale, color, opacity, rotation = 0) {
   return sprite;
 }
 
+function createMoonAuraSprite(scale, color, opacity, rotation = 0) {
+  const sprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: sunAuraTexture,
+      color,
+      transparent: true,
+      opacity,
+      blending: THREE.AdditiveBlending,
+      depthTest: false,
+      depthWrite: false
+    })
+  );
+  sprite.material.rotation = rotation;
+  sprite.scale.setScalar(scale);
+  sprite.renderOrder = 21;
+  return sprite;
+}
+
 const orbitSunCorona = createSunAuraSprite(ORBIT_SUN_CORONA_SCALE, 0xffdc8d, ORBIT_SUN_CORONA_OPACITY);
 const orbitSunAureole = createSunAuraSprite(ORBIT_SUN_AUREOLE_SCALE, 0x8fddff, ORBIT_SUN_AUREOLE_OPACITY, Math.PI / 6);
 orbitSun.add(orbitSunCorona);
@@ -982,11 +1128,11 @@ const orbitMoon = new THREE.Group();
 const orbitMoonBody = new THREE.Mesh(
   new THREE.SphereGeometry(ORBIT_MOON_SIZE, 32, 24),
   new THREE.MeshStandardMaterial({
-    color: 0xd8deea,
-    emissive: 0xa8b6d4,
+    color: 0xffffff,
+    emissive: 0xf3f3f0,
     emissiveIntensity: ORBIT_MOON_BODY_EMISSIVE_INTENSITY,
-    roughness: 0.42,
-    metalness: 0.82,
+    roughness: 0.68,
+    metalness: 0.08,
     transparent: true,
     opacity: 1
   })
@@ -1002,10 +1148,43 @@ const orbitMoonHalo = new THREE.Mesh(
     side: THREE.DoubleSide
   })
 );
+orbitMoonHalo.visible = false;
 orbitMoon.add(orbitMoonHalo);
 
 const orbitMoonLight = new THREE.PointLight(0xdbe4ff, ORBIT_MOON_LIGHT_INTENSITY, scaleDimension(5.5), 1.9);
 orbitMoon.add(orbitMoonLight);
+const orbitMoonCoolGlow = new THREE.Mesh(
+  new THREE.SphereGeometry(ORBIT_MOON_COOL_GLOW_SCALE, 24, 18),
+  new THREE.MeshBasicMaterial({
+    color: ORBIT_MOON_COOL_GLOW_COLOR,
+    transparent: true,
+    opacity: 0,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    depthTest: false,
+    blending: THREE.AdditiveBlending
+  })
+);
+orbitMoonCoolGlow.renderOrder = 22;
+orbitMoonCoolGlow.visible = false;
+orbitMoon.add(orbitMoonCoolGlow);
+const orbitMoonCorona = createMoonAuraSprite(ORBIT_MOON_CORONA_SCALE, 0xf6f8ff, ORBIT_MOON_CORONA_OPACITY);
+const orbitMoonAureole = createMoonAuraSprite(
+  ORBIT_MOON_AUREOLE_SCALE,
+  ORBIT_MOON_COOL_GLOW_COLOR,
+  ORBIT_MOON_AUREOLE_OPACITY,
+  Math.PI / 7
+);
+orbitMoonAureole.visible = false;
+const orbitMoonWarmFringe = createMoonAuraSprite(
+  ORBIT_MOON_WARM_FRINGE_SCALE,
+  0xffefc5,
+  ORBIT_MOON_WARM_FRINGE_OPACITY,
+  Math.PI / 3
+);
+orbitMoon.add(orbitMoonCorona);
+orbitMoon.add(orbitMoonAureole);
+orbitMoon.add(orbitMoonWarmFringe);
 scalableStage.add(orbitMoon);
 
 const observerMoon = orbitMoon.clone(true);
@@ -1013,7 +1192,20 @@ const observerMoonBody = observerMoon.children[0];
 observerMoonBody.material = observerMoonBody.material.clone();
 const observerMoonHalo = observerMoon.children[1];
 observerMoonHalo.material = observerMoonHalo.material.clone();
+observerMoonHalo.visible = false;
 const observerMoonLight = observerMoon.children[2];
+const observerMoonCoolGlow = observerMoon.children[3];
+observerMoonCoolGlow.material = observerMoonCoolGlow.material.clone();
+observerMoonCoolGlow.visible = false;
+const observerMoonCorona = observerMoon.children[4];
+observerMoonCorona.material = observerMoonCorona.material.clone();
+const observerMoonAureole = observerMoon.children[5];
+observerMoonAureole.material = observerMoonAureole.material.clone();
+observerMoonAureole.visible = false;
+const observerMoonWarmFringe = observerMoon.children[6];
+observerMoonWarmFringe.material = observerMoonWarmFringe.material.clone();
+enhanceMoonMaterialWithPhase(orbitMoonBody.material);
+enhanceMoonMaterialWithPhase(observerMoonBody.material);
 observerMoon.visible = false;
 firstPersonScene.add(observerMoon);
 
@@ -1285,6 +1477,11 @@ const ui = {
   firstPersonHorizonEl,
   firstPersonOverlayEl,
   moonCoordinatesEl,
+  moonPhaseDegreesEl,
+  moonPhaseDirectionEl,
+  moonPhaseLabelEl,
+  moonPhasePointerEl,
+  moonPhaseStepEl,
   observationTimeEl,
   orbitLabelEl,
   realityLiveEl,
@@ -1451,7 +1648,8 @@ function getCurrentUiSnapshot() {
   return {
     date: astronomyState.selectedDate,
     sun: getGeoFromProjectedPosition(orbitSun.position, DISC_RADIUS),
-    moon: getGeoFromProjectedPosition(orbitMoon.position, DISC_RADIUS)
+    moon: getGeoFromProjectedPosition(orbitMoon.position, DISC_RADIUS),
+    moonPhase: getMoonPhase(astronomyState.selectedDate)
   };
 }
 
@@ -1636,8 +1834,152 @@ function getHorizontalFromWorldPosition(sourceWorldPosition, observerGeo) {
   };
 }
 
+function getMoonRenderState(snapshot) {
+  const moonPhase = snapshot?.moonPhase ?? {
+    illuminationFraction: 1,
+    waxing: true
+  };
+  const illuminationFraction = THREE.MathUtils.clamp(moonPhase.illuminationFraction ?? 1, 0, 1);
+  const moonSolarFactor = snapshot
+    ? getSolarAltitudeFactor(
+      snapshot.moon.latitudeDegrees,
+      snapshot.moon.longitudeDegrees,
+      snapshot.sun.latitudeDegrees,
+      snapshot.sun.longitudeDegrees
+    )
+    : -1;
+  const nightGlow = snapshot
+    ? THREE.MathUtils.clamp((-moonSolarFactor + 0.04) / 0.3, 0, 1)
+    : 1;
+  const nightWarmthBase = THREE.MathUtils.clamp((nightGlow - 0.56) / 0.34, 0, 1);
+  const nightWarmth = nightWarmthBase * nightWarmthBase * (3 - (2 * nightWarmthBase));
+  const phaseGlow = Math.pow(illuminationFraction, 0.72);
+  const shadowCoverage = Math.pow(1 - illuminationFraction, 0.78);
+  const terminatorPresence = Math.pow(Math.max(0, 1 - Math.abs((illuminationFraction * 2) - 1)), 0.58);
+  const coolGlowStrength = nightGlow * terminatorPresence;
+  const pulseTime = performance.now();
+  const pulse = 0.5 + (Math.sin(pulseTime * ORBIT_MOON_PULSE_SPEED) * 0.5);
+  const auraStrength = nightGlow * THREE.MathUtils.lerp(0.24, 1, phaseGlow);
+
+  return {
+    aureoleOpacity: (
+      ORBIT_MOON_AUREOLE_OPACITY *
+      auraStrength *
+      THREE.MathUtils.lerp(0.42, 1, terminatorPresence) *
+      THREE.MathUtils.lerp(0.86, 1.16, pulse)
+    ),
+    aureoleRotation: (Math.PI / 7) + (pulseTime * 0.00008),
+    aureoleScale: ORBIT_MOON_AUREOLE_SCALE * THREE.MathUtils.lerp(0.96, 1.1, pulse),
+    bodyEmissiveIntensity: (
+      THREE.MathUtils.lerp(0.12, ORBIT_MOON_BODY_EMISSIVE_INTENSITY, nightGlow) *
+      THREE.MathUtils.lerp(0.18, 1, phaseGlow)
+    ),
+    coolGlowOpacity: 0.18 * coolGlowStrength,
+    coolGlowStrength,
+    coronaOpacity: ORBIT_MOON_CORONA_OPACITY * auraStrength * THREE.MathUtils.lerp(0.84, 1.12, pulse),
+    coronaRotation: pulseTime * 0.00005,
+    coronaScale: ORBIT_MOON_CORONA_SCALE * THREE.MathUtils.lerp(0.92, 1.08, pulse),
+    glowStrength: THREE.MathUtils.lerp(0.08, 1, nightGlow),
+    haloOpacity: ORBIT_MOON_HALO_OPACITY * nightGlow * THREE.MathUtils.lerp(0.18, 1, phaseGlow),
+    illuminationFraction,
+    lightIntensity: ORBIT_MOON_LIGHT_INTENSITY * nightGlow * THREE.MathUtils.lerp(0.14, 1, phaseGlow),
+    nightWarmth,
+    shadowAlpha: THREE.MathUtils.lerp(0.12, 0.012, Math.max(shadowCoverage, terminatorPresence)),
+    warmFringeOpacity: (
+      ORBIT_MOON_WARM_FRINGE_OPACITY *
+      auraStrength *
+      THREE.MathUtils.lerp(0.1, 1, nightWarmth) *
+      THREE.MathUtils.lerp(0.88, 1.18, 1 - pulse)
+    ),
+    warmFringeRotation: (Math.PI / 3) - (pulseTime * 0.00012),
+    warmFringeScale: ORBIT_MOON_WARM_FRINGE_SCALE * THREE.MathUtils.lerp(0.94, 1.12, 1 - pulse),
+    waxing: moonPhase.waxing !== false
+  };
+}
+
+function syncMoonMaterialPresentation(material, moonRenderState) {
+  setMoonMaterialPhase(material, {
+    coolGlowStrength: moonRenderState.coolGlowStrength,
+    illuminationFraction: moonRenderState.illuminationFraction,
+    shadowAlpha: moonRenderState.shadowAlpha,
+    waxing: moonRenderState.waxing,
+    glowStrength: moonRenderState.glowStrength
+  });
+}
+
+function syncMoonLightPresentation(
+  bodyMaterial,
+  haloMaterial,
+  coolGlowMaterial,
+  coronaSprite,
+  aureoleSprite,
+  warmFringeSprite,
+  pointLight,
+  moonRenderState
+) {
+  const coronaMaterial = coronaSprite.material;
+  const aureoleMaterial = aureoleSprite.material;
+  const warmFringeMaterial = warmFringeSprite.material;
+
+  bodyMaterial.emissive.copy(ORBIT_MOON_EMISSIVE_COLOR_DAY).lerp(
+    ORBIT_MOON_EMISSIVE_COLOR_NIGHT,
+    moonRenderState.nightWarmth
+  );
+  haloMaterial.color.copy(ORBIT_MOON_HALO_COLOR_DAY).lerp(
+    ORBIT_MOON_HALO_COLOR_NIGHT,
+    moonRenderState.nightWarmth
+  );
+  pointLight.color.copy(ORBIT_MOON_LIGHT_COLOR_DAY).lerp(
+    ORBIT_MOON_LIGHT_COLOR_NIGHT,
+    moonRenderState.nightWarmth
+  );
+  coolGlowMaterial.color.copy(ORBIT_MOON_COOL_GLOW_COLOR);
+  coolGlowMaterial.opacity = moonRenderState.coolGlowOpacity;
+  coronaMaterial.color.copy(ORBIT_MOON_LIGHT_COLOR_DAY).lerp(
+    ORBIT_MOON_LIGHT_COLOR_NIGHT,
+    moonRenderState.nightWarmth * 0.42
+  );
+  coronaMaterial.opacity = moonRenderState.coronaOpacity;
+  coronaMaterial.rotation = moonRenderState.coronaRotation;
+  coronaSprite.scale.setScalar(moonRenderState.coronaScale);
+  aureoleMaterial.color.copy(ORBIT_MOON_COOL_GLOW_COLOR).lerp(ORBIT_MOON_LIGHT_COLOR_DAY, 0.22);
+  aureoleMaterial.opacity = moonRenderState.aureoleOpacity;
+  aureoleMaterial.rotation = moonRenderState.aureoleRotation;
+  aureoleSprite.scale.setScalar(moonRenderState.aureoleScale);
+  warmFringeMaterial.color.copy(ORBIT_MOON_LIGHT_COLOR_DAY).lerp(
+    ORBIT_MOON_HALO_COLOR_NIGHT,
+    moonRenderState.nightWarmth
+  );
+  warmFringeMaterial.opacity = moonRenderState.warmFringeOpacity;
+  warmFringeMaterial.rotation = moonRenderState.warmFringeRotation;
+  warmFringeSprite.scale.setScalar(moonRenderState.warmFringeScale);
+}
+
 function updateObserverCelestialPerspective(snapshot) {
   if (!walkerState.enabled || !snapshot) {
+    const moonRenderState = getMoonRenderState(snapshot);
+    syncMoonMaterialPresentation(orbitMoonBody.material, moonRenderState);
+    syncMoonMaterialPresentation(observerMoonBody.material, moonRenderState);
+    syncMoonLightPresentation(
+      orbitMoonBody.material,
+      orbitMoonHalo.material,
+      orbitMoonCoolGlow.material,
+      orbitMoonCorona,
+      orbitMoonAureole,
+      orbitMoonWarmFringe,
+      orbitMoonLight,
+      moonRenderState
+    );
+    syncMoonLightPresentation(
+      observerMoonBody.material,
+      observerMoonHalo.material,
+      observerMoonCoolGlow.material,
+      observerMoonCorona,
+      observerMoonAureole,
+      observerMoonWarmFringe,
+      observerMoonLight,
+      moonRenderState
+    );
     observerSun.visible = false;
     observerMoon.visible = false;
     firstPersonSunRayGroup.visible = false;
@@ -1658,17 +2000,18 @@ function updateObserverCelestialPerspective(snapshot) {
     moonTrail.visible = true;
     moonTrailPointsCloud.visible = true;
     orbitMoonBody.material.opacity = 1;
-    orbitMoonBody.material.emissiveIntensity = ORBIT_MOON_BODY_EMISSIVE_INTENSITY;
+    orbitMoonBody.material.emissiveIntensity = moonRenderState.bodyEmissiveIntensity;
     orbitMoonBody.material.depthTest = false;
     orbitMoonBody.material.depthWrite = false;
-    orbitMoonHalo.material.opacity = ORBIT_MOON_HALO_OPACITY;
+    orbitMoonHalo.material.opacity = moonRenderState.haloOpacity;
     orbitMoonHalo.material.depthTest = true;
     orbitMoonHalo.material.depthWrite = false;
-    orbitMoonLight.intensity = ORBIT_MOON_LIGHT_INTENSITY;
+    orbitMoonLight.intensity = moonRenderState.lightIntensity;
     return;
   }
 
   const observerGeo = getGeoFromProjectedPosition(walkerState.position, constants.DISC_RADIUS);
+  const moonRenderState = getMoonRenderState(snapshot);
   const sunHorizontal = getHorizontalFromWorldPosition(
     orbitSun.getWorldPosition(tempDemoSunSourceWorld),
     observerGeo
@@ -1679,12 +2022,6 @@ function updateObserverCelestialPerspective(snapshot) {
   );
   const adjustedSunHorizontal = applyCelestialAltitudeOffset(sunHorizontal);
   const adjustedMoonHorizontal = applyCelestialAltitudeOffset(moonHorizontal);
-  const solarFactor = getSolarAltitudeFactor(
-    observerGeo.latitudeDegrees,
-    observerGeo.longitudeDegrees,
-    snapshot.sun.latitudeDegrees,
-    snapshot.sun.longitudeDegrees
-  );
   const sunTargetVisibility = THREE.MathUtils.clamp(
     (adjustedSunHorizontal.altitudeDegrees + FIRST_PERSON_CELESTIAL_FADE_RANGE) / (FIRST_PERSON_CELESTIAL_FADE_RANGE * 2),
     0,
@@ -1714,6 +2051,28 @@ function updateObserverCelestialPerspective(snapshot) {
   observerMoon.position.y -= (1 - moonHorizonLift) * (constants.FIRST_PERSON_HORIZON_SINK * 0.65);
   observerSun.scale.setScalar(FIRST_PERSON_SUN_SCALE);
   observerMoon.scale.setScalar(FIRST_PERSON_MOON_SCALE);
+  syncMoonMaterialPresentation(orbitMoonBody.material, moonRenderState);
+  syncMoonMaterialPresentation(observerMoonBody.material, moonRenderState);
+  syncMoonLightPresentation(
+    orbitMoonBody.material,
+    orbitMoonHalo.material,
+    orbitMoonCoolGlow.material,
+    orbitMoonCorona,
+    orbitMoonAureole,
+    orbitMoonWarmFringe,
+    orbitMoonLight,
+    moonRenderState
+  );
+  syncMoonLightPresentation(
+    observerMoonBody.material,
+    observerMoonHalo.material,
+    observerMoonCoolGlow.material,
+    observerMoonCorona,
+    observerMoonAureole,
+    observerMoonWarmFringe,
+    observerMoonLight,
+    moonRenderState
+  );
 
   orbitSun.visible = false;
   sunTrail.visible = false;
@@ -1776,18 +2135,15 @@ function updateObserverCelestialPerspective(snapshot) {
   observerMoonBody.material.depthWrite = false;
   observerMoonBody.material.opacity += (moonOcclusionVisibility - observerMoonBody.material.opacity) * 0.18;
   observerMoonBody.material.emissiveIntensity += (
-    (
-      (ORBIT_MOON_BODY_EMISSIVE_INTENSITY + (solarFactor * 0.18) + (moonOcclusionVisibility * 0.9)) -
-      observerMoonBody.material.emissiveIntensity
-    )
+    ((moonRenderState.bodyEmissiveIntensity * moonOcclusionVisibility) - observerMoonBody.material.emissiveIntensity)
   ) * 0.12;
   observerMoonHalo.material.depthTest = false;
   observerMoonHalo.material.depthWrite = false;
   observerMoonHalo.material.opacity += (
-    (ORBIT_MOON_HALO_OPACITY * moonOcclusionVisibility) - observerMoonHalo.material.opacity
+    (moonRenderState.haloOpacity * moonOcclusionVisibility) - observerMoonHalo.material.opacity
   ) * 0.18;
   observerMoonLight.intensity += (
-    (ORBIT_MOON_LIGHT_INTENSITY * moonOcclusionVisibility) - observerMoonLight.intensity
+    (moonRenderState.lightIntensity * moonOcclusionVisibility) - observerMoonLight.intensity
   ) * 0.18;
 }
 
@@ -2206,12 +2562,15 @@ function animate() {
     astronomyApi.updateMoonTrail();
     astronomyApi.updateSeasonPresentation(orbitRadius);
     const demoSunGeo = getGeoFromProjectedPosition(orbitSun.position, DISC_RADIUS);
+    const demoMoonGeo = getGeoFromProjectedPosition(orbitMoon.position, DISC_RADIUS);
     astronomyApi.updateDayNightOverlayFromSun(demoSunGeo.latitudeDegrees, demoSunGeo.longitudeDegrees);
     snapshot = {
       date: projectionDate,
       sun: demoSunGeo,
-      moon: getGeoFromProjectedPosition(orbitMoon.position, DISC_RADIUS)
+      moon: demoMoonGeo,
+      moonPhase: getMoonPhase(projectionDate)
     };
+    astronomyApi.updateAstronomyUi(snapshot);
   }
 
   walkerApi.updateWalkerMovement(deltaSeconds);

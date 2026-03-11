@@ -138,6 +138,42 @@
                 <strong class="coord-value" id="moon-coordinates">0.00degN / 0.00degE</strong>
               </div>
             </div>
+            <section class="moon-phase-panel">
+              <p class="orbit-title" data-i18n="moonPhasePanelTitle">Moon Phase Wheel</p>
+              <p class="sync-copy subtle moon-phase-copy" data-i18n="moonPhasePanelCopy">
+                The same 360deg / 16-step phase value drives this chart and the rendered moon.
+              </p>
+              <div class="moon-phase-visual">
+                <img
+                  class="moon-phase-chart-image"
+                  id="moon-phase-chart-image"
+                  src="./assets/moon-phases-360-ko.png"
+                  alt=""
+                >
+                <div class="moon-phase-pointer" id="moon-phase-pointer" aria-hidden="true">
+                  <span class="moon-phase-pointer-line"></span>
+                  <span class="moon-phase-pointer-dot"></span>
+                </div>
+              </div>
+              <div class="coord-grid moon-phase-grid">
+                <div class="coord-card">
+                  <span class="coord-label" data-i18n="moonPhaseCurrentLabel">Current Phase</span>
+                  <strong class="coord-value" id="moon-phase-label">Full Moon</strong>
+                </div>
+                <div class="coord-card">
+                  <span class="coord-label" data-i18n="moonPhaseDegreesLabel">Phase Angle</span>
+                  <strong class="coord-value" id="moon-phase-degrees">0.0deg</strong>
+                </div>
+                <div class="coord-card">
+                  <span class="coord-label" data-i18n="moonPhaseStepLabel">Chart Step</span>
+                  <strong class="coord-value" id="moon-phase-step">1 / 16</strong>
+                </div>
+                <div class="coord-card">
+                  <span class="coord-label" data-i18n="moonPhaseDirectionLabel">Cycle Direction</span>
+                  <strong class="coord-value" id="moon-phase-direction">Waxing</strong>
+                </div>
+              </div>
+            </section>
             <div class="sync-row overlay-row">
               <span class="sync-title" data-i18n="dayNightOverlayTitle">Day/Night Overlay</span>
               <label class="toggle">
@@ -227,14 +263,6 @@
             <p class="sync-copy subtle" id="seasonal-moon-summary">
               The selected seasonal anchor loads an exact preview time and summarizes the moon's 24-hour subpoint swing.
             </p>
-          </section>
-
-          <section class="sun-audit-panel">
-            <p class="orbit-title" data-i18n="sunAuditTitle">Sun Audit</p>
-            <p class="sync-copy" id="seasonal-sun-summary">
-              Uses the shared seasonal anchor above. Equinoxes should stay near 0deg solar latitude and solstices near 23.4degN or 23.4degS.
-            </p>
-            <div class="seasonal-sun-grid" id="seasonal-sun-grid"></div>
           </section>
 
           <section class="orbit-panel">

@@ -17,7 +17,7 @@ import {
   getMoonHorizontalCoordinates,
   getSunHorizontalCoordinates,
   SEASONAL_EVENT_DEFINITIONS
-} from "./astronomy-utils.js";
+} from "./astronomy-utils.js?v=20260311-moon4";
 
 export function createAstronomyController({
   constants,
@@ -83,6 +83,10 @@ export function createAstronomyController({
   function formatAltitude(value) {
     const prefix = value > 0 ? "+" : "";
     return `${prefix}${value.toFixed(1)}deg`;
+  }
+
+  function formatIllumination(fraction) {
+    return `${Math.round(THREE.MathUtils.clamp(fraction ?? 0, 0, 1) * 100)}%`;
   }
 
   function formatObservationTime(date) {
@@ -153,6 +157,37 @@ export function createAstronomyController({
 
   function getObserverGeo() {
     return getGeoFromProjectedPosition(walkerState.position, constants.DISC_RADIUS);
+  }
+
+  function getMoonPhaseLabel(moonPhase) {
+    return i18n.t(moonPhase?.labelKey ?? "moonPhaseFull");
+  }
+
+  function getMoonDirectionLabel(moonPhase) {
+    const phaseProgress = THREE.MathUtils.euclideanModulo(moonPhase?.phaseProgress ?? 0, 1);
+    return i18n.t(phaseProgress < 0.5 ? "moonDirectionWaxing" : "moonDirectionWaning");
+  }
+
+  function syncMoonPhaseUi(snapshot) {
+    if (!snapshot || !ui.moonPhasePointerEl) {
+      return;
+    }
+
+    const moonPhase = snapshot.moonPhase ?? {};
+    const phaseAngleDegrees = THREE.MathUtils.euclideanModulo(moonPhase.phaseAngleDegrees ?? 0, 360);
+    const phaseStepNumber = moonPhase.phaseStepNumber ?? 1;
+    const phaseStepCount = moonPhase.phaseStepCount ?? 16;
+
+    ui.moonPhasePointerEl.style.setProperty("--moon-phase-angle", `${phaseAngleDegrees}deg`);
+    ui.moonPhaseLabelEl.textContent = getMoonPhaseLabel(moonPhase);
+    ui.moonPhaseDegreesEl.textContent = i18n.t("moonPhaseDegreesValue", {
+      angle: phaseAngleDegrees.toFixed(1)
+    });
+    ui.moonPhaseStepEl.textContent = i18n.t("moonPhaseStepValue", {
+      step: phaseStepNumber,
+      total: phaseStepCount
+    });
+    ui.moonPhaseDirectionEl.textContent = getMoonDirectionLabel(moonPhase);
   }
 
   function getOrbitLatitudeRatio(radius) {
@@ -315,6 +350,7 @@ export function createAstronomyController({
     const audit = getSelectedSeasonalAudit();
     const definition = seasonalEventMap.get(audit.key);
     const seasonalLabel = getSeasonalEventLabel(audit.key);
+    const phaseLabel = getMoonPhaseLabel(audit.moonPhase);
     ui.seasonalYearEl.value = String(seasonalMoonState.selectedYear);
     syncSeasonalEventButtons();
     ui.seasonalEventTimeEl.textContent =
@@ -335,9 +371,11 @@ export function createAstronomyController({
     });
     ui.seasonalMoonSummaryEl.textContent = i18n.t("seasonalMoonSummary", {
       eventLabel: seasonalLabel,
+      illumination: formatIllumination(audit.moonPhase?.illuminationFraction),
       latitudeMin: formatLatitude(audit.motion.latitudeMinDegrees),
       latitudeMax: formatLatitude(audit.motion.latitudeMaxDegrees),
-      longitudeSweep: audit.motion.longitudeSweepDegrees.toFixed(1)
+      longitudeSweep: audit.motion.longitudeSweepDegrees.toFixed(1),
+      phaseLabel
     });
 
     return audit;
@@ -352,6 +390,11 @@ export function createAstronomyController({
   }
 
   function syncSeasonalSunUi(force = false) {
+    if (!ui.seasonalSunGridEl || !ui.seasonalSunSummaryEl) {
+      lastSeasonalSunKey = "";
+      return;
+    }
+
     const year = sanitizeSeasonalYear(seasonalMoonState.selectedYear);
     const observerGeo = getObserverGeo();
     const uiKey = getSeasonalSunUiKey(year, observerGeo);
@@ -655,11 +698,20 @@ export function createAstronomyController({
   }
 
   function updateAstronomyUi(snapshot) {
-    ui.timeSummaryEl.textContent = astronomyState.live
-      ? i18n.t("timeSummaryLive", { date: formatObservationTime(snapshot.date) })
-      : i18n.t("timeSummaryPreview", { date: formatObservationTime(snapshot.date) });
+    ui.timeSummaryEl.textContent = astronomyState.enabled
+      ? (
+        astronomyState.live
+          ? i18n.t("timeSummaryLive", { date: formatObservationTime(snapshot.date) })
+          : i18n.t("timeSummaryPreview", { date: formatObservationTime(snapshot.date) })
+      )
+      : i18n.t("demoOrbitModeActive");
     ui.sunCoordinatesEl.textContent = formatGeoPair(snapshot.sun.latitudeDegrees, snapshot.sun.longitudeDegrees);
-    ui.moonCoordinatesEl.textContent = formatGeoPair(snapshot.moon.latitudeDegrees, snapshot.moon.longitudeDegrees);
+    ui.moonCoordinatesEl.textContent = i18n.t("moonCoordinatesValue", {
+      geo: formatGeoPair(snapshot.moon.latitudeDegrees, snapshot.moon.longitudeDegrees),
+      illumination: formatIllumination(snapshot.moonPhase?.illuminationFraction),
+      phaseLabel: getMoonPhaseLabel(snapshot.moonPhase)
+    });
+    syncMoonPhaseUi(snapshot);
     ui.orbitLabelEl.textContent = astronomyState.enabled
       ? i18n.t("orbitLabelRealitySync")
       : i18n.t(orbitModes[simulationState.orbitMode].labelKey);
@@ -883,6 +935,7 @@ export function createAstronomyController({
     resetMoonTrail,
     resetSunTrail,
     setObservationInputValue,
+    updateAstronomyUi,
     syncAstronomyControls,
     syncAnalemmaUi,
     syncSkyAnalemmaUi,

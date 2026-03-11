@@ -9,6 +9,30 @@ import {
 const DAY_MS = 86_400_000;
 const HOUR_MS = 3_600_000;
 const J2000 = 2451545;
+const FULL_CIRCLE_RADIANS = Math.PI * 2;
+const FULL_CIRCLE_DEGREES = 360;
+const SYNODIC_MONTH_DAYS = 29.530588853;
+const REFERENCE_NEW_MOON_JULIAN_DATE = 2451550.1;
+const MOON_PHASE_STEP_COUNT = 16;
+const MOON_PHASE_STEP_DEGREES = FULL_CIRCLE_DEGREES / MOON_PHASE_STEP_COUNT;
+const MOON_PHASE_LABEL_KEYS = [
+  "moonPhaseNew",
+  "moonPhaseEarlyWaxingCrescent",
+  "moonPhaseWaxingCrescent",
+  "moonPhaseLateWaxingCrescent",
+  "moonPhaseFirstQuarter",
+  "moonPhaseEarlyWaxingGibbous",
+  "moonPhaseWaxingGibbous",
+  "moonPhaseLateWaxingGibbous",
+  "moonPhaseFull",
+  "moonPhaseEarlyWaningGibbous",
+  "moonPhaseWaningGibbous",
+  "moonPhaseLateWaningGibbous",
+  "moonPhaseLastQuarter",
+  "moonPhaseEarlyWaningCrescent",
+  "moonPhaseWaningCrescent",
+  "moonPhaseLateWaningCrescent"
+];
 
 export const SEASONAL_EVENT_DEFINITIONS = [
   {
@@ -79,6 +103,7 @@ function getSunEquatorialPosition(date) {
   return {
     daysSinceJ2000,
     declination,
+    eclipticLongitude,
     rightAscension
   };
 }
@@ -104,8 +129,37 @@ function getMoonEquatorialPosition(date) {
   return {
     daysSinceJ2000,
     declination,
+    eclipticLatitude,
+    eclipticLongitude,
     rightAscension
   };
+}
+
+export function getMoonPhaseFromProgress(phaseProgressValue) {
+  const phaseProgress = THREE.MathUtils.euclideanModulo(phaseProgressValue, 1);
+  const phaseAngleRadians = phaseProgress * FULL_CIRCLE_RADIANS;
+  const phaseAngleDegrees = phaseProgress * FULL_CIRCLE_DEGREES;
+  const illuminationFraction = (1 - Math.cos(phaseAngleRadians)) / 2;
+  const phaseStepIndex = Math.floor((phaseProgress * MOON_PHASE_STEP_COUNT) + 0.5) % MOON_PHASE_STEP_COUNT;
+
+  return {
+    illuminationFraction,
+    labelKey: MOON_PHASE_LABEL_KEYS[phaseStepIndex],
+    phaseAngleDegrees,
+    phaseAngleRadians,
+    phaseProgress,
+    phaseStepCount: MOON_PHASE_STEP_COUNT,
+    phaseStepDegrees: MOON_PHASE_STEP_DEGREES,
+    phaseStepIndex,
+    phaseStepNumber: phaseStepIndex + 1,
+    waxing: phaseProgress > 0 && phaseProgress < 0.5
+  };
+}
+
+export function getMoonPhase(date) {
+  const julianDate = getJulianDate(date);
+  const phaseProgress = (julianDate - REFERENCE_NEW_MOON_JULIAN_DATE) / SYNODIC_MONTH_DAYS;
+  return getMoonPhaseFromProgress(phaseProgress);
 }
 
 export function getSunSubpoint(date) {
@@ -280,6 +334,7 @@ export function getSeasonalMoonAudit(key, year) {
   return {
     key,
     date: eventDate,
+    moonPhase: getMoonPhase(eventDate),
     sun: getSunSubpoint(eventDate),
     moon: getMoonSubpoint(eventDate),
     motion: getMoonMotionWindow(eventDate)
@@ -337,6 +392,7 @@ export function getAstronomySnapshot({
     date,
     sun,
     moon,
+    moonPhase: getMoonPhase(date),
     sunPosition: getBodyPositionFromGeo({
       latitudeDegrees: sun.latitudeDegrees,
       longitudeDegrees: sun.longitudeDegrees,
