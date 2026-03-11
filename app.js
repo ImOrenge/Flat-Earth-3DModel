@@ -82,7 +82,9 @@ const ORBIT_MOON_SIZE = CELESTIAL_BODY_SIZE;
 const ORBIT_MOON_HALO_OPACITY = 0.24;
 const ORBIT_MOON_LIGHT_INTENSITY = 8.4;
 const ORBIT_MOON_BODY_EMISSIVE_INTENSITY = 1.8;
-const ORBIT_MOON_SPEED = 0.0048;
+const ORBIT_MOON_SPEED = 0.0096;
+const DEMO_MOON_PHASE_DAYS_PER_SECOND = 3;
+const DEMO_MOON_PHASE_MS_PER_SECOND = DEMO_MOON_PHASE_DAYS_PER_SECOND * 86_400_000;
 const ORBIT_MOON_CORONA_SCALE = ORBIT_MOON_SIZE * 7.2;
 const ORBIT_MOON_AUREOLE_SCALE = ORBIT_MOON_SIZE * 10.4;
 const ORBIT_MOON_WARM_FRINGE_SCALE = ORBIT_MOON_SIZE * 5.4;
@@ -1317,6 +1319,7 @@ scalableStage.add(createOrbitTrack(EQUATOR_RADIUS, 0x7fd8ff, 0.78, ORBIT_SUN_HEI
 scalableStage.add(createOrbitTrack(TROPIC_CAPRICORN_RADIUS, 0xff93b6, 0.88, ORBIT_SUN_HEIGHT_SOUTH));
 
 const simulationState = {
+  demoPhaseDateMs: Date.now(),
   orbitMoonAngle: Math.PI * 0.35,
   orbitMode: "auto",
   orbitSeasonPhase: -Math.PI / 2,
@@ -1643,11 +1646,13 @@ function getCurrentUiSnapshot() {
     return astronomyApi.getAstronomySnapshot(observationDate);
   }
 
+  const demoPhaseDate = new Date(simulationState.demoPhaseDateMs);
+
   return {
-    date: astronomyState.selectedDate,
+    date: demoPhaseDate,
     sun: getGeoFromProjectedPosition(orbitSun.position, DISC_RADIUS),
     moon: getGeoFromProjectedPosition(orbitMoon.position, DISC_RADIUS),
-    moonPhase: getMoonPhase(astronomyState.selectedDate)
+    moonPhase: getMoonPhase(demoPhaseDate)
   };
 }
 
@@ -2375,6 +2380,7 @@ realitySyncEl.addEventListener("change", () => {
     return;
   }
   astronomyApi.disableRealityMode();
+  simulationState.demoPhaseDateMs = astronomyState.selectedDate.getTime();
 });
 
 realityLiveEl.addEventListener("change", () => {
@@ -2549,6 +2555,8 @@ function animate() {
       simulationState.orbitSeasonPhase += ORBIT_SUN_SEASON_SPEED;
     }
     simulationState.orbitMoonAngle += ORBIT_MOON_SPEED;
+    simulationState.demoPhaseDateMs += deltaSeconds * DEMO_MOON_PHASE_MS_PER_SECOND;
+    projectionDate = new Date(simulationState.demoPhaseDateMs);
     const orbitRadius = astronomyApi.getCurrentOrbitRadius();
     orbitSun.position.set(
       Math.cos(simulationState.orbitSunAngle) * orbitRadius,
