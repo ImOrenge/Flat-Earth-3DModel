@@ -10,6 +10,10 @@ export function createCameraController({
 }) {
   const modelScale = constants.MODEL_SCALE ?? 1;
   const tempCameraLookTarget = new THREE.Vector3();
+  const defaultLookTarget = new THREE.Vector3(0, constants.SURFACE_Y * (5 / 6), 0);
+
+  cameraState.lookTarget = cameraState.lookTarget ?? defaultLookTarget.clone();
+  cameraState.targetLookTarget = cameraState.targetLookTarget ?? defaultLookTarget.clone();
 
   function clampCamera() {
     cameraState.targetPhi = Math.min(Math.max(cameraState.targetPhi, 0.3), 1.48);
@@ -56,14 +60,15 @@ export function createCameraController({
     cameraState.theta += (cameraState.targetTheta - cameraState.theta) * 0.08;
     cameraState.phi += (cameraState.targetPhi - cameraState.phi) * 0.08;
     cameraState.radius += (cameraState.targetRadius - cameraState.radius) * 0.08;
+    cameraState.lookTarget.lerp(cameraState.targetLookTarget, 0.12);
 
     const sinPhi = Math.sin(cameraState.phi);
     camera.position.set(
-      cameraState.radius * sinPhi * Math.sin(cameraState.theta),
-      cameraState.radius * Math.cos(cameraState.phi),
-      cameraState.radius * sinPhi * Math.cos(cameraState.theta)
+      cameraState.lookTarget.x + (cameraState.radius * sinPhi * Math.sin(cameraState.theta)),
+      cameraState.lookTarget.y + (cameraState.radius * Math.cos(cameraState.phi)),
+      cameraState.lookTarget.z + (cameraState.radius * sinPhi * Math.cos(cameraState.theta))
     );
-    camera.lookAt(0, constants.SURFACE_Y * (5 / 6), 0);
+    camera.lookAt(cameraState.lookTarget);
   }
 
   function resize() {

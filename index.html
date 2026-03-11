@@ -248,6 +248,18 @@
             <p class="orbit-copy" id="orbit-label">Auto mode sweeps the sun between the tropics.</p>
             <p class="sync-copy subtle" data-i18n="orbitAltitudeProfile">Altitude profile: north tropic highest, equator mid, south tropic lowest.</p>
           </section>
+
+          <section class="orbit-panel">
+            <p class="orbit-title" data-i18n="celestialTrackingTitle">Celestial Tracking</p>
+            <div class="track-mode-grid">
+              <button class="orbit-mode active" data-camera-track="off" type="button" data-i18n="trackCameraOff">Free Camera</button>
+              <button class="orbit-mode" data-camera-track="sun" type="button" data-i18n="trackCameraSun">Track Sun</button>
+              <button class="orbit-mode" data-camera-track="moon" type="button" data-i18n="trackCameraMoon">Track Moon</button>
+            </div>
+            <p class="orbit-copy" id="camera-track-summary">
+              Top-down camera is free. Select the sun or moon to keep it centered.
+            </p>
+          </section>
         </div>
 
         <div class="panel-tab-content" data-control-panel="routes" hidden>

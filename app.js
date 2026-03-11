@@ -8,6 +8,7 @@ import {
 } from "./modules/astronomy-utils.js";
 import { createAstronomyController } from "./modules/astronomy-controller.js";
 import { createCameraController } from "./modules/camera-controller.js";
+import { createCelestialTrackingCameraController } from "./modules/celestial-tracking-camera-controller.js";
 import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js";
 import { createI18n } from "./modules/i18n.js";
 import { createRouteSimulationController } from "./modules/route-simulation-controller.js";
@@ -169,6 +170,8 @@ const translatableTextEls = [...document.querySelectorAll("[data-i18n]")];
 const translatableHtmlEls = [...document.querySelectorAll("[data-i18n-html]")];
 const orbitLabelEl = document.getElementById("orbit-label");
 const orbitModeButtons = [...document.querySelectorAll("[data-orbit-mode]")];
+const cameraTrackButtons = [...document.querySelectorAll("[data-camera-track]")];
+const cameraTrackSummaryEl = document.getElementById("camera-track-summary");
 const seasonLatitudeEl = document.getElementById("season-latitude");
 const seasonSummaryEl = document.getElementById("season-summary");
 const seasonDetailEl = document.getElementById("season-detail");
@@ -298,11 +301,14 @@ const firstPersonScene = new THREE.Scene();
 firstPersonScene.fog = new THREE.Fog(0x06101d, FOG_WALKER_NEAR, FOG_WALKER_FAR);
 
 const camera = new THREE.PerspectiveCamera(CAMERA_DEFAULT_FOV, 1, 0.1, scaleDimension(100));
+const defaultCameraLookTarget = new THREE.Vector3(0, SURFACE_Y * (5 / 6), 0);
 
 const cameraState = {
+  lookTarget: defaultCameraLookTarget.clone(),
   radius: CAMERA_TOPDOWN_DEFAULT_RADIUS,
   theta: -0.55,
   phi: 1.12,
+  targetLookTarget: defaultCameraLookTarget.clone(),
   targetTheta: -0.55,
   targetPhi: 1.12,
   targetRadius: CAMERA_TOPDOWN_DEFAULT_RADIUS
@@ -1424,6 +1430,18 @@ const routeSimulationApi = createRouteSimulationController({
   }
 });
 
+const celestialTrackingCameraApi = createCelestialTrackingCameraController({
+  buttons: cameraTrackButtons,
+  cameraState,
+  constants,
+  i18n,
+  summaryEl: cameraTrackSummaryEl,
+  trackables: {
+    moon: orbitMoon,
+    sun: orbitSun
+  }
+});
+
 function getCurrentUiSnapshot() {
   if (astronomyState.enabled) {
     const observationDate = astronomyState.live ? new Date() : astronomyState.selectedDate;
@@ -1440,6 +1458,7 @@ function getCurrentUiSnapshot() {
 i18n.subscribe(() => {
   applyStaticTranslations();
   syncSeasonalEventButtonLabels();
+  celestialTrackingCameraApi.refreshLocalizedUi?.();
   textureApi.refreshLocalizedUi?.();
   astronomyApi.refreshLocalizedUi?.();
   walkerApi.refreshLocalizedUi?.(getCurrentUiSnapshot());
@@ -1951,6 +1970,7 @@ resetButton.addEventListener("click", () => {
   if (walkerState.enabled || renderState.preparing) {
     exitFirstPersonMode();
   }
+  celestialTrackingCameraApi.clearTracking();
   cameraState.targetTheta = -0.55;
   cameraState.targetPhi = 1.12;
   cameraState.targetRadius = constants.CAMERA_TOPDOWN_DEFAULT_RADIUS;
@@ -2072,6 +2092,12 @@ for (const button of orbitModeButtons) {
     astronomyApi.updateOrbitModeUi();
     astronomyApi.resetSunTrail();
     astronomyApi.resetMoonTrail();
+  });
+}
+
+for (const button of cameraTrackButtons) {
+  button.addEventListener("click", () => {
+    celestialTrackingCameraApi.setTarget(button.dataset.cameraTrack);
   });
 }
 
@@ -2199,6 +2225,7 @@ function animate() {
   }
   updateRenderState();
   syncPreparationPresentation();
+  celestialTrackingCameraApi.update();
   cameraApi.updateCamera();
   firstPersonWorldApi.update(snapshot);
   if (snapshot) {
