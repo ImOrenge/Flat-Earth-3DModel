@@ -610,6 +610,15 @@ h1 {
   accent-color: #8ad7ff;
 }
 
+.slider-input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.celestial-value-row {
+  margin-top: 8px;
+}
+
 .seasonal-year-input {
   appearance: textfield;
 }

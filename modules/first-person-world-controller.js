@@ -1,6 +1,5 @@
 import * as THREE from "../vendor/three.module.js";
-import { getGeoFromProjectedPosition } from "./geo-utils.js";
-import { getSolarAltitudeFactor } from "./astronomy-utils.js";
+import { getDisplayLocalSolarAltitudeDegreesFromModel } from "./astronomy-utils.js";
 
 const DEFAULT_FOG_COLOR = new THREE.Color(0x06101d);
 
@@ -540,24 +539,23 @@ export function createFirstPersonWorldController({
       walkerState.position.z * renderState.visualScale
     );
 
-    const observerGeo = getGeoFromProjectedPosition(walkerState.position, constants.DISC_RADIUS);
     tempObserverModelPosition.set(
       walkerState.position.x,
       constants.WALKER_EYE_HEIGHT,
       walkerState.position.z
     );
-    tempSunDirection.copy(snapshot.sunPosition).sub(tempObserverModelPosition).normalize();
-    const sunAltitudeDegrees = THREE.MathUtils.radToDeg(Math.asin(tempSunDirection.y)) -
-      constants.CELESTIAL_ALTITUDE_DROP_DEGREES;
-    const sunAltitudeRadians = THREE.MathUtils.degToRad(sunAltitudeDegrees);
-    const solarFactor = getSolarAltitudeFactor(
-      observerGeo.latitudeDegrees,
-      observerGeo.longitudeDegrees,
-      snapshot.sun.latitudeDegrees,
-      snapshot.sun.longitudeDegrees
+    tempSunDirection.copy(snapshot.sunRenderPosition ?? snapshot.sunPosition).sub(tempObserverModelPosition).normalize();
+    const sunRenderPosition = snapshot.sunRenderPosition ?? snapshot.sunPosition;
+    const sunAltitudeDegrees = getDisplayLocalSolarAltitudeDegreesFromModel(
+      walkerState.position.x,
+      walkerState.position.z,
+      sunRenderPosition.x,
+      sunRenderPosition.z,
+      Math.max(sunRenderPosition.y - constants.WALKER_EYE_HEIGHT, 0.0001)
     );
-    const dayFactor = THREE.MathUtils.clamp((sunAltitudeDegrees + 8) / 52, 0, 1);
-    const twilightFactor = THREE.MathUtils.clamp(1 - (Math.abs(sunAltitudeDegrees) / 14), 0, 1);
+    const sunAltitudeRadians = THREE.MathUtils.degToRad(sunAltitudeDegrees);
+    const dayFactor = THREE.MathUtils.clamp(THREE.MathUtils.inverseLerp(0, 30, sunAltitudeDegrees), 0, 1);
+    const twilightFactor = THREE.MathUtils.clamp(1 - (Math.abs(sunAltitudeDegrees + 3) / 9), 0, 1);
     const nightFactor = THREE.MathUtils.clamp((-sunAltitudeDegrees - 5) / 20, 0, 1);
 
     scene.background = null;
@@ -697,7 +695,7 @@ export function createFirstPersonWorldController({
     const glowDistance = constants.FIRST_PERSON_HORIZON_RADIUS * 0.88;
     sunsetGlow.position.copy(tempSunDirection).multiplyScalar(glowDistance);
     sunsetGlow.position.y = constants.SURFACE_Y + scaleDimension(6) + (Math.sin(sunAltitudeRadians) * scaleDimension(12));
-    sunsetGlow.material.opacity = Math.max(0, (twilightFactor * 0.72) + (Math.max(solarFactor, 0) * 0.08));
+    sunsetGlow.material.opacity = Math.max(0, (twilightFactor * 0.72) + (dayFactor * 0.08));
     sunsetGlow.visible = sunsetGlow.material.opacity > 0.01;
   }
 

@@ -15,6 +15,7 @@ const SYNODIC_MONTH_DAYS = 29.530588853;
 const REFERENCE_NEW_MOON_JULIAN_DATE = 2451550.1;
 const MOON_PHASE_STEP_COUNT = 16;
 const MOON_PHASE_STEP_DEGREES = FULL_CIRCLE_DEGREES / MOON_PHASE_STEP_COUNT;
+export const LOCAL_LIGHT_HORIZON_OFFSET_DEGREES = 22;
 const MOON_PHASE_LABEL_KEYS = [
   "moonPhaseNew",
   "moonPhaseEarlyWaxingCrescent",
@@ -382,31 +383,56 @@ export function getAstronomySnapshot({
   date,
   discRadius,
   domeRadius,
-  getSunOrbitHeight,
-  getMoonBaseHeight
+  getSunRenderState,
+  getMoonBaseHeight,
+  getMoonRenderState
 }) {
   const sun = getSunSubpoint(date);
   const moon = getMoonSubpoint(date);
+  const sunProjectedRadius = THREE.MathUtils.clamp(
+    projectedRadiusFromLatitude(sun.latitudeDegrees, discRadius),
+    0,
+    domeRadius - 0.2
+  );
+  const sunRenderState = getSunRenderState({
+    date,
+    longitudeDegrees: sun.longitudeDegrees,
+    projectedRadius: sunProjectedRadius,
+    source: "reality"
+  });
+  const sunRenderPosition = sunRenderState.position.clone();
+  const moonProjectedRadius = THREE.MathUtils.clamp(
+    projectedRadiusFromLatitude(moon.latitudeDegrees, discRadius),
+    0,
+    domeRadius - 0.2
+  );
+  const moonRenderState = getMoonRenderState
+    ? getMoonRenderState({
+      date,
+      longitudeDegrees: moon.longitudeDegrees,
+      projectedRadius: moonProjectedRadius,
+      source: "reality"
+    })
+    : null;
+  const moonRenderPosition = moonRenderState?.position?.clone() ?? getBodyPositionFromGeo({
+    latitudeDegrees: moon.latitudeDegrees,
+    longitudeDegrees: moon.longitudeDegrees,
+    getHeight: getMoonBaseHeight,
+    discRadius,
+    domeRadius
+  });
 
   return {
     date,
     sun,
     moon,
     moonPhase: getMoonPhase(date),
-    sunPosition: getBodyPositionFromGeo({
-      latitudeDegrees: sun.latitudeDegrees,
-      longitudeDegrees: sun.longitudeDegrees,
-      getHeight: getSunOrbitHeight,
-      discRadius,
-      domeRadius
-    }),
-    moonPosition: getBodyPositionFromGeo({
-      latitudeDegrees: moon.latitudeDegrees,
-      longitudeDegrees: moon.longitudeDegrees,
-      getHeight: getMoonBaseHeight,
-      discRadius,
-      domeRadius
-    })
+    sunPosition: sunRenderPosition.clone(),
+    sunRenderPosition,
+    sunRenderState,
+    moonPosition: moonRenderPosition.clone(),
+    moonRenderPosition,
+    moonRenderState
   };
 }
 
@@ -423,6 +449,77 @@ export function getSolarAltitudeFactor(
     (Math.sin(latitude) * Math.sin(sunLatitude)) +
     (Math.cos(latitude) * Math.cos(sunLatitude) * Math.cos(longitudeDelta))
   );
+}
+
+export function getDisplayAwareSolarFactor(solarFactor, displayAltitudeDegrees) {
+  if (!Number.isFinite(displayAltitudeDegrees)) {
+    return solarFactor;
+  }
+
+  const displayFactor = Math.sin(toRadians(displayAltitudeDegrees));
+  const displayWeight = THREE.MathUtils.clamp((displayAltitudeDegrees + 10) / 52, 0.2, 0.72);
+  return THREE.MathUtils.clamp(
+    THREE.MathUtils.lerp(solarFactor, displayFactor, displayWeight),
+    -1,
+    1
+  );
+}
+
+export function getLocalSolarAltitudeRadiansFromModel(
+  surfaceX,
+  surfaceZ,
+  sunX,
+  sunZ,
+  sunHeightAboveSurface
+) {
+  const planarDistance = Math.hypot(sunX - surfaceX, sunZ - surfaceZ);
+  return Math.atan2(sunHeightAboveSurface, Math.max(planarDistance, 0.0001));
+}
+
+export function getLocalSolarAltitudeDegreesFromModel(
+  surfaceX,
+  surfaceZ,
+  sunX,
+  sunZ,
+  sunHeightAboveSurface
+) {
+  return toDegrees(getLocalSolarAltitudeRadiansFromModel(
+    surfaceX,
+    surfaceZ,
+    sunX,
+    sunZ,
+    sunHeightAboveSurface
+  ));
+}
+
+export function getDisplayLocalSolarAltitudeDegreesFromModel(
+  surfaceX,
+  surfaceZ,
+  sunX,
+  sunZ,
+  sunHeightAboveSurface,
+  horizonOffsetDegrees = LOCAL_LIGHT_HORIZON_OFFSET_DEGREES
+) {
+  return getLocalSolarAltitudeDegreesFromModel(
+    surfaceX,
+    surfaceZ,
+    sunX,
+    sunZ,
+    sunHeightAboveSurface
+  ) - horizonOffsetDegrees;
+}
+
+export function getLocalLightSummaryFromAltitude(altitudeDegrees) {
+  if (altitudeDegrees >= 8) {
+    return "Day";
+  }
+  if (altitudeDegrees >= 0) {
+    return "Low Sun";
+  }
+  if (altitudeDegrees >= -6) {
+    return "Twilight";
+  }
+  return "Night";
 }
 
 export function getSunHorizontalCoordinates(date, observerLatitudeDegrees, observerLongitudeDegrees) {

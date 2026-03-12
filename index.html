@@ -39,8 +39,8 @@
         <p class="eyebrow" data-i18n="summaryEyebrow">3D MODEL</p>
         <h1 data-i18n="summaryTitle">Flat Earth Disc</h1>
         <p class="panel-copy" data-i18n-html="summaryCopy">
-          Flat map texture based 3D preview. Drop a custom map into
-          <code>assets/flat-earth-map.png</code> or upload one here for an immediate update.
+          Bundled default map: <code>assets/flat-earth-map-square.svg</code>. For a custom model source, replace
+          <code>assets/flat-earth-map.png</code> or upload an SVG here for an immediate preview update.
         </p>
 
         <div class="language-toggle-row">
@@ -88,10 +88,10 @@
         <ol class="steps" id="summary-steps">
           <li data-i18n-html="stepGenerateMesh">Generate the mesh with <code>scripts/generate-flat-earth-obj.ps1</code>.</li>
           <li data-i18n-html="stepOpenObj">Open <code>models/flat-earth-disc.obj</code> in Blender or another DCC tool.</li>
-          <li data-i18n-html="stepSwapTexture">Swap the top texture with <code>assets/flat-earth-map.png</code> when needed.</li>
+          <li data-i18n-html="stepSwapTexture">Replace <code>assets/flat-earth-map.png</code> and rerun the mesh script when you need a new model texture.</li>
         </ol>
 
-        <p class="hint" id="status">Loading the default texture.</p>
+        <p class="hint" id="status">Loading the bundled default map.</p>
       </aside>
 
       <aside class="control-panel detail-panel">
@@ -288,6 +288,37 @@
             <p class="sync-copy subtle" data-i18n="orbitAltitudeProfile">Altitude profile: north tropic highest, equator mid, south tropic lowest.</p>
           </section>
 
+          <section class="orbit-panel celestial-motion-panel">
+            <p class="orbit-title" data-i18n="celestialMotionTitle">Celestial Motion</p>
+            <label class="field" for="celestial-trail-length">
+              <span class="field-label" data-i18n="celestialTrailLengthLabel">Trail Length</span>
+              <input class="slider-input" id="celestial-trail-length" type="range" min="0" max="100" step="5" value="100">
+            </label>
+            <div class="sync-row celestial-value-row">
+              <span class="sync-title" data-i18n="celestialTrailLengthValueTitle">Current Trail</span>
+              <strong class="route-speed-value" id="celestial-trail-length-value">100%</strong>
+            </div>
+            <label class="field" for="celestial-speed">
+              <span class="field-label" data-i18n="celestialSpeedLabel">Demo Orbit Speed</span>
+              <input class="slider-input" id="celestial-speed" type="range" min="0" max="5" step="0.1" value="1">
+            </label>
+            <div class="sync-row celestial-value-row">
+              <span class="sync-title" data-i18n="celestialSpeedValueTitle">Demo Speed</span>
+              <strong class="route-speed-value" id="celestial-speed-value">1.0x</strong>
+            </div>
+            <div class="sync-row overlay-row">
+              <span class="sync-title" data-i18n="celestialFullTrailTitle">Full Orbit Path</span>
+              <label class="toggle">
+                <input id="celestial-full-trail" type="checkbox" role="switch" checked>
+                <span class="toggle-switch" aria-hidden="true"></span>
+                <span class="toggle-text" data-i18n="celestialFullTrailToggle">Show</span>
+              </label>
+            </div>
+            <p class="sync-copy subtle" id="celestial-motion-summary">
+              Demo speed scales both celestial bodies, while the full path overlays one complete orbit.
+            </p>
+          </section>
+
           <section class="orbit-panel">
             <p class="orbit-title" data-i18n="celestialTrackingTitle">Celestial Tracking</p>
             <div class="track-mode-grid">
@@ -370,6 +401,6 @@
     </div>
   </div>
 
-  <script type="module" src="./app.js"></script>
+  <script type="module" src="./app.js?v=20260312-coilorbit2"></script>
 </body>
 </html>

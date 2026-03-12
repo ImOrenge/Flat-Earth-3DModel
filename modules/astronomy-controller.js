@@ -15,13 +15,15 @@ import {
   getMoonHorizontalCoordinates,
   getSunHorizontalCoordinates,
   SEASONAL_EVENT_DEFINITIONS
-} from "./astronomy-utils.js?v=20260311-moon4";
+} from "./astronomy-utils.js?v=20260312-coilorbit2";
 
 export function createAstronomyController({
   constants,
   i18n,
   ui,
+  magneticFieldApi,
   astronomyState,
+  celestialControlState,
   seasonalMoonState,
   analemmaState,
   skyAnalemmaState,
@@ -39,8 +41,12 @@ export function createAstronomyController({
   skyAnalemmaPointsGeometry,
   orbitSun,
   orbitMoon,
+  sunFullTrailGeometry,
+  sunFullTrailPointsGeometry,
   sunTrailGeometry,
   sunTrailPointsGeometry,
+  moonFullTrailGeometry,
+  moonFullTrailPointsGeometry,
   moonTrailGeometry,
   moonTrailPointsGeometry,
   northSeasonOverlay,
@@ -50,7 +56,9 @@ export function createAstronomyController({
   const seasonalEventMap = new Map(
     SEASONAL_EVENT_DEFINITIONS.map((definition) => [definition.key, definition])
   );
+  const sunFullTrailPoints = [];
   const sunTrailPoints = [];
+  const moonFullTrailPoints = [];
   const moonTrailPoints = [];
   const analemmaPoints = [];
   const skyAnalemmaPoints = [];
@@ -60,7 +68,14 @@ export function createAstronomyController({
   const tempUpAxis = new THREE.Vector3(0, 1, 0);
   const tempSkyPoint = new THREE.Vector3();
   const tempSkyOrigin = new THREE.Vector3();
+  const tempHorizontalRelative = new THREE.Vector3();
+  const tempRadialAxis = new THREE.Vector3();
   let lastSeasonalSunKey = "";
+  const bandCenterProgressByMode = {
+    north: 0.5,
+    equator: 0.5,
+    south: 0.5
+  };
 
   function sanitizeSeasonalYear(value) {
     const parsed = Number.parseInt(value, 10);
@@ -82,6 +97,34 @@ export function createAstronomyController({
 
   function formatIllumination(fraction) {
     return `${Math.round(THREE.MathUtils.clamp(fraction ?? 0, 0, 1) * 100)}%`;
+  }
+
+  function getTrailLengthFactor() {
+    return THREE.MathUtils.clamp(celestialControlState?.trailLengthFactor ?? 1, 0, 1);
+  }
+
+  function getSpeedMultiplier() {
+    return THREE.MathUtils.clamp(celestialControlState?.speedMultiplier ?? 1, 0, 5);
+  }
+
+  function getCurrentTrailPointLimit(baseCount) {
+    const factor = getTrailLengthFactor();
+    if (factor <= 0) {
+      return 0;
+    }
+    return Math.max(2, Math.round(baseCount * factor));
+  }
+
+  function getRealityCurrentTrailWindowMs() {
+    return constants.REALITY_TRAIL_WINDOW_MS * getTrailLengthFactor();
+  }
+
+  function getRealityCurrentTrailSampleCount(baseCount) {
+    const factor = getTrailLengthFactor();
+    if (factor <= 0) {
+      return 0;
+    }
+    return Math.max(2, Math.round(baseCount * factor));
   }
 
   function formatObservationTime(date) {
@@ -194,19 +237,261 @@ export function createAstronomyController({
     return THREE.MathUtils.mapLinear(ratio, -1, 1, constants.ORBIT_SUN_HEIGHT_SOUTH, constants.ORBIT_SUN_HEIGHT_NORTH);
   }
 
+  function getDomeMaxHeight(radius, clearance) {
+    const clampedRadius = THREE.MathUtils.clamp(radius, 0, constants.DOME_RADIUS);
+    const domeRise = Math.sqrt(Math.max(0, (constants.DOME_RADIUS ** 2) - (clampedRadius ** 2)));
+    return (
+      constants.DOME_BASE_Y +
+      (domeRise * constants.DOME_VERTICAL_SCALE) -
+      clearance
+    );
+  }
+
+  function getHorizontalFromModelPosition(position, observerPosition = walkerState.position, observerGeo = getObserverGeo()) {
+    getObserverSkyAxes(observerPosition, observerGeo.longitudeDegrees);
+    tempSkyOrigin.set(
+      observerPosition.x,
+      constants.WALKER_EYE_HEIGHT,
+      observerPosition.z
+    );
+    tempHorizontalRelative.copy(position).sub(tempSkyOrigin);
+
+    const northComponent = tempHorizontalRelative.dot(tempNorthAxis);
+    const eastComponent = tempHorizontalRelative.dot(tempEastAxis);
+    const upComponent = tempHorizontalRelative.y;
+    const planarDistance = Math.hypot(northComponent, eastComponent);
+    const altitudeRadians = Math.atan2(upComponent, Math.max(planarDistance, 0.0001));
+    const azimuthRadians = Math.atan2(eastComponent, northComponent);
+
+    return {
+      altitudeDegrees: THREE.MathUtils.radToDeg(altitudeRadians),
+      azimuthDegrees: THREE.MathUtils.euclideanModulo(THREE.MathUtils.radToDeg(azimuthRadians), 360),
+      altitudeRadians,
+      azimuthRadians
+    };
+  }
+
+  function getSunDisplayHorizontalFromPosition(position, observerPosition = walkerState.position, observerGeo = getObserverGeo()) {
+    return applyCelestialAltitudeOffset(getHorizontalFromModelPosition(position, observerPosition, observerGeo));
+  }
+
   function getMoonBaseHeight(radius) {
     const ratio = getOrbitLatitudeRatio(radius);
     return THREE.MathUtils.mapLinear(ratio, -1, 1, constants.ORBIT_MOON_HEIGHT_SOUTH, constants.ORBIT_MOON_HEIGHT_NORTH);
   }
 
+  function getBodyCoilConfig(body) {
+    if (body === "moon") {
+      return {
+        baseClearance: constants.ORBIT_TRACK_TUBE_RADIUS + (constants.ORBIT_MOON_SIZE * 1.08),
+        bodyClearance: constants.ORBIT_MOON_SIZE * 1.08,
+        domeClearance: constants.ORBIT_MOON_SIZE * 0.96,
+        localRadiusMax: scaleDimension(0.15),
+        localRadiusMin: scaleDimension(0.036),
+        riseRange: scaleDimension(1.12),
+        tangentialScale: 0.74
+      };
+    }
+
+    return {
+      baseClearance: constants.SUN_COIL_BASE_CLEARANCE,
+      bodyClearance: constants.ORBIT_SUN_SIZE * 1.12,
+      domeClearance: constants.SUN_COIL_DOME_CLEARANCE * 0.62,
+      localRadiusMax: scaleDimension(0.18),
+      localRadiusMin: scaleDimension(0.042),
+      riseRange: scaleDimension(1.48),
+      tangentialScale: 0.82
+    };
+  }
+
+  function getCoilOrbitProfile(body = "sun") {
+    return magneticFieldApi?.getCoilOrbitProfile?.(body) ?? {
+      turns: body === "moon" ? 24 : 32,
+      radiusCurveExponent: body === "moon" ? 1.42 : 1.65,
+      radiusStart: scaleDimension(0.08),
+      radiusEnd: scaleDimension(body === "moon" ? 0.24 : 0.34),
+      yStart: constants.SURFACE_Y,
+      yEnd: constants.DOME_BASE_Y + scaleDimension(body === "moon" ? 1.6 : 2)
+    };
+  }
+
+  function sampleCoilOrbitProfile(body = "sun", progress = 0) {
+    return magneticFieldApi?.sampleCoilOrbitProfile?.(body, progress) ?? (() => {
+      const profile = getCoilOrbitProfile(body);
+      const clampedProgress = THREE.MathUtils.clamp(progress, 0, 1);
+      const radiusProgress = clampedProgress ** profile.radiusCurveExponent;
+      const radius = THREE.MathUtils.lerp(profile.radiusStart, profile.radiusEnd, radiusProgress);
+      const radiusSpan = Math.max(profile.radiusEnd - profile.radiusStart, 0.0001);
+      const y = THREE.MathUtils.lerp(profile.yStart, profile.yEnd, clampedProgress);
+      const ySpan = Math.max(profile.yEnd - profile.yStart, 0.0001);
+
+      return {
+        progress: clampedProgress,
+        radius,
+        radiusRatio: THREE.MathUtils.clamp((radius - profile.radiusStart) / radiusSpan, 0, 1),
+        y,
+        yRatio: THREE.MathUtils.clamp((y - profile.yStart) / ySpan, 0, 1)
+      };
+    })();
+  }
+
+  function getBodyCorridorRange(body) {
+    const config = getBodyCoilConfig(body);
+    const min = constants.TROPIC_CANCER_RADIUS + constants.ORBIT_TRACK_TUBE_RADIUS + config.bodyClearance;
+    const max = constants.TROPIC_CAPRICORN_RADIUS - constants.ORBIT_TRACK_TUBE_RADIUS - config.bodyClearance;
+    return {
+      max: Math.max(max, min + 0.0001),
+      min
+    };
+  }
+
+  function getBodyBandRadiusRange(body, orbitMode = "auto") {
+    const corridor = getBodyCorridorRange(body);
+    if (orbitMode === "auto") {
+      return corridor;
+    }
+
+    const span = corridor.max - corridor.min;
+    const bandSpan = span / 3;
+
+    if (orbitMode === "north") {
+      return {
+        min: corridor.min,
+        max: corridor.min + bandSpan
+      };
+    }
+
+    if (orbitMode === "south") {
+      return {
+        min: corridor.max - bandSpan,
+        max: corridor.max
+      };
+    }
+
+    return {
+      min: corridor.min + bandSpan,
+      max: corridor.max - bandSpan
+    };
+  }
+
+  function getBodyModeProgress(body, orbitMode = "auto", progress = 0.5) {
+    if (orbitMode === "auto") {
+      return THREE.MathUtils.clamp(progress, 0, 1);
+    }
+    return bandCenterProgressByMode[orbitMode] ?? 0.5;
+  }
+
+  function getBodyProgressFromProjectedRadius(body, projectedRadius) {
+    const corridor = getBodyCorridorRange(body);
+    return THREE.MathUtils.clamp(
+      THREE.MathUtils.inverseLerp(corridor.min, corridor.max, projectedRadius),
+      0,
+      1
+    );
+  }
+
+  function getBodyBaseHeight(body, radius) {
+    return body === "moon"
+      ? getMoonBaseHeight(radius)
+      : getSunOrbitHeight(radius);
+  }
+
+  function getBodyCoilRenderState({
+    body,
+    longitudeDegrees = 0,
+    orbitAngleRadians = 0,
+    projectedRadius = constants.EQUATOR_RADIUS,
+    progress = 0.5,
+    source = "reality",
+    orbitMode = source === "demo" ? simulationState.orbitMode : "auto"
+  }) {
+    const bandRange = getBodyBandRadiusRange(body, orbitMode);
+    const bodyProgress = source === "reality"
+      ? getBodyProgressFromProjectedRadius(body, projectedRadius)
+      : getBodyModeProgress(body, orbitMode, progress);
+    const config = getBodyCoilConfig(body);
+    const centerRadius = THREE.MathUtils.lerp(bandRange.min, bandRange.max, bodyProgress);
+    const macroAngle = source === "demo"
+      ? orbitAngleRadians
+      : THREE.MathUtils.degToRad(longitudeDegrees);
+    const baseHeight = getBodyBaseHeight(body, centerRadius);
+
+    tempRadialAxis.set(-Math.cos(macroAngle), 0, Math.sin(macroAngle));
+    const planarX = tempRadialAxis.x * centerRadius;
+    const planarZ = tempRadialAxis.z * centerRadius;
+    const planarRadius = centerRadius;
+    const targetHeight = baseHeight + config.baseClearance;
+    const coilHeight = THREE.MathUtils.clamp(
+      targetHeight,
+      targetHeight,
+      Math.max(targetHeight, getDomeMaxHeight(planarRadius, config.domeClearance))
+    );
+
+    return {
+      baseHeight,
+      centerRadius,
+      coilHeight,
+      localCoilRadius: 0,
+      macroProgress: bodyProgress,
+      position: new THREE.Vector3(
+        planarX,
+        coilHeight,
+        planarZ
+      )
+    };
+  }
+
+  function getSunRenderState({
+    longitudeDegrees = 0,
+    orbitAngleRadians = 0,
+    projectedRadius = constants.EQUATOR_RADIUS,
+    progress = simulationState.sunBandProgress ?? 0.5,
+    source = "reality",
+    orbitMode = source === "demo" ? simulationState.orbitMode : "auto"
+  }) {
+    return getBodyCoilRenderState({
+      body: "sun",
+      longitudeDegrees,
+      orbitAngleRadians,
+      orbitMode,
+      progress,
+      projectedRadius,
+      source
+    });
+  }
+
+  function getMoonRenderState({
+    longitudeDegrees = 0,
+    orbitAngleRadians = 0,
+    projectedRadius = constants.EQUATOR_RADIUS,
+    progress = simulationState.moonBandProgress ?? 0.5,
+    source = "reality",
+    orbitMode = source === "demo" ? simulationState.orbitMode : "auto"
+  }) {
+    return getBodyCoilRenderState({
+      body: "moon",
+      longitudeDegrees,
+      orbitAngleRadians,
+      orbitMode,
+      progress,
+      projectedRadius,
+      source
+    });
+  }
+
   function getAstronomySnapshot(date) {
-    return buildAstronomySnapshot({
+    const snapshot = buildAstronomySnapshot({
       date,
       discRadius: constants.DISC_RADIUS,
       domeRadius: constants.DOME_RADIUS,
-      getSunOrbitHeight,
-      getMoonBaseHeight
+      getSunRenderState,
+      getMoonBaseHeight,
+      getMoonRenderState
     });
+    snapshot.sunDisplayHorizontal = getSunDisplayHorizontalFromPosition(
+      snapshot.sunRenderPosition ?? snapshot.sunPosition
+    );
+    return snapshot;
   }
 
   function syncDayNightOverlayMaterial(sunLatitudeDegrees, sunLongitudeDegrees) {
@@ -246,8 +531,49 @@ export function createAstronomyController({
     dayNightOverlay.visible = true;
   }
 
+  function updateDayNightOverlayFromSunPosition(sunRenderPosition, force = false) {
+    if (!sunRenderPosition) {
+      dayNightOverlay.visible = false;
+      return;
+    }
+
+    const sunGeo = getGeoFromProjectedPosition(sunRenderPosition, constants.DISC_RADIUS);
+    updateDayNightOverlayFromSun(sunGeo.latitudeDegrees, sunGeo.longitudeDegrees, force);
+  }
+
   function setObservationInputValue(date) {
     ui.observationTimeEl.value = toDatetimeLocalValue(date);
+  }
+
+  function syncCelestialMotionUi() {
+    const trailPercent = Math.round(getTrailLengthFactor() * 100);
+    const speedValue = getSpeedMultiplier().toFixed(1);
+
+    if (ui.celestialTrailLengthEl) {
+      ui.celestialTrailLengthEl.value = String(trailPercent);
+    }
+    if (ui.celestialTrailLengthValueEl) {
+      ui.celestialTrailLengthValueEl.textContent = i18n.t("celestialTrailLengthValue", {
+        percent: trailPercent
+      });
+    }
+    if (ui.celestialSpeedEl) {
+      ui.celestialSpeedEl.value = speedValue;
+      ui.celestialSpeedEl.disabled = astronomyState.enabled;
+    }
+    if (ui.celestialSpeedValueEl) {
+      ui.celestialSpeedValueEl.textContent = i18n.t("celestialSpeedValue", {
+        speed: speedValue
+      });
+    }
+    if (ui.celestialFullTrailEl) {
+      ui.celestialFullTrailEl.checked = Boolean(celestialControlState?.showFullTrail);
+    }
+    if (ui.celestialMotionSummaryEl) {
+      ui.celestialMotionSummaryEl.textContent = astronomyState.enabled
+        ? i18n.t("celestialMotionSummaryReality")
+        : i18n.t("celestialMotionSummaryDemo");
+    }
   }
 
   function syncAstronomyControls() {
@@ -256,6 +582,7 @@ export function createAstronomyController({
     ui.realityLiveEl.disabled = !astronomyState.enabled;
     ui.observationTimeEl.disabled = !astronomyState.enabled || astronomyState.live;
     ui.applyObservationTimeButton.disabled = !astronomyState.enabled || astronomyState.live;
+    syncCelestialMotionUi();
 
     for (const button of orbitModeButtons) {
       button.disabled = astronomyState.enabled;
@@ -357,10 +684,13 @@ export function createAstronomyController({
     ui.seasonalYearEl.value = String(year);
 
     const audits = getSeasonalSunAudit(year, observerGeo.latitudeDegrees, observerGeo.longitudeDegrees)
-      .map((audit) => ({
-        ...audit,
-        horizontal: applyCelestialAltitudeOffset(audit.horizontal)
-      }));
+      .map((audit) => {
+        const snapshot = getAstronomySnapshot(audit.date);
+        return {
+          ...audit,
+          horizontal: snapshot.sunDisplayHorizontal
+        };
+      });
     const auditsByKey = Object.fromEntries(audits.map((audit) => [audit.key, audit]));
     const highestAudit = audits.reduce((best, audit) => (
       audit.horizontal.altitudeDegrees > best.horizontal.altitudeDegrees ? audit : best
@@ -400,6 +730,43 @@ export function createAstronomyController({
     });
 
     lastSeasonalSunKey = uiKey;
+  }
+
+  function getBodyBandProgressStep(body) {
+    const turns = Math.max(magneticFieldApi?.getCoilOrbitProfile?.(body)?.turns ?? 1, 1);
+    const baseSpeed = body === "moon"
+      ? constants.ORBIT_SUN_SEASON_SPEED * constants.ORBIT_MOON_BAND_SPEED_FACTOR
+      : constants.ORBIT_SUN_SEASON_SPEED;
+    return baseSpeed / turns;
+  }
+
+  function advanceOscillatingProgress(progress, direction, delta) {
+    let nextProgress = THREE.MathUtils.clamp(progress ?? 0.5, 0, 1);
+    let nextDirection = direction >= 0 ? 1 : -1;
+    let remaining = Math.max(delta, 0);
+
+    while (remaining > 0.000001) {
+      const distanceToEdge = nextDirection > 0 ? 1 - nextProgress : nextProgress;
+      if (distanceToEdge <= 0.000001) {
+        nextDirection *= -1;
+        continue;
+      }
+
+      if (remaining <= distanceToEdge) {
+        nextProgress += nextDirection * remaining;
+        remaining = 0;
+        break;
+      }
+
+      nextProgress = nextDirection > 0 ? 1 : 0;
+      remaining -= distanceToEdge;
+      nextDirection *= -1;
+    }
+
+    return {
+      progress: THREE.MathUtils.clamp(nextProgress, 0, 1),
+      direction: nextDirection
+    };
   }
 
   function setTrailPoints(target, lineGeometry, pointsGeometry, points) {
@@ -627,23 +994,126 @@ export function createAstronomyController({
     });
   }
 
+  function buildRealityTrailSamples(snapshot, baseCount, windowMs) {
+    if (baseCount <= 0 || windowMs <= 0) {
+      return [];
+    }
+
+    const samples = [];
+    for (let index = 0; index < baseCount; index += 1) {
+      const progress = baseCount === 1 ? 0.5 : index / (baseCount - 1);
+      const sampleTime = snapshot.date.getTime() - windowMs + (progress * windowMs * 2);
+      const sample = getAstronomySnapshot(new Date(sampleTime));
+      samples.push(sample);
+    }
+    return samples;
+  }
+
+  function buildDemoFullTrailPoints(body, sampleCount) {
+    if (sampleCount <= 1) {
+      return [];
+    }
+
+    const orbitSpeed = body === "moon" ? constants.ORBIT_MOON_SPEED : constants.ORBIT_SUN_SPEED;
+    const orbitMode = simulationState.orbitMode;
+    const orbitFrames = (Math.PI * 2) / Math.max(orbitSpeed, 0.000001);
+    const bandStep = getBodyBandProgressStep(body);
+    const totalFrames = orbitMode === "auto"
+      ? Math.max(orbitFrames, 2 / Math.max(bandStep, 0.000001))
+      : orbitFrames;
+    const normalizedSampleCount = orbitMode === "auto"
+      ? Math.min(8192, Math.max(sampleCount * 3, Math.ceil(totalFrames / 6)))
+      : sampleCount;
+    const frameAdvance = totalFrames / Math.max(normalizedSampleCount - 1, 1);
+    let orbitAngle = body === "moon"
+      ? simulationState.orbitMoonAngle
+      : simulationState.orbitSunAngle;
+    let progress = body === "moon"
+      ? (simulationState.moonBandProgress ?? 0.5)
+      : (simulationState.sunBandProgress ?? 0.5);
+    let direction = body === "moon"
+      ? (simulationState.moonBandDirection ?? 1)
+      : (simulationState.sunBandDirection ?? 1);
+    const progressStep = bandStep * frameAdvance;
+    const points = [];
+
+    for (let index = 0; index < normalizedSampleCount; index += 1) {
+      const renderState = body === "moon"
+        ? getMoonRenderState({
+          orbitAngleRadians: orbitAngle,
+          orbitMode,
+          progress,
+          source: "demo"
+        })
+        : getSunRenderState({
+          orbitAngleRadians: orbitAngle,
+          orbitMode,
+          progress,
+          source: "demo"
+        });
+      points.push(renderState.position.clone());
+
+      if (index === normalizedSampleCount - 1) {
+        continue;
+      }
+
+      orbitAngle += orbitSpeed * frameAdvance;
+      if (orbitMode === "auto") {
+        const nextState = advanceOscillatingProgress(progress, direction, progressStep);
+        progress = nextState.progress;
+        direction = nextState.direction;
+      }
+    }
+
+    return points;
+  }
+
+  function rebuildFullRealityTrails(snapshot) {
+    const sunSamples = buildRealityTrailSamples(snapshot, constants.SUN_TRAIL_MAX_POINTS, constants.REALITY_TRAIL_WINDOW_MS)
+      .map((sample) => sample.sunRenderPosition ?? sample.sunPosition);
+    const moonSamples = buildRealityTrailSamples(snapshot, constants.MOON_TRAIL_MAX_POINTS, constants.REALITY_TRAIL_WINDOW_MS)
+      .map((sample) => sample.moonRenderPosition ?? sample.moonPosition);
+    setTrailPoints(sunFullTrailPoints, sunFullTrailGeometry, sunFullTrailPointsGeometry, sunSamples);
+    setTrailPoints(moonFullTrailPoints, moonFullTrailGeometry, moonFullTrailPointsGeometry, moonSamples);
+  }
+
+  function rebuildFullDemoTrails() {
+    setTrailPoints(
+      sunFullTrailPoints,
+      sunFullTrailGeometry,
+      sunFullTrailPointsGeometry,
+      buildDemoFullTrailPoints("sun", constants.SUN_TRAIL_MAX_POINTS)
+    );
+    setTrailPoints(
+      moonFullTrailPoints,
+      moonFullTrailGeometry,
+      moonFullTrailPointsGeometry,
+      buildDemoFullTrailPoints("moon", constants.MOON_TRAIL_MAX_POINTS)
+    );
+  }
+
   function rebuildAstronomyTrails(snapshot) {
-    const sunSamples = [];
-    const moonSamples = [];
-    for (let index = 0; index < constants.SUN_TRAIL_MAX_POINTS; index += 1) {
-      const progress = index / (constants.SUN_TRAIL_MAX_POINTS - 1);
-      const sampleTime = snapshot.date.getTime() - constants.REALITY_TRAIL_WINDOW_MS + (progress * constants.REALITY_TRAIL_WINDOW_MS * 2);
-      const sample = getAstronomySnapshot(new Date(sampleTime));
-      sunSamples.push(sample.sunPosition);
+    const currentWindowMs = getRealityCurrentTrailWindowMs();
+    const sunSampleCount = getRealityCurrentTrailSampleCount(constants.SUN_TRAIL_MAX_POINTS);
+    const moonSampleCount = getRealityCurrentTrailSampleCount(constants.MOON_TRAIL_MAX_POINTS);
+
+    if (sunSampleCount > 0 && currentWindowMs > 0) {
+      const sunSamples = buildRealityTrailSamples(snapshot, sunSampleCount, currentWindowMs)
+        .map((sample) => sample.sunRenderPosition ?? sample.sunPosition);
+      setTrailPoints(sunTrailPoints, sunTrailGeometry, sunTrailPointsGeometry, sunSamples);
+    } else {
+      resetSunTrail();
     }
-    for (let index = 0; index < constants.MOON_TRAIL_MAX_POINTS; index += 1) {
-      const progress = index / (constants.MOON_TRAIL_MAX_POINTS - 1);
-      const sampleTime = snapshot.date.getTime() - constants.REALITY_TRAIL_WINDOW_MS + (progress * constants.REALITY_TRAIL_WINDOW_MS * 2);
-      const sample = getAstronomySnapshot(new Date(sampleTime));
-      moonSamples.push(sample.moonPosition);
+
+    if (moonSampleCount > 0 && currentWindowMs > 0) {
+      const moonSamples = buildRealityTrailSamples(snapshot, moonSampleCount, currentWindowMs)
+        .map((sample) => sample.moonRenderPosition ?? sample.moonPosition);
+      setTrailPoints(moonTrailPoints, moonTrailGeometry, moonTrailPointsGeometry, moonSamples);
+    } else {
+      resetMoonTrail();
     }
-    setTrailPoints(sunTrailPoints, sunTrailGeometry, sunTrailPointsGeometry, sunSamples);
-    setTrailPoints(moonTrailPoints, moonTrailGeometry, moonTrailPointsGeometry, moonSamples);
+
+    rebuildFullRealityTrails(snapshot);
     astronomyState.lastTrailRebuildMs = snapshot.date.getTime();
   }
 
@@ -706,8 +1176,8 @@ export function createAstronomyController({
   }
 
   function applyAstronomySnapshot(snapshot) {
-    orbitSun.position.copy(snapshot.sunPosition);
-    orbitMoon.position.copy(snapshot.moonPosition);
+    orbitSun.position.copy(snapshot.sunRenderPosition ?? snapshot.sunPosition);
+    orbitMoon.position.copy(snapshot.moonRenderPosition ?? snapshot.moonPosition);
     updateSeasonPresentation(projectedRadiusFromLatitude(snapshot.sun.latitudeDegrees, constants.DISC_RADIUS));
     updateAstronomyUi(snapshot);
     syncSeasonalSunUi();
@@ -722,14 +1192,17 @@ export function createAstronomyController({
   }
 
   function resetSunTrail() {
-    sunTrailPoints.length = 0;
-    sunTrailGeometry.setFromPoints(sunTrailPoints);
-    sunTrailPointsGeometry.setFromPoints(sunTrailPoints);
+    setTrailPoints(sunTrailPoints, sunTrailGeometry, sunTrailPointsGeometry, []);
   }
 
   function updateSunTrail() {
+    const pointLimit = getCurrentTrailPointLimit(constants.SUN_TRAIL_MAX_POINTS);
+    if (pointLimit <= 0) {
+      resetSunTrail();
+      return;
+    }
     sunTrailPoints.push(orbitSun.position.clone());
-    if (sunTrailPoints.length > constants.SUN_TRAIL_MAX_POINTS) {
+    while (sunTrailPoints.length > pointLimit) {
       sunTrailPoints.shift();
     }
     sunTrailGeometry.setFromPoints(sunTrailPoints);
@@ -737,8 +1210,13 @@ export function createAstronomyController({
   }
 
   function updateMoonTrail() {
+    const pointLimit = getCurrentTrailPointLimit(constants.MOON_TRAIL_MAX_POINTS);
+    if (pointLimit <= 0) {
+      resetMoonTrail();
+      return;
+    }
     moonTrailPoints.push(orbitMoon.position.clone());
-    if (moonTrailPoints.length > constants.MOON_TRAIL_MAX_POINTS) {
+    while (moonTrailPoints.length > pointLimit) {
       moonTrailPoints.shift();
     }
     moonTrailGeometry.setFromPoints(moonTrailPoints);
@@ -746,9 +1224,21 @@ export function createAstronomyController({
   }
 
   function resetMoonTrail() {
-    moonTrailPoints.length = 0;
-    moonTrailGeometry.setFromPoints(moonTrailPoints);
-    moonTrailPointsGeometry.setFromPoints(moonTrailPoints);
+    setTrailPoints(moonTrailPoints, moonTrailGeometry, moonTrailPointsGeometry, []);
+  }
+
+  function refreshTrailsForCurrentMode() {
+    if (astronomyState.enabled) {
+      const activeDate = astronomyState.live ? new Date() : astronomyState.selectedDate;
+      const snapshot = getAstronomySnapshot(activeDate);
+      rebuildAstronomyTrails(snapshot);
+      return;
+    }
+
+    astronomyState.lastTrailRebuildMs = 0;
+    resetSunTrail();
+    resetMoonTrail();
+    rebuildFullDemoTrails();
   }
 
   function updateOrbitModeUi() {
@@ -762,37 +1252,26 @@ export function createAstronomyController({
   }
 
   function getCurrentOrbitRadius() {
-    if (simulationState.orbitMode === "auto") {
-      return constants.ORBIT_RADIUS_MID + Math.sin(simulationState.orbitSeasonPhase) * constants.ORBIT_RADIUS_AMPLITUDE;
-    }
-    return orbitModes[simulationState.orbitMode].radius;
+    const orbitMode = simulationState.orbitMode;
+    const bandRange = getBodyBandRadiusRange("sun", orbitMode);
+    const bandProgress = orbitMode === "auto"
+      ? THREE.MathUtils.clamp(simulationState.sunBandProgress ?? 0.5, 0, 1)
+      : 0.5;
+    return THREE.MathUtils.lerp(bandRange.min, bandRange.max, bandProgress);
   }
 
-  function updateMoonOrbit(seasonRadius) {
-    const orbitRadius = THREE.MathUtils.clamp(
-      seasonRadius,
-      constants.TROPIC_CANCER_RADIUS - scaleDimension(0.15),
-      constants.DOME_RADIUS - scaleDimension(0.24)
-    );
-    const height = getMoonBaseHeight(seasonRadius);
-    const safeDomeRadius = constants.DOME_RADIUS - (constants.ORBIT_MOON_SIZE * 1.6);
-    const domeHeightOffset = THREE.MathUtils.clamp(height - constants.DOME_BASE_Y, 0, safeDomeRadius);
-    const maxPlanarRadius = Math.sqrt(Math.max(0, (safeDomeRadius ** 2) - (domeHeightOffset ** 2)));
-    let moonX = Math.cos(simulationState.orbitMoonAngle) * orbitRadius;
-    let moonZ = Math.sin(simulationState.orbitMoonAngle) * orbitRadius;
-    const planarDistance = Math.hypot(moonX, moonZ);
-
-    if (planarDistance > maxPlanarRadius && planarDistance > 0) {
-      const clampScale = maxPlanarRadius / planarDistance;
-      moonX *= clampScale;
-      moonZ *= clampScale;
-    }
-
-    orbitMoon.position.set(
-      moonX,
-      height,
-      moonZ
-    );
+  function updateMoonOrbit({
+    orbitMode = simulationState.orbitMode,
+    progress = simulationState.moonBandProgress ?? 0.5
+  } = {}) {
+    const moonRenderState = getMoonRenderState({
+      orbitAngleRadians: simulationState.orbitMoonAngle,
+      orbitMode,
+      progress,
+      source: "demo"
+    });
+    orbitMoon.position.copy(moonRenderState.position);
+    return moonRenderState;
   }
 
   function setAstronomyDate(date) {
@@ -818,8 +1297,10 @@ export function createAstronomyController({
   function disableRealityMode() {
     astronomyState.enabled = false;
     astronomyState.live = false;
+    astronomyState.lastTrailRebuildMs = 0;
     resetSunTrail();
     resetMoonTrail();
+    rebuildFullDemoTrails();
     ui.timeSummaryEl.textContent = i18n.t("demoOrbitModeActive");
     syncSeasonalSunUi(true);
     syncAnalemmaUi(astronomyState.selectedDate, true);
@@ -841,6 +1322,7 @@ export function createAstronomyController({
       return;
     }
 
+    rebuildFullDemoTrails();
     updateSeasonPresentation(getCurrentOrbitRadius());
     ui.timeSummaryEl.textContent = i18n.t("demoOrbitModeActive");
     updateOrbitModeUi();
@@ -876,12 +1358,17 @@ export function createAstronomyController({
     applyObservationTimeSelection,
     disableRealityMode,
     enableRealityMode,
+    getBodyCoilRenderState,
     getAstronomySnapshot,
     getCurrentOrbitRadius,
     getMoonBaseHeight,
+    getMoonRenderState,
+    getSunDisplayHorizontalFromPosition,
+    getSunRenderState,
     getSunOrbitHeight,
     rebuildAstronomyTrails,
     refreshLocalizedUi,
+    refreshTrailsForCurrentMode,
     resetMoonTrail,
     resetSunTrail,
     setObservationInputValue,
@@ -894,6 +1381,7 @@ export function createAstronomyController({
     syncSeasonalSunUi,
     syncLiveObservationInput,
     updateDayNightOverlayFromSun,
+    updateDayNightOverlayFromSunPosition,
     updateMoonOrbit,
     updateMoonTrail,
     updateOrbitModeUi,

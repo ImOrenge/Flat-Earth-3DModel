@@ -1,5 +1,8 @@
 import * as THREE from "../vendor/three.module.js";
-import { getLocalLightSummary, getSolarAltitudeFactor } from "./astronomy-utils.js";
+import {
+  getDisplayLocalSolarAltitudeDegreesFromModel,
+  getLocalLightSummaryFromAltitude,
+} from "./astronomy-utils.js";
 import {
   formatGeoPair,
   getGeoFromProjectedPosition,
@@ -133,14 +136,16 @@ export function createWalkerController({
 
   function updateWalkerUi(snapshot) {
     const observerGeo = getGeoFromProjectedPosition(walkerState.position, constants.DISC_RADIUS);
-    const solarFactor = getSolarAltitudeFactor(
-      observerGeo.latitudeDegrees,
-      observerGeo.longitudeDegrees,
-      snapshot.sun.latitudeDegrees,
-      snapshot.sun.longitudeDegrees
+    const sunRenderPosition = snapshot.sunRenderPosition ?? snapshot.sunPosition;
+    const solarAltitudeDegrees = getDisplayLocalSolarAltitudeDegreesFromModel(
+      walkerState.position.x,
+      walkerState.position.z,
+      sunRenderPosition.x,
+      sunRenderPosition.z,
+      Math.max(sunRenderPosition.y - constants.WALKER_EYE_HEIGHT, 0.0001)
     );
     const coordinatesLabel = formatGeoPair(observerGeo.latitudeDegrees, observerGeo.longitudeDegrees);
-    const lightSummary = getLocalLightSummary(solarFactor);
+    const lightSummary = getLocalLightSummaryFromAltitude(solarAltitudeDegrees);
     const lightLabel = lightSummary === "Day"
       ? i18n.t("lightDay")
       : lightSummary === "Low Sun"
@@ -160,13 +165,25 @@ export function createWalkerController({
     }
 
     const ambientIntensity = walkerState.enabled
-      ? THREE.MathUtils.lerp(0.22, 1.1, THREE.MathUtils.clamp((solarFactor + 0.24) / 0.62, 0, 1))
+      ? THREE.MathUtils.lerp(0.22, 1.1, THREE.MathUtils.clamp(
+        THREE.MathUtils.inverseLerp(-10, 30, solarAltitudeDegrees),
+        0,
+        1
+      ))
       : 0.9;
     const keyIntensity = walkerState.enabled
-      ? THREE.MathUtils.lerp(0.3, 1.55, THREE.MathUtils.clamp((solarFactor + 0.2) / 0.55, 0, 1))
+      ? THREE.MathUtils.lerp(0.3, 1.55, THREE.MathUtils.clamp(
+        THREE.MathUtils.inverseLerp(-8, 30, solarAltitudeDegrees),
+        0,
+        1
+      ))
       : 1.35;
     const rimIntensity = walkerState.enabled
-      ? THREE.MathUtils.lerp(0.12, 0.48, THREE.MathUtils.clamp((solarFactor + 0.16) / 0.46, 0, 1))
+      ? THREE.MathUtils.lerp(0.12, 0.48, THREE.MathUtils.clamp(
+        THREE.MathUtils.inverseLerp(-6, 24, solarAltitudeDegrees),
+        0,
+        1
+      ))
       : 0.42;
 
     ambient.intensity += (ambientIntensity - ambient.intensity) * 0.08;

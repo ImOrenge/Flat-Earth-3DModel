@@ -6,13 +6,13 @@ import {
 import {
   getMoonPhase,
   getSolarAltitudeFactor,
-} from "./modules/astronomy-utils.js?v=20260311-moon4";
-import { createAstronomyController } from "./modules/astronomy-controller.js?v=20260311-moon5";
+} from "./modules/astronomy-utils.js?v=20260312-coilorbit2";
+import { createAstronomyController } from "./modules/astronomy-controller.js?v=20260312-coilorbit2";
 import { createCameraController } from "./modules/camera-controller.js";
 import { createCelestialTrackingCameraController } from "./modules/celestial-tracking-camera-controller.js";
 import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js";
-import { createI18n } from "./modules/i18n.js?v=20260311-magnetic1";
-import { createMagneticFieldController } from "./modules/magnetic-field-controller.js?v=20260311-magnetic1";
+import { createI18n } from "./modules/i18n.js?v=20260312-coilorbit2";
+import { createMagneticFieldController } from "./modules/magnetic-field-controller.js?v=20260312-coilorbit2";
 import { createRouteSimulationController } from "./modules/route-simulation-controller.js";
 import { createTextureManager } from "./modules/texture-manager.js?v=20260311-gpu-daynight";
 import { createWalkerController } from "./modules/walker-controller.js";
@@ -49,7 +49,8 @@ const POLARIS_CORE_OPACITY = 1;
 const POLARIS_GLOW_OPACITY = 1;
 const POLARIS_HALO_OPACITY = 0.48;
 const TROPIC_LATITUDE = 23.44;
-const SUN_ORBIT_ALTITUDE_CONTRAST = 1.75;
+const SUN_ORBIT_ALTITUDE_CONTRAST = 2.35;
+const MOON_ORBIT_ALTITUDE_CONTRAST = 1.85;
 const RAW_ORBIT_TRACK_HEIGHT = DOME_BASE_Y + scaleDimension(2.01) - CELESTIAL_HEIGHT_DROP;
 const RAW_ORBIT_SUN_HEIGHT = RAW_ORBIT_TRACK_HEIGHT + scaleDimension(0.12);
 const RAW_ORBIT_SUN_HEIGHT_NORTH = RAW_ORBIT_SUN_HEIGHT + (scaleDimension(0.52) * SUN_ORBIT_ALTITUDE_CONTRAST);
@@ -62,6 +63,9 @@ const CELESTIAL_BODY_SIZE = scaleDimension(0.13) * CELESTIAL_SIZE_SCALE;
 const ORBIT_SUN_SIZE = CELESTIAL_BODY_SIZE;
 const ORBIT_SUN_SPEED = 0.011;
 const ORBIT_SUN_SEASON_SPEED = 0.0026;
+const ORBIT_MOON_BAND_SPEED_FACTOR = 0.86;
+const CELESTIAL_TRAIL_LENGTH_DEFAULT_PERCENT = 100;
+const CELESTIAL_SPEED_DEFAULT = 1;
 const ORBIT_SUN_HALO_OPACITY = 0.2;
 const ORBIT_SUN_LIGHT_INTENSITY = 32;
 const ORBIT_SUN_BODY_EMISSIVE_INTENSITY = 5.4;
@@ -70,13 +74,18 @@ const ORBIT_SUN_AUREOLE_SCALE = ORBIT_SUN_SIZE * 18.5;
 const ORBIT_SUN_CORONA_OPACITY = 0.52;
 const ORBIT_SUN_AUREOLE_OPACITY = 0.24;
 const ORBIT_SUN_PULSE_SPEED = 0.0031;
+const SUN_COIL_TURNS = 10;
+const SUN_COIL_AMPLITUDE = scaleDimension(0.05);
+const SUN_COIL_PITCH = scaleDimension(0.075);
 const ORBIT_TRACK_TUBE_RADIUS = scaleDimension(0.045);
+const SUN_COIL_BASE_CLEARANCE = ORBIT_TRACK_TUBE_RADIUS + (ORBIT_SUN_SIZE * 1.12);
+const SUN_COIL_DOME_CLEARANCE = ORBIT_SUN_SIZE * 1.55;
 const ORBIT_HEIGHT_GUIDE_RADIUS = scaleDimension(0.018);
 const ORBIT_HEIGHT_GUIDE_MARKER_SIZE = scaleDimension(0.05);
 const ORBIT_HEIGHT_GUIDE_ANGLES = [-0.82, 1.34, 2.58];
 const RAW_ORBIT_MOON_BASE_HEIGHT = RAW_ORBIT_TRACK_HEIGHT + scaleDimension(0.28);
-const RAW_ORBIT_MOON_HEIGHT_NORTH = RAW_ORBIT_MOON_BASE_HEIGHT + scaleDimension(0.16);
-const RAW_ORBIT_MOON_HEIGHT_SOUTH = RAW_ORBIT_MOON_BASE_HEIGHT - scaleDimension(0.26);
+const RAW_ORBIT_MOON_HEIGHT_NORTH = RAW_ORBIT_MOON_BASE_HEIGHT + (scaleDimension(0.16) * MOON_ORBIT_ALTITUDE_CONTRAST);
+const RAW_ORBIT_MOON_HEIGHT_SOUTH = RAW_ORBIT_MOON_BASE_HEIGHT - (scaleDimension(0.26) * MOON_ORBIT_ALTITUDE_CONTRAST);
 const ORBIT_MOON_BASE_HEIGHT = scaleCelestialAltitude(RAW_ORBIT_MOON_BASE_HEIGHT);
 const ORBIT_MOON_HEIGHT_NORTH = scaleCelestialAltitude(RAW_ORBIT_MOON_HEIGHT_NORTH);
 const ORBIT_MOON_HEIGHT_SOUTH = scaleCelestialAltitude(RAW_ORBIT_MOON_HEIGHT_SOUTH);
@@ -84,7 +93,7 @@ const ORBIT_MOON_SIZE = CELESTIAL_BODY_SIZE;
 const ORBIT_MOON_HALO_OPACITY = 0.24;
 const ORBIT_MOON_LIGHT_INTENSITY = 8.4;
 const ORBIT_MOON_BODY_EMISSIVE_INTENSITY = 1.8;
-const ORBIT_MOON_SPEED = 0.0096;
+const ORBIT_MOON_SPEED = 0.0058;
 const DEMO_MOON_PHASE_DAYS_PER_SECOND = 3;
 const DEMO_MOON_PHASE_MS_PER_SECOND = DEMO_MOON_PHASE_DAYS_PER_SECOND * 86_400_000;
 const ORBIT_MOON_CORONA_SCALE = ORBIT_MOON_SIZE * 7.2;
@@ -187,6 +196,12 @@ const controlTabPanels = [...document.querySelectorAll("[data-control-panel]")];
 const translatableTextEls = [...document.querySelectorAll("[data-i18n]")];
 const translatableHtmlEls = [...document.querySelectorAll("[data-i18n-html]")];
 const orbitLabelEl = document.getElementById("orbit-label");
+const celestialTrailLengthEl = document.getElementById("celestial-trail-length");
+const celestialTrailLengthValueEl = document.getElementById("celestial-trail-length-value");
+const celestialSpeedEl = document.getElementById("celestial-speed");
+const celestialSpeedValueEl = document.getElementById("celestial-speed-value");
+const celestialFullTrailEl = document.getElementById("celestial-full-trail");
+const celestialMotionSummaryEl = document.getElementById("celestial-motion-summary");
 const orbitModeButtons = [...document.querySelectorAll("[data-orbit-mode]")];
 const cameraTrackButtons = [...document.querySelectorAll("[data-camera-track]")];
 const cameraTrackSummaryEl = document.getElementById("camera-track-summary");
@@ -1267,6 +1282,30 @@ enhanceMoonMaterialWithPhase(observerMoonBody.material);
 observerMoon.visible = false;
 firstPersonScene.add(observerMoon);
 
+const sunFullTrailGeometry = new THREE.BufferGeometry();
+const sunFullTrailMaterial = new THREE.LineBasicMaterial({
+  color: 0xffdc85,
+  transparent: true,
+  opacity: 0.26,
+  depthWrite: false,
+  depthTest: false
+});
+const sunFullTrail = new THREE.Line(sunFullTrailGeometry, sunFullTrailMaterial);
+scalableStage.add(sunFullTrail);
+
+const sunFullTrailPointsGeometry = new THREE.BufferGeometry();
+const sunFullTrailPointsMaterial = new THREE.PointsMaterial({
+  color: 0xffef9a,
+  size: scaleDimension(0.05),
+  sizeAttenuation: true,
+  transparent: true,
+  opacity: 0.22,
+  depthWrite: false,
+  depthTest: false
+});
+const sunFullTrailPointsCloud = new THREE.Points(sunFullTrailPointsGeometry, sunFullTrailPointsMaterial);
+scalableStage.add(sunFullTrailPointsCloud);
+
 const sunTrailGeometry = new THREE.BufferGeometry();
 const sunTrailMaterial = new THREE.LineBasicMaterial({
   color: 0xffdc85,
@@ -1290,6 +1329,30 @@ const sunTrailPointsMaterial = new THREE.PointsMaterial({
 });
 const sunTrailPointsCloud = new THREE.Points(sunTrailPointsGeometry, sunTrailPointsMaterial);
 scalableStage.add(sunTrailPointsCloud);
+
+const moonFullTrailGeometry = new THREE.BufferGeometry();
+const moonFullTrailMaterial = new THREE.LineBasicMaterial({
+  color: 0xd7def2,
+  transparent: true,
+  opacity: 0.24,
+  depthWrite: false,
+  depthTest: false
+});
+const moonFullTrail = new THREE.Line(moonFullTrailGeometry, moonFullTrailMaterial);
+scalableStage.add(moonFullTrail);
+
+const moonFullTrailPointsGeometry = new THREE.BufferGeometry();
+const moonFullTrailPointsMaterial = new THREE.PointsMaterial({
+  color: 0xf4f7ff,
+  size: scaleDimension(0.04),
+  sizeAttenuation: true,
+  transparent: true,
+  opacity: 0.2,
+  depthWrite: false,
+  depthTest: false
+});
+const moonFullTrailPointsCloud = new THREE.Points(moonFullTrailPointsGeometry, moonFullTrailPointsMaterial);
+scalableStage.add(moonFullTrailPointsCloud);
 
 const moonTrailGeometry = new THREE.BufferGeometry();
 const moonTrailMaterial = new THREE.LineBasicMaterial({
@@ -1378,10 +1441,14 @@ scalableStage.add(createOrbitTrack(TROPIC_CAPRICORN_RADIUS, 0xff93b6, 0.88, ORBI
 
 const simulationState = {
   demoPhaseDateMs: Date.now(),
+  moonBandDirection: -1,
+  moonBandProgress: 0.62,
   orbitMoonAngle: Math.PI * 0.35,
   orbitMode: "auto",
   orbitSeasonPhase: -Math.PI / 2,
-  orbitSunAngle: 0
+  orbitSunAngle: 0,
+  sunBandDirection: 1,
+  sunBandProgress: 0.12
 };
 const astronomyState = {
   enabled: true,
@@ -1389,6 +1456,11 @@ const astronomyState = {
   selectedDate: new Date(),
   lastTrailRebuildMs: 0,
   lastInputSyncMs: 0
+};
+const celestialControlState = {
+  trailLengthFactor: CELESTIAL_TRAIL_LENGTH_DEFAULT_PERCENT / 100,
+  speedMultiplier: CELESTIAL_SPEED_DEFAULT,
+  showFullTrail: true
 };
 const dayNightState = {
   enabled: true,
@@ -1497,13 +1569,24 @@ const constants = {
   FIRST_PERSON_SKY_RADIUS,
   FIRST_PERSON_WORLD_RADIUS,
   ORBIT_MOON_BASE_HEIGHT,
+  ORBIT_MOON_BAND_SPEED_FACTOR,
   ORBIT_MOON_HEIGHT_NORTH,
   ORBIT_MOON_HEIGHT_SOUTH,
   ORBIT_MOON_SIZE,
+  ORBIT_MOON_SPEED,
+  ORBIT_TRACK_TUBE_RADIUS,
   ORBIT_RADIUS_AMPLITUDE,
   ORBIT_RADIUS_MID,
+  ORBIT_SUN_SEASON_SPEED,
+  ORBIT_SUN_SPEED,
+  ORBIT_SUN_SIZE,
   RIM_INNER_RADIUS,
   SURFACE_Y,
+  SUN_COIL_AMPLITUDE,
+  SUN_COIL_BASE_CLEARANCE,
+  SUN_COIL_DOME_CLEARANCE,
+  SUN_COIL_PITCH,
+  SUN_COIL_TURNS,
   ORBIT_SUN_HEIGHT,
   ORBIT_SUN_HEIGHT_NORTH,
   ORBIT_SUN_HEIGHT_SOUTH,
@@ -1536,6 +1619,12 @@ const ui = {
   applyObservationTimeButton,
   analemmaOverlayEl,
   analemmaSummaryEl,
+  celestialFullTrailEl,
+  celestialMotionSummaryEl,
+  celestialSpeedEl,
+  celestialSpeedValueEl,
+  celestialTrailLengthEl,
+  celestialTrailLengthValueEl,
   dayNightOverlayEl,
   dayNightSummaryEl,
   firstPersonHorizonEl,
@@ -1623,7 +1712,9 @@ astronomyApi = createAstronomyController({
   constants,
   i18n,
   ui,
+  magneticFieldApi,
   astronomyState,
+  celestialControlState,
   seasonalMoonState,
   analemmaState,
   skyAnalemmaState,
@@ -1641,8 +1732,12 @@ astronomyApi = createAstronomyController({
   skyAnalemmaPointsGeometry,
   orbitSun,
   orbitMoon,
+  sunFullTrailGeometry,
+  sunFullTrailPointsGeometry,
   sunTrailGeometry,
   sunTrailPointsGeometry,
+  moonFullTrailGeometry,
+  moonFullTrailPointsGeometry,
   moonTrailGeometry,
   moonTrailPointsGeometry,
   northSeasonOverlay,
@@ -1724,8 +1819,21 @@ function getCurrentUiSnapshot() {
     date: demoPhaseDate,
     sun: getGeoFromProjectedPosition(orbitSun.position, DISC_RADIUS),
     moon: getGeoFromProjectedPosition(orbitMoon.position, DISC_RADIUS),
-    moonPhase: getMoonPhase(demoPhaseDate)
+    moonPhase: getMoonPhase(demoPhaseDate),
+    sunPosition: orbitSun.position.clone(),
+    sunRenderPosition: orbitSun.position.clone(),
+    sunDisplayHorizontal: astronomyApi?.getSunDisplayHorizontalFromPosition?.(orbitSun.position),
+    moonPosition: orbitMoon.position.clone(),
+    moonRenderPosition: orbitMoon.position.clone()
   };
+}
+
+function syncFullTrailVisibility() {
+  const visible = celestialControlState.showFullTrail && !walkerState.enabled;
+  sunFullTrail.visible = visible;
+  sunFullTrailPointsCloud.visible = visible;
+  moonFullTrail.visible = visible;
+  moonFullTrailPointsCloud.visible = visible;
 }
 
 i18n.subscribe(() => {
@@ -2061,6 +2169,8 @@ function updateObserverCelestialPerspective(snapshot) {
     firstPersonSunRayGroup.visible = false;
     orbitSun.visible = true;
     orbitSun.renderOrder = 20;
+    sunFullTrail.visible = celestialControlState.showFullTrail;
+    sunFullTrailPointsCloud.visible = celestialControlState.showFullTrail;
     sunTrail.visible = true;
     sunTrailPointsCloud.visible = true;
     orbitSunBody.material.opacity = 1;
@@ -2073,6 +2183,8 @@ function updateObserverCelestialPerspective(snapshot) {
     orbitSunLight.intensity = ORBIT_SUN_LIGHT_INTENSITY;
     orbitMoon.visible = true;
     orbitMoon.renderOrder = 18;
+    moonFullTrail.visible = celestialControlState.showFullTrail;
+    moonFullTrailPointsCloud.visible = celestialControlState.showFullTrail;
     moonTrail.visible = true;
     moonTrailPointsCloud.visible = true;
     orbitMoonBody.material.opacity = 1;
@@ -2151,6 +2263,8 @@ function updateObserverCelestialPerspective(snapshot) {
   );
 
   orbitSun.visible = false;
+  sunFullTrail.visible = false;
+  sunFullTrailPointsCloud.visible = false;
   sunTrail.visible = false;
   sunTrailPointsCloud.visible = false;
   observerSun.renderOrder = 24;
@@ -2203,6 +2317,8 @@ function updateObserverCelestialPerspective(snapshot) {
 
   orbitMoon.renderOrder = 23;
   orbitMoon.visible = false;
+  moonFullTrail.visible = false;
+  moonFullTrailPointsCloud.visible = false;
   moonTrail.visible = false;
   moonTrailPointsCloud.visible = false;
   observerMoon.renderOrder = 23;
@@ -2435,6 +2551,31 @@ routeSpeedEl.addEventListener("input", () => {
   routeSimulationApi.setSpeedMultiplier(routeSpeedEl.value);
 });
 
+celestialTrailLengthEl.addEventListener("input", () => {
+  celestialControlState.trailLengthFactor = THREE.MathUtils.clamp(
+    Number.parseFloat(celestialTrailLengthEl.value) / 100,
+    0,
+    1
+  );
+  astronomyApi.syncAstronomyControls();
+  astronomyApi.refreshTrailsForCurrentMode();
+});
+
+celestialSpeedEl.addEventListener("input", () => {
+  celestialControlState.speedMultiplier = THREE.MathUtils.clamp(
+    Number.parseFloat(celestialSpeedEl.value),
+    0,
+    5
+  );
+  astronomyApi.syncAstronomyControls();
+});
+
+celestialFullTrailEl.addEventListener("change", () => {
+  celestialControlState.showFullTrail = celestialFullTrailEl.checked;
+  astronomyApi.syncAstronomyControls();
+  syncFullTrailVisibility();
+});
+
 routePlaybackButton.addEventListener("click", () => {
   routeSimulationApi.togglePlayback();
 });
@@ -2530,8 +2671,7 @@ for (const button of orbitModeButtons) {
   button.addEventListener("click", () => {
     simulationState.orbitMode = button.dataset.orbitMode;
     astronomyApi.updateOrbitModeUi();
-    astronomyApi.resetSunTrail();
-    astronomyApi.resetMoonTrail();
+    astronomyApi.refreshTrailsForCurrentMode();
   });
 }
 
@@ -2609,6 +2749,29 @@ window.addEventListener("keyup", (event) => {
   }
 });
 
+function getBodyBandProgressStep(body) {
+  const turns = Math.max(magneticFieldApi.getCoilOrbitProfile(body).turns, 1);
+  const baseSpeed = body === "moon"
+    ? ORBIT_SUN_SEASON_SPEED * ORBIT_MOON_BAND_SPEED_FACTOR
+    : ORBIT_SUN_SEASON_SPEED;
+  return baseSpeed / turns;
+}
+
+function advanceBandProgress(progressKey, directionKey, step) {
+  const direction = simulationState[directionKey] ?? 1;
+  let nextProgress = (simulationState[progressKey] ?? 0.5) + (step * direction);
+
+  if (nextProgress >= 1) {
+    nextProgress = 1;
+    simulationState[directionKey] = -1;
+  } else if (nextProgress <= 0) {
+    nextProgress = 0;
+    simulationState[directionKey] = 1;
+  }
+
+  simulationState[progressKey] = nextProgress;
+}
+
 function animate() {
   requestAnimationFrame(animate);
   const deltaSeconds = Math.min(clock.getDelta(), 0.05);
@@ -2630,23 +2793,29 @@ function animate() {
     snapshot = astronomyApi.getAstronomySnapshot(observationDate);
     astronomyApi.applyAstronomySnapshot(snapshot);
   } else {
-    simulationState.orbitSunAngle += ORBIT_SUN_SPEED;
+    const speedMultiplier = celestialControlState.speedMultiplier;
+    simulationState.orbitSunAngle += ORBIT_SUN_SPEED * speedMultiplier;
     if (simulationState.orbitMode === "auto") {
-      simulationState.orbitSeasonPhase += ORBIT_SUN_SEASON_SPEED;
+      advanceBandProgress("sunBandProgress", "sunBandDirection", getBodyBandProgressStep("sun") * speedMultiplier);
+      advanceBandProgress("moonBandProgress", "moonBandDirection", getBodyBandProgressStep("moon") * speedMultiplier);
     }
-    simulationState.orbitMoonAngle += ORBIT_MOON_SPEED;
-    simulationState.demoPhaseDateMs += deltaSeconds * DEMO_MOON_PHASE_MS_PER_SECOND;
+    simulationState.orbitMoonAngle += ORBIT_MOON_SPEED * speedMultiplier;
+    simulationState.demoPhaseDateMs += deltaSeconds * DEMO_MOON_PHASE_MS_PER_SECOND * speedMultiplier;
     projectionDate = new Date(simulationState.demoPhaseDateMs);
-    const orbitRadius = astronomyApi.getCurrentOrbitRadius();
-    orbitSun.position.set(
-      Math.cos(simulationState.orbitSunAngle) * orbitRadius,
-      astronomyApi.getSunOrbitHeight(orbitRadius),
-      Math.sin(simulationState.orbitSunAngle) * orbitRadius
-    );
+    const sunRenderState = astronomyApi.getSunRenderState({
+      orbitAngleRadians: simulationState.orbitSunAngle,
+      orbitMode: simulationState.orbitMode,
+      progress: simulationState.sunBandProgress,
+      source: "demo"
+    });
+    orbitSun.position.copy(sunRenderState.position);
     astronomyApi.updateSunTrail();
-    astronomyApi.updateMoonOrbit(orbitRadius);
+    astronomyApi.updateMoonOrbit({
+      orbitMode: simulationState.orbitMode,
+      progress: simulationState.moonBandProgress
+    });
     astronomyApi.updateMoonTrail();
-    astronomyApi.updateSeasonPresentation(orbitRadius);
+    astronomyApi.updateSeasonPresentation(sunRenderState.centerRadius);
     const demoSunGeo = getGeoFromProjectedPosition(orbitSun.position, DISC_RADIUS);
     const demoMoonGeo = getGeoFromProjectedPosition(orbitMoon.position, DISC_RADIUS);
     astronomyApi.updateDayNightOverlayFromSun(demoSunGeo.latitudeDegrees, demoSunGeo.longitudeDegrees);
@@ -2654,7 +2823,12 @@ function animate() {
       date: projectionDate,
       sun: demoSunGeo,
       moon: demoMoonGeo,
-      moonPhase: getMoonPhase(projectionDate)
+      moonPhase: getMoonPhase(projectionDate),
+      sunPosition: orbitSun.position.clone(),
+      sunRenderPosition: orbitSun.position.clone(),
+      sunDisplayHorizontal: astronomyApi.getSunDisplayHorizontalFromPosition(orbitSun.position),
+      moonPosition: orbitMoon.position.clone(),
+      moonRenderPosition: orbitMoon.position.clone()
     };
     astronomyApi.updateAstronomyUi(snapshot);
   }
@@ -2694,6 +2868,7 @@ astronomyApi.syncSeasonalMoonUi();
 astronomyApi.syncSeasonalSunUi(true);
 walkerApi.syncWalkerUi();
 routeSimulationApi.initialize();
+syncFullTrailVisibility();
 astronomyApi.enableRealityMode({ live: true, date: astronomyState.selectedDate });
 animate();
 
