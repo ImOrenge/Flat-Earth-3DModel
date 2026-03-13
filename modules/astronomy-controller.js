@@ -8,14 +8,16 @@ import {
   latitudeFromProjectedRadius
 } from "./geo-utils.js";
 import {
+  createSolarEclipseState,
   getAstronomySnapshot as buildAstronomySnapshot,
+  getSunSubpoint,
   getSeasonalEventMoments,
   getSeasonalMoonAudit,
   getSeasonalSunAudit,
   getMoonHorizontalCoordinates,
   getSunHorizontalCoordinates,
   SEASONAL_EVENT_DEFINITIONS
-} from "./astronomy-utils.js?v=20260312-coilorbit2";
+} from "./astronomy-utils.js?v=20260312-darksun-stages1";
 
 export function createAstronomyController({
   constants,
@@ -40,6 +42,7 @@ export function createAstronomyController({
   skyAnalemmaGeometry,
   skyAnalemmaPointsGeometry,
   orbitSun,
+  orbitDarkSun,
   orbitMoon,
   sunFullTrailGeometry,
   sunFullTrailPointsGeometry,
@@ -70,7 +73,14 @@ export function createAstronomyController({
   const tempSkyOrigin = new THREE.Vector3();
   const tempHorizontalRelative = new THREE.Vector3();
   const tempRadialAxis = new THREE.Vector3();
+  const DARK_SUN_REFERENCE_TIME_MS = Date.parse("2026-01-01T00:00:00Z");
+  const DARK_SUN_START_ANGLE = Math.PI;
+  const DARK_SUN_START_PROGRESS = 0.88;
+  const DARK_SUN_START_DIRECTION = -1;
+  const DARK_SUN_ORBIT_SPEED_FACTOR = 0.72;
+  const DARK_SUN_BAND_SPEED_FACTOR = 1.08;
   let lastSeasonalSunKey = "";
+  let lastSolarEclipseState = createSolarEclipseState();
   const bandCenterProgressByMode = {
     north: 0.5,
     equator: 0.5,
@@ -204,6 +214,27 @@ export function createAstronomyController({
   function getMoonDirectionLabel(moonPhase) {
     const phaseProgress = THREE.MathUtils.euclideanModulo(moonPhase?.phaseProgress ?? 0, 1);
     return i18n.t(phaseProgress < 0.5 ? "moonDirectionWaxing" : "moonDirectionWaning");
+  }
+
+  function getSolarEclipseStageLabel(solarEclipse) {
+    return i18n.t(solarEclipse?.stageLabelKey ?? "solarEclipseStageIdle");
+  }
+
+  function getSolarEclipseSummaryKey(solarEclipse) {
+    switch (solarEclipse?.stageKey) {
+      case "approach":
+        return "solarEclipseSummaryApproach";
+      case "partialIngress":
+        return "solarEclipseSummaryPartialIngress";
+      case "totality":
+        return "solarEclipseSummaryTotality";
+      case "partialEgress":
+        return "solarEclipseSummaryPartialEgress";
+      case "complete":
+        return "solarEclipseSummaryComplete";
+      default:
+        return "solarEclipseSummaryIdle";
+    }
   }
 
   function syncMoonPhaseUi(snapshot) {
@@ -479,11 +510,59 @@ export function createAstronomyController({
     });
   }
 
+  function getRealityDarkSunState(date) {
+    const referenceSun = getSunSubpoint(new Date(DARK_SUN_REFERENCE_TIME_MS));
+    const currentSun = getSunSubpoint(date);
+    const currentProjectedRadius = projectedRadiusFromLatitude(
+      currentSun.latitudeDegrees,
+      constants.DISC_RADIUS
+    );
+    const elapsedFrames = Math.max(
+      0,
+      (date.getTime() - DARK_SUN_REFERENCE_TIME_MS) / (1000 / 60)
+    );
+
+    return {
+      direction: DARK_SUN_START_DIRECTION,
+      orbitAngleRadians: THREE.MathUtils.degToRad(referenceSun.longitudeDegrees + 180) -
+        (constants.ORBIT_SUN_SPEED * DARK_SUN_ORBIT_SPEED_FACTOR * elapsedFrames),
+      progress: 1 - getBodyProgressFromProjectedRadius("darkSun", currentProjectedRadius)
+    };
+  }
+
+  function getDarkSunRenderState({
+    date = astronomyState.selectedDate,
+    orbitAngleRadians = simulationState.orbitDarkSunAngle ?? DARK_SUN_START_ANGLE,
+    progress = simulationState.darkSunBandProgress ?? DARK_SUN_START_PROGRESS,
+    source = "reality",
+    orbitMode = source === "demo" ? simulationState.orbitMode : "auto"
+  } = {}) {
+    if (source === "demo") {
+      return getBodyCoilRenderState({
+        body: "darkSun",
+        orbitAngleRadians,
+        orbitMode,
+        progress,
+        source: "demo"
+      });
+    }
+
+    const realityState = getRealityDarkSunState(date);
+    return getBodyCoilRenderState({
+      body: "darkSun",
+      orbitAngleRadians: realityState.orbitAngleRadians,
+      orbitMode: "auto",
+      progress: realityState.progress,
+      source: "demo"
+    });
+  }
+
   function getAstronomySnapshot(date) {
     const snapshot = buildAstronomySnapshot({
       date,
       discRadius: constants.DISC_RADIUS,
       domeRadius: constants.DOME_RADIUS,
+      getDarkSunRenderState,
       getSunRenderState,
       getMoonBaseHeight,
       getMoonRenderState
@@ -582,6 +661,9 @@ export function createAstronomyController({
     ui.realityLiveEl.disabled = !astronomyState.enabled;
     ui.observationTimeEl.disabled = !astronomyState.enabled || astronomyState.live;
     ui.applyObservationTimeButton.disabled = !astronomyState.enabled || astronomyState.live;
+    if (ui.darkSunDebugEl) {
+      ui.darkSunDebugEl.checked = Boolean(simulationState.darkSunDebugVisible);
+    }
     syncCelestialMotionUi();
 
     for (const button of orbitModeButtons) {
@@ -733,10 +815,16 @@ export function createAstronomyController({
   }
 
   function getBodyBandProgressStep(body) {
-    const turns = Math.max(magneticFieldApi?.getCoilOrbitProfile?.(body)?.turns ?? 1, 1);
-    const baseSpeed = body === "moon"
-      ? constants.ORBIT_SUN_SEASON_SPEED * constants.ORBIT_MOON_BAND_SPEED_FACTOR
-      : constants.ORBIT_SUN_SEASON_SPEED;
+    const normalizedBody = body === "darkSun" ? "sun" : body;
+    const turns = Math.max(magneticFieldApi?.getCoilOrbitProfile?.(normalizedBody)?.turns ?? 1, 1);
+    let baseSpeed = constants.ORBIT_SUN_SEASON_SPEED;
+
+    if (body === "moon") {
+      baseSpeed *= constants.ORBIT_MOON_BAND_SPEED_FACTOR;
+    } else if (body === "darkSun") {
+      baseSpeed *= DARK_SUN_BAND_SPEED_FACTOR;
+    }
+
     return baseSpeed / turns;
   }
 
@@ -1137,6 +1225,34 @@ export function createAstronomyController({
       : i18n.t(orbitModes[simulationState.orbitMode].labelKey);
   }
 
+  function syncSolarEclipseUi(solarEclipse = lastSolarEclipseState) {
+    const nextState = createSolarEclipseState(solarEclipse);
+    const stateKey = nextState.active
+      ? (nextState.total ? "solarEclipseStateTotal" : "solarEclipseStatePartial")
+      : "solarEclipseStateNone";
+    const stateLabel = i18n.t(stateKey);
+    const stageLabel = getSolarEclipseStageLabel(nextState);
+    const coverageLabel = `${Math.round(THREE.MathUtils.clamp(nextState.coverage, 0, 1) * 100)}%`;
+
+    lastSolarEclipseState = nextState;
+    if (ui.solarEclipseStateEl) {
+      ui.solarEclipseStateEl.textContent = stateLabel;
+    }
+    if (ui.solarEclipseStageEl) {
+      ui.solarEclipseStageEl.textContent = stageLabel;
+    }
+    if (ui.solarEclipseCoverageEl) {
+      ui.solarEclipseCoverageEl.textContent = coverageLabel;
+    }
+    if (ui.solarEclipseSummaryEl) {
+      ui.solarEclipseSummaryEl.textContent = i18n.t(getSolarEclipseSummaryKey(nextState), {
+        coverage: coverageLabel,
+        state: stateLabel,
+        stage: stageLabel
+      });
+    }
+  }
+
   function updateSeasonPresentation(radius) {
     const latitude = latitudeFromProjectedRadius(radius, constants.DISC_RADIUS);
     const ratio = THREE.MathUtils.clamp(latitude / constants.TROPIC_LATITUDE, -1, 1);
@@ -1177,6 +1293,9 @@ export function createAstronomyController({
 
   function applyAstronomySnapshot(snapshot) {
     orbitSun.position.copy(snapshot.sunRenderPosition ?? snapshot.sunPosition);
+    if (snapshot.darkSunRenderPosition) {
+      orbitDarkSun.position.copy(snapshot.darkSunRenderPosition);
+    }
     orbitMoon.position.copy(snapshot.moonRenderPosition ?? snapshot.moonPosition);
     updateSeasonPresentation(projectedRadiusFromLatitude(snapshot.sun.latitudeDegrees, constants.DISC_RADIUS));
     updateAstronomyUi(snapshot);
@@ -1312,6 +1431,7 @@ export function createAstronomyController({
     const activeDate = astronomyState.live ? new Date() : astronomyState.selectedDate;
     syncDayNightOverlayUi();
     syncAstronomyControls();
+    syncSolarEclipseUi(lastSolarEclipseState);
     syncSeasonalMoonUi();
     syncSeasonalSunUi(true);
     syncAnalemmaUi(activeDate, true);
@@ -1361,6 +1481,7 @@ export function createAstronomyController({
     getBodyCoilRenderState,
     getAstronomySnapshot,
     getCurrentOrbitRadius,
+    getDarkSunRenderState,
     getMoonBaseHeight,
     getMoonRenderState,
     getSunDisplayHorizontalFromPosition,
@@ -1377,6 +1498,7 @@ export function createAstronomyController({
     syncAnalemmaUi,
     syncSkyAnalemmaUi,
     syncDayNightOverlayUi,
+    syncSolarEclipseUi,
     syncSeasonalMoonUi,
     syncSeasonalSunUi,
     syncLiveObservationInput,

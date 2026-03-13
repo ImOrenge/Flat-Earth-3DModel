@@ -294,12 +294,14 @@ export function createMagneticFieldController({
   }
 
   function getCoilOrbitProfile(body = "sun") {
-    const profile = coilOrbitProfiles[body] ?? coilOrbitProfiles.sun;
+    const normalizedBody = body === "darkSun" ? "sun" : body;
+    const profile = coilOrbitProfiles[normalizedBody] ?? coilOrbitProfiles.sun;
     return { ...profile };
   }
 
   function sampleCoilOrbitProfile(body = "sun", progress = 0) {
-    const profile = coilOrbitProfiles[body] ?? coilOrbitProfiles.sun;
+    const normalizedBody = body === "darkSun" ? "sun" : body;
+    const profile = coilOrbitProfiles[normalizedBody] ?? coilOrbitProfiles.sun;
     const clampedProgress = THREE.MathUtils.clamp(progress, 0, 1);
     const radiusProgress = clampedProgress ** profile.radiusCurveExponent;
     const radius = THREE.MathUtils.lerp(profile.radiusStart, profile.radiusEnd, radiusProgress);

@@ -379,10 +379,33 @@ export function getBodyPositionFromGeo({
   );
 }
 
+export function createSolarEclipseState(overrides = {}) {
+  return {
+    active: false,
+    total: false,
+    coverage: 0,
+    rawCoverage: 0,
+    direction: "idle",
+    lightReduction: 0,
+    normalizedDistance: Number.POSITIVE_INFINITY,
+    recentlyActive: false,
+    hasContact: false,
+    hasVisibleOverlap: false,
+    contactDepthPx: 0,
+    rawStageKey: "idle",
+    stageKey: "idle",
+    stageLabelKey: "solarEclipseStageIdle",
+    stageProgress: 0,
+    visibleInView: false,
+    ...overrides
+  };
+}
+
 export function getAstronomySnapshot({
   date,
   discRadius,
   domeRadius,
+  getDarkSunRenderState,
   getSunRenderState,
   getMoonBaseHeight,
   getMoonRenderState
@@ -421,6 +444,13 @@ export function getAstronomySnapshot({
     discRadius,
     domeRadius
   });
+  const darkSunRenderState = getDarkSunRenderState
+    ? getDarkSunRenderState({
+      date,
+      source: "reality"
+    })
+    : null;
+  const darkSunRenderPosition = darkSunRenderState?.position?.clone() ?? null;
 
   return {
     date,
@@ -430,9 +460,12 @@ export function getAstronomySnapshot({
     sunPosition: sunRenderPosition.clone(),
     sunRenderPosition,
     sunRenderState,
+    darkSunRenderPosition,
+    darkSunRenderState,
     moonPosition: moonRenderPosition.clone(),
     moonRenderPosition,
-    moonRenderState
+    moonRenderState,
+    solarEclipse: createSolarEclipseState()
   };
 }
 

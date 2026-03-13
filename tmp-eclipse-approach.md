@@ -1,0 +1,213 @@
+- generic [ref=e2]:
+  - generic:
+    - generic:
+      - paragraph: 1인칭
+      - strong: Preparing observer render
+      - paragraph: Scaling the disc and compiling the first-person render path.
+  - generic:
+    - complementary [ref=e4]:
+      - paragraph [ref=e5]: 3D 모델
+      - heading "평면 지구 원반" [level=1] [ref=e6]
+      - paragraph [ref=e7]:
+        - text: 기본 번들 지도는
+        - code [ref=e8]: assets/flat-earth-map-square.svg
+        - text: 입니다. 모델 용 사용자 지도를 바꾸려면
+        - code [ref=e9]: assets/flat-earth-map.png
+        - text: 를 교체하거나, 여기에 SVG를 업로드해 미리보기를 바로 갱신하세요.
+      - generic [ref=e10]:
+        - generic [ref=e11]: 언어
+        - generic [ref=e12] [cursor=pointer]:
+          - switch "언어 전환" [ref=e13]
+          - generic [ref=e15]: 한국어
+      - generic [ref=e16]:
+        - generic [ref=e17] [cursor=pointer]: 지도 업로드
+        - button "카메라 초기화" [ref=e18] [cursor=pointer]
+      - button "지도 업로드" [ref=e19]
+      - generic [ref=e20]:
+        - generic [ref=e21]:
+          - generic [ref=e22]: 태양 위도
+          - strong [ref=e23]: 4.7degS
+        - generic [ref=e24]:
+          - generic [ref=e25]: 계절 상태
+          - strong [ref=e26]: 북반구 겨울 / 남반구 여름
+        - paragraph [ref=e27]: 태양이 남회귀선에 더 가까워 이 모델에서는 남반구가 더 직접적인 조명을 받습니다.
+      - generic [ref=e28]:
+        - generic [ref=e29]:
+          - generic [ref=e30]: 모델
+          - strong [ref=e31]: 원반 + 빙벽
+        - generic [ref=e32]:
+          - generic [ref=e33]: 출력
+          - strong [ref=e34]: OBJ / MTL
+      - list [ref=e35]:
+        - listitem [ref=e36]:
+          - code [ref=e37]: scripts/generate-flat-earth-obj.ps1
+          - text: 로 메시를 생성합니다.
+        - listitem [ref=e38]:
+          - code [ref=e39]: models/flat-earth-disc.obj
+          - text: 를 Blender 또는 다른 DCC 도구에서 엽니다.
+        - listitem [ref=e40]:
+          - text: 새 모델 텍스처가 필요하면
+          - code [ref=e41]: assets/flat-earth-map.png
+          - text: 를 교체한 뒤 메시 스크립트를 다시 실행하세요.
+      - paragraph [ref=e42]: assets/flat-earth-map-square.svg 기본 번들 지도를 상단 정사각 표면에 불러왔습니다.
+    - complementary [ref=e43]:
+      - paragraph [ref=e44]: 세부 제어
+      - tablist "세부 제어 섹션" [ref=e45]:
+        - button "천문" [ref=e46] [cursor=pointer]
+        - button "경로 제어" [ref=e47] [cursor=pointer]
+      - generic [ref=e48]:
+        - generic [ref=e49]:
+          - generic [ref=e50]:
+            - generic [ref=e51]: 현실 동기화
+            - generic [ref=e52] [cursor=pointer]:
+              - switch "켜짐" [ref=e53]
+              - generic [ref=e55]: 켜짐
+          - generic [ref=e56]:
+            - generic [ref=e57]: 현재 시간 사용
+            - generic [ref=e58] [cursor=pointer]:
+              - switch "실시간" [disabled] [ref=e59]
+              - generic [ref=e61]: 실시간
+          - generic [ref=e62]:
+            - generic [ref=e63]: 관측 시간
+            - textbox "관측 시간" [disabled] [ref=e64]: 2026-03-13T11:29
+          - generic [ref=e65]:
+            - button "시간 미리보기" [disabled] [ref=e66] [cursor=pointer]
+            - button "현재로 복귀" [ref=e67] [cursor=pointer]
+          - paragraph [ref=e68]: 데모 공전 모드가 활성화되어 있습니다.
+          - generic [ref=e69]:
+            - generic [ref=e70]:
+              - generic [ref=e71]: 태양
+              - strong [ref=e72]: 4.67degS / 102.11degE
+            - generic [ref=e73]:
+              - generic [ref=e74]: 달
+              - strong [ref=e75]: 2.75degS / 129.85degW | 후기 기우는 달 | 조도 74%
+          - generic [ref=e76]:
+            - paragraph [ref=e77]: 달 위상 표
+            - paragraph [ref=e78]: 360deg / 16단계 위상 값을 위상표와 달 렌더링에 동일하게 사용합니다.
+            - img "360deg 달 위상표, 차오름과 기움 구간 표시" [ref=e80]
+            - generic [ref=e81]:
+              - generic [ref=e82]:
+                - generic [ref=e83]: 현재 위상
+                - strong [ref=e84]: 후기 기우는 달
+              - generic [ref=e85]:
+                - generic [ref=e86]: 위상 각도
+                - strong [ref=e87]: 240.7deg
+              - generic [ref=e88]:
+                - generic [ref=e89]: 16단계 진행
+                - strong [ref=e90]: 12 / 16
+              - generic [ref=e91]:
+                - generic [ref=e92]: 주기 방향
+                - strong [ref=e93]: 기움
+          - generic [ref=e94]:
+            - generic [ref=e95]: 주야 오버레이
+            - generic [ref=e96] [cursor=pointer]:
+              - switch "표시" [checked] [ref=e97]
+              - generic [ref=e99]: 표시
+          - paragraph [ref=e100]: 밤 영역 오버레이가 활성화되어 있습니다.
+          - generic [ref=e101]:
+            - generic [ref=e102]: 지면 아날렘마
+            - generic [ref=e103] [cursor=pointer]:
+              - switch "연간 경로" [checked] [ref=e104]
+              - generic [ref=e106]: 연간 경로
+          - paragraph [ref=e107]: 2026년 오전 11:29 현지 시각 기준 지면 투영입니다. 원반 표면에 하루당 하나의 태양 하점을 샘플링합니다.
+          - generic [ref=e108]:
+            - generic [ref=e109]: 자기장
+            - generic [ref=e110] [cursor=pointer]:
+              - switch "자기장 선" [checked] [ref=e111]
+              - generic [ref=e113]: 자기장 선
+          - paragraph [ref=e114]: 북극 중심에서 돔 상단으로 솟아오른 자기장 선이 남극권 경계 방향으로 방사하며, 중심축 주위를 최저 고도에서 위로 갈수록 폭이 넓어지는 나선 코일이 감십니다.
+          - generic [ref=e115]:
+            - paragraph [ref=e116]: 일식
+            - generic [ref=e117]:
+              - generic [ref=e118]:
+                - generic [ref=e119]: 일식
+                - strong [ref=e120]: 부분
+              - generic [ref=e121]:
+                - generic [ref=e122]: 단계
+                - strong [ref=e123]: 복귀
+              - generic [ref=e124]:
+                - generic [ref=e125]: 가림률
+                - strong [ref=e126]: 22%
+            - paragraph [ref=e127]: 일식이 복귀 단계에 들어갔습니다. 현재 가림률은 22%입니다.
+            - button "일식 직전 연출" [active] [ref=e129] [cursor=pointer]
+            - generic [ref=e130]:
+              - generic [ref=e131]: 암흑태양 디버그
+              - generic [ref=e132] [cursor=pointer]:
+                - switch "표시" [ref=e133]
+                - generic [ref=e135]: 표시
+          - generic [ref=e136]:
+            - generic [ref=e137]: 하늘 궤도
+            - generic [ref=e138] [cursor=pointer]:
+              - switch "관측자 궤적" [ref=e139]
+              - generic [ref=e141]: 관측자 궤적
+        - generic [ref=e142]:
+          - generic [ref=e143]:
+            - generic [ref=e144]: 워커 시점
+            - generic [ref=e145] [cursor=pointer]:
+              - switch "1인칭" [ref=e146]
+              - generic [ref=e148]: 1인칭
+          - paragraph [ref=e149]: WASD 또는 방향키로 지도를 걸어 다니며 관측자 위치 기준의 낮과 밤을 확인할 수 있습니다.
+          - generic [ref=e150]:
+            - generic [ref=e151]:
+              - generic [ref=e152]: 관측자
+              - strong [ref=e153]: 37.57degN / 126.98degE
+            - generic [ref=e154]:
+              - generic [ref=e155]: 현지 광량
+              - strong [ref=e156]: 낮
+          - button "워커 초기화" [ref=e158] [cursor=pointer]
+        - generic [ref=e159]:
+          - paragraph [ref=e160]: 계절 점검 제어
+          - generic [ref=e161]:
+            - generic [ref=e162]: 점검 연도
+            - spinbutton "점검 연도" [ref=e163]: "2026"
+          - generic [ref=e164]:
+            - button "춘분" [ref=e165] [cursor=pointer]
+            - button "하지" [ref=e166] [cursor=pointer]
+            - button "추분" [ref=e167] [cursor=pointer]
+            - button "동지" [ref=e168] [cursor=pointer]
+          - paragraph [ref=e169]: "공유 계절 기준점: 2026년 춘분 2026. 3. 21. 오전 10:23"
+          - paragraph [ref=e170]: 달 점검
+          - generic [ref=e171]:
+            - generic [ref=e172]:
+              - generic [ref=e173]: 달 기준점
+              - strong [ref=e174]: 13.63degN / 176.71degW
+            - generic [ref=e175]:
+              - generic [ref=e176]: 24시간 변화
+              - strong [ref=e177]: 위도 변화 +5.9deg / 경도 변화 +12.4deg
+          - paragraph [ref=e178]: 춘분 기준으로 달 위상은 초기 초승달이며 조도는 7%입니다. 24시간 동안 달 하점은 10.6degN에서 16.5degN까지 움직이고, 경도는 347.6deg 범위로 이동합니다.
+        - generic [ref=e179]:
+          - paragraph [ref=e180]: 태양 공전
+          - generic [ref=e181]:
+            - button "자동" [ref=e182] [cursor=pointer]
+            - button "북측 밴드" [ref=e183] [cursor=pointer]
+            - button "중앙 밴드" [ref=e184] [cursor=pointer]
+            - button "남측 밴드" [ref=e185] [cursor=pointer]
+          - paragraph [ref=e186]: "자동 모드: 원형 공전을 유지한 채 반경이 회귀선 통로 전체에서 이동하고, 고도는 북측에서 가장 높고 남측에서 가장 낮습니다."
+          - paragraph [ref=e187]: "고도 프로필: 북측 밴드가 가장 높고, 중앙은 중간, 남측 밴드는 가장 낮습니다."
+        - generic [ref=e188]:
+          - paragraph [ref=e189]: 천체 움직임
+          - generic [ref=e190]:
+            - generic [ref=e191]: 잔상 길이
+            - slider "잔상 길이" [ref=e192]: "100"
+          - generic [ref=e193]:
+            - generic [ref=e194]: 현재 잔상
+            - strong [ref=e195]: 100%
+          - generic [ref=e196]:
+            - generic [ref=e197]: 데모 공전 속도
+            - slider "데모 공전 속도" [ref=e198]: "0.5"
+          - generic [ref=e199]:
+            - generic [ref=e200]: 데모 속도
+            - strong [ref=e201]: 0.5x
+          - generic [ref=e202]:
+            - generic [ref=e203]: 전체 경로
+            - generic [ref=e204] [cursor=pointer]:
+              - switch "표시" [checked] [ref=e205]
+              - generic [ref=e207]: 표시
+          - paragraph [ref=e208]: 데모 속도는 태양과 달을 함께 배속하고, 전체 경로는 위도와 고도 변화 전체 주기를 겹쳐 보여줍니다.
+        - generic [ref=e209]:
+          - paragraph [ref=e210]: Celestial Tracking
+          - generic [ref=e211]:
+            - button "Free Camera" [ref=e212] [cursor=pointer]
+            - button "Track Sun" [ref=e213] [cursor=pointer]
+            - button "Track Moon" [ref=e214] [cursor=pointer]
+          - paragraph [ref=e215]: Top-down camera is tracking the sun and keeps it centered while it moves.

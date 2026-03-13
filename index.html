@@ -205,6 +205,37 @@
             <p class="sync-copy subtle" id="magnetic-field-summary">
               Radial magnetic field lines flow from the north polar mountain toward the southern boundary.
             </p>
+            <section class="sun-audit-panel">
+              <p class="orbit-title" data-i18n="solarEclipseTitle">Solar Eclipse</p>
+              <div class="coord-grid">
+                <div class="coord-card">
+                  <span class="coord-label" data-i18n="solarEclipseTitle">Solar Eclipse</span>
+                  <strong class="coord-value" id="solar-eclipse-state">None</strong>
+                </div>
+                <div class="coord-card">
+                  <span class="coord-label" data-i18n="solarEclipseStage">Stage</span>
+                  <strong class="coord-value" id="solar-eclipse-stage">Idle</strong>
+                </div>
+                <div class="coord-card">
+                  <span class="coord-label" data-i18n="solarEclipseCoverage">Coverage</span>
+                  <strong class="coord-value" id="solar-eclipse-coverage">0%</strong>
+                </div>
+              </div>
+              <p class="sync-copy subtle" id="solar-eclipse-summary">
+                No dark sun overlap is active.
+              </p>
+              <div class="button-row compact">
+                <button class="button secondary compact-button" id="stage-pre-eclipse" type="button" data-i18n="stagePreEclipseButton">Stage Pre-Eclipse</button>
+              </div>
+              <div class="sync-row overlay-row">
+                <span class="sync-title" data-i18n="darkSunDebugTitle">Dark Sun Debug</span>
+                <label class="toggle">
+                  <input id="dark-sun-debug" type="checkbox" role="switch">
+                  <span class="toggle-switch" aria-hidden="true"></span>
+                  <span class="toggle-text" data-i18n="toggleDarkSunDebug">Show</span>
+                </label>
+              </div>
+            </section>
             <div class="sync-row overlay-row" hidden>
               <span class="sync-title" data-i18n="skyOrbitTitle">Sky Orbit</span>
               <label class="toggle">
@@ -300,11 +331,11 @@
             </div>
             <label class="field" for="celestial-speed">
               <span class="field-label" data-i18n="celestialSpeedLabel">Demo Orbit Speed</span>
-              <input class="slider-input" id="celestial-speed" type="range" min="0" max="5" step="0.1" value="1">
+              <input class="slider-input" id="celestial-speed" type="range" min="0" max="5" step="0.1" value="0.5">
             </label>
             <div class="sync-row celestial-value-row">
               <span class="sync-title" data-i18n="celestialSpeedValueTitle">Demo Speed</span>
-              <strong class="route-speed-value" id="celestial-speed-value">1.0x</strong>
+              <strong class="route-speed-value" id="celestial-speed-value">0.5x</strong>
             </div>
             <div class="sync-row overlay-row">
               <span class="sync-title" data-i18n="celestialFullTrailTitle">Full Orbit Path</span>
@@ -401,6 +432,6 @@
     </div>
   </div>
 
-  <script type="module" src="./app.js?v=20260312-coilorbit2"></script>
+  <script type="module" src="./app.js?v=20260312-darksun-mask1"></script>
 </body>
 </html>

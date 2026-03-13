@@ -1,5 +1,5 @@
 import * as THREE from "../vendor/three.module.js";
-import { getDisplayLocalSolarAltitudeDegreesFromModel } from "./astronomy-utils.js";
+import { getDisplayLocalSolarAltitudeDegreesFromModel } from "./astronomy-utils.js?v=20260312-darksun-eclipse1";
 
 const DEFAULT_FOG_COLOR = new THREE.Color(0x06101d);
 
@@ -554,9 +554,22 @@ export function createFirstPersonWorldController({
       Math.max(sunRenderPosition.y - constants.WALKER_EYE_HEIGHT, 0.0001)
     );
     const sunAltitudeRadians = THREE.MathUtils.degToRad(sunAltitudeDegrees);
-    const dayFactor = THREE.MathUtils.clamp(THREE.MathUtils.inverseLerp(0, 30, sunAltitudeDegrees), 0, 1);
-    const twilightFactor = THREE.MathUtils.clamp(1 - (Math.abs(sunAltitudeDegrees + 3) / 9), 0, 1);
-    const nightFactor = THREE.MathUtils.clamp((-sunAltitudeDegrees - 5) / 20, 0, 1);
+    const solarEclipseReduction = THREE.MathUtils.clamp(snapshot.solarEclipse?.lightReduction ?? 0, 0, 1);
+    const dayFactor = THREE.MathUtils.clamp(
+      THREE.MathUtils.inverseLerp(0, 30, sunAltitudeDegrees) * (1 - (solarEclipseReduction * 0.55)),
+      0,
+      1
+    );
+    const twilightFactor = THREE.MathUtils.clamp(
+      (1 - (Math.abs(sunAltitudeDegrees + 3) / 9)) + (solarEclipseReduction * 0.24),
+      0,
+      1
+    );
+    const nightFactor = THREE.MathUtils.clamp(
+      ((-sunAltitudeDegrees - 5) / 20) + (solarEclipseReduction * 0.18),
+      0,
+      1
+    );
 
     scene.background = null;
 

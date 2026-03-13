@@ -4,18 +4,19 @@ import {
   projectedRadiusFromLatitude
 } from "./modules/geo-utils.js";
 import {
+  createSolarEclipseState,
   getMoonPhase,
   getSolarAltitudeFactor,
-} from "./modules/astronomy-utils.js?v=20260312-coilorbit2";
-import { createAstronomyController } from "./modules/astronomy-controller.js?v=20260312-coilorbit2";
+} from "./modules/astronomy-utils.js?v=20260312-darksun-stages1";
+import { createAstronomyController } from "./modules/astronomy-controller.js?v=20260312-darksun-stages1";
 import { createCameraController } from "./modules/camera-controller.js";
 import { createCelestialTrackingCameraController } from "./modules/celestial-tracking-camera-controller.js";
-import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js";
-import { createI18n } from "./modules/i18n.js?v=20260312-coilorbit2";
-import { createMagneticFieldController } from "./modules/magnetic-field-controller.js?v=20260312-coilorbit2";
+import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js?v=20260312-darksun-eclipse1";
+import { createI18n } from "./modules/i18n.js?v=20260312-darksun-stages1";
+import { createMagneticFieldController } from "./modules/magnetic-field-controller.js?v=20260312-darksun-eclipse1";
 import { createRouteSimulationController } from "./modules/route-simulation-controller.js";
 import { createTextureManager } from "./modules/texture-manager.js?v=20260311-gpu-daynight";
-import { createWalkerController } from "./modules/walker-controller.js";
+import { createWalkerController } from "./modules/walker-controller.js?v=20260312-darksun-eclipse1";
 
 const DEFAULT_MAP_PATH = "./assets/flat-earth-map-square.svg";
 const DEFAULT_MAP_LABEL = "assets/flat-earth-map-square.svg";
@@ -62,10 +63,48 @@ const ORBIT_SUN_HEIGHT_SOUTH = scaleCelestialAltitude(RAW_ORBIT_SUN_HEIGHT_SOUTH
 const CELESTIAL_BODY_SIZE = scaleDimension(0.13) * CELESTIAL_SIZE_SCALE;
 const ORBIT_SUN_SIZE = CELESTIAL_BODY_SIZE;
 const ORBIT_SUN_SPEED = 0.011;
+const ORBIT_DARK_SUN_SPEED = ORBIT_SUN_SPEED * 0.72;
+const ORBIT_DARK_SUN_BAND_SPEED_FACTOR = 1.08;
+const ORBIT_DARK_SUN_SIZE = ORBIT_SUN_SIZE * 1.04;
+const ORBIT_DARK_SUN_DEBUG_OPACITY = 0.92;
+const ORBIT_DARK_SUN_OCCLUSION_OPACITY = 0.98;
+const ORBIT_DARK_SUN_RIM_OPACITY = 0.16;
+const DARK_SUN_ATTRACTION_START_FACTOR = 2.9;
+const DARK_SUN_ATTRACTION_END_FACTOR = 0.14;
+const DARK_SUN_CAPTURE_RESPONSE = 0.042;
+const DARK_SUN_RELEASE_RESPONSE = 0.12;
+const DARK_SUN_TRANSIT_PERPENDICULAR_COMPRESSION = 0.03;
+const DARK_SUN_TRANSIT_ALONG_COMPRESSION = 0.62;
+const DARK_SUN_HOLD_DAMPING = 0.976;
+const DARK_SUN_CENTER_HOLD_FACTOR = 0.82;
+const DARK_SUN_ECLIPSE_TRANSIT_SLOW_FACTOR = 0.22;
+const DARK_SUN_ECLIPSE_RESPONSE_SLOW_FACTOR = 0.34;
+const DARK_SUN_ALTITUDE_LOCK_START = 0.72;
+const DARK_SUN_ALTITUDE_ALIGNMENT_TOLERANCE_FACTOR = 0.02;
+const DARK_SUN_STAGE_PRE_ECLIPSE_DISTANCE_FACTOR = 1.06;
+const SOLAR_ECLIPSE_APPROACH_DISTANCE_FACTOR = 1.18;
+const SOLAR_ECLIPSE_IDLE_DISTANCE_FACTOR = 1.3;
+const SOLAR_ECLIPSE_MIN_COVERAGE = 0.01;
+const SOLAR_ECLIPSE_TOTAL_COVERAGE = 0.98;
+const SOLAR_ECLIPSE_DIRECTION_EPSILON = 0.003;
+const SOLAR_ECLIPSE_VISIBLE_CONTACT_PX = 1;
+const SOLAR_ECLIPSE_APPROACH_MIN_MS = 800;
+const SOLAR_ECLIPSE_TOTALITY_MIN_MS = 1200;
+const SOLAR_ECLIPSE_COMPLETE_FADE_MS = 900;
+const SOLAR_ECLIPSE_PRESENTATION_COVERAGE_RATE = 0.22;
+const SOLAR_ECLIPSE_COMPLETE_HOLD_FRAMES = 72;
+const DARK_SUN_STAGE_TRANSIT_ANGLE_SPEED_FACTOR = 0.42;
+const DARK_SUN_STAGE_TRANSIT_PROGRESS_SPEED = 0.16;
+const DARK_SUN_STAGE_TIMELINE_SECONDS = 10.5;
+const DARK_SUN_STAGE_APPROACH_SHARE = 0.18;
+const DARK_SUN_STAGE_INGRESS_SHARE = 0.26;
+const DARK_SUN_STAGE_TOTALITY_SHARE = 0.12;
+const DARK_SUN_STAGE_EGRESS_SHARE = 0.26;
+const DARK_SUN_STAGE_COMPLETE_SHARE = 0.18;
 const ORBIT_SUN_SEASON_SPEED = 0.0026;
 const ORBIT_MOON_BAND_SPEED_FACTOR = 0.86;
 const CELESTIAL_TRAIL_LENGTH_DEFAULT_PERCENT = 100;
-const CELESTIAL_SPEED_DEFAULT = 1;
+const CELESTIAL_SPEED_DEFAULT = 0.5;
 const ORBIT_SUN_HALO_OPACITY = 0.2;
 const ORBIT_SUN_LIGHT_INTENSITY = 32;
 const ORBIT_SUN_BODY_EMISSIVE_INTENSITY = 5.4;
@@ -228,6 +267,12 @@ const analemmaOverlayEl = document.getElementById("analemma-overlay");
 const analemmaSummaryEl = document.getElementById("analemma-summary");
 const magneticFieldOverlayEl = document.getElementById("magnetic-field-overlay");
 const magneticFieldSummaryEl = document.getElementById("magnetic-field-summary");
+const solarEclipseStateEl = document.getElementById("solar-eclipse-state");
+const solarEclipseStageEl = document.getElementById("solar-eclipse-stage");
+const solarEclipseCoverageEl = document.getElementById("solar-eclipse-coverage");
+const solarEclipseSummaryEl = document.getElementById("solar-eclipse-summary");
+const stagePreEclipseButton = document.getElementById("stage-pre-eclipse");
+const darkSunDebugEl = document.getElementById("dark-sun-debug");
 const skyAnalemmaOverlayEl = document.getElementById("sky-analemma-overlay");
 const skyAnalemmaSummaryEl = document.getElementById("sky-analemma-summary");
 const seasonalYearEl = document.getElementById("seasonal-year");
@@ -1047,6 +1092,7 @@ const orbitSunBody = new THREE.Mesh(
     opacity: 1
   })
 );
+orbitSunBody.renderOrder = 24;
 orbitSun.add(orbitSunBody);
 
 const orbitSunHalo = new THREE.Mesh(
@@ -1060,6 +1106,7 @@ const orbitSunHalo = new THREE.Mesh(
     blending: THREE.AdditiveBlending
   })
 );
+orbitSunHalo.renderOrder = 23;
 orbitSun.add(orbitSunHalo);
 
 const orbitSunLight = new THREE.PointLight(0xffcf75, ORBIT_SUN_LIGHT_INTENSITY, scaleDimension(9.5), 1.4);
@@ -1069,11 +1116,178 @@ scalableStage.add(orbitSun);
 const observerSun = orbitSun.clone(true);
 const observerSunBody = observerSun.children[0];
 observerSunBody.material = observerSunBody.material.clone();
+observerSunBody.renderOrder = orbitSunBody.renderOrder;
 const observerSunHalo = observerSun.children[1];
 observerSunHalo.material = observerSunHalo.material.clone();
+observerSunHalo.renderOrder = orbitSunHalo.renderOrder;
 const observerSunLight = observerSun.children[2];
 observerSun.visible = false;
 firstPersonScene.add(observerSun);
+enhanceSunMaterialWithEclipseMask(orbitSunBody.material);
+enhanceSunMaterialWithEclipseMask(observerSunBody.material);
+
+function createDarkSunGroup() {
+  const group = new THREE.Group();
+  const body = new THREE.Mesh(
+    new THREE.SphereGeometry(ORBIT_DARK_SUN_SIZE, 32, 24),
+    new THREE.MeshBasicMaterial({
+      color: 0x03060d,
+      transparent: true,
+      opacity: ORBIT_DARK_SUN_DEBUG_OPACITY,
+      depthTest: false,
+      depthWrite: false
+    })
+  );
+  body.renderOrder = 31;
+  group.add(body);
+
+  const rim = new THREE.Mesh(
+    new THREE.SphereGeometry(ORBIT_DARK_SUN_SIZE * 1.08, 24, 16),
+    new THREE.MeshBasicMaterial({
+      color: 0x4b6f95,
+      transparent: true,
+      opacity: ORBIT_DARK_SUN_RIM_OPACITY,
+      side: THREE.BackSide,
+      depthTest: false,
+      depthWrite: false
+    })
+  );
+  rim.renderOrder = 30;
+  group.add(rim);
+
+  group.visible = false;
+  return group;
+}
+
+function enhanceDarkSunMaterialWithSunMask(material) {
+  material.userData.darkSunMaskState = {
+    active: 0,
+    centerNdc: new THREE.Vector2(),
+    radius: 0,
+    viewport: new THREE.Vector2(1, 1)
+  };
+
+  material.onBeforeCompile = (shader) => {
+    const { darkSunMaskState } = material.userData;
+    shader.uniforms.darkSunMaskActive = { value: darkSunMaskState.active };
+    shader.uniforms.darkSunMaskCenterNdc = { value: darkSunMaskState.centerNdc };
+    shader.uniforms.darkSunMaskRadius = { value: darkSunMaskState.radius };
+    shader.uniforms.darkSunMaskViewport = { value: darkSunMaskState.viewport };
+    material.userData.darkSunMaskShader = shader;
+    const darkSunMaskFragment = `if (darkSunMaskActive < 0.5) {
+  discard;
+}
+vec2 darkSunMaskNdc = vec2(
+  ((gl_FragCoord.x / max(darkSunMaskViewport.x, 1.0)) * 2.0) - 1.0,
+  ((gl_FragCoord.y / max(darkSunMaskViewport.y, 1.0)) * 2.0) - 1.0
+);
+if (distance(darkSunMaskNdc, darkSunMaskCenterNdc) > darkSunMaskRadius) {
+  discard;
+}`;
+
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        "#include <common>",
+        `#include <common>
+uniform float darkSunMaskActive;
+uniform vec2 darkSunMaskCenterNdc;
+uniform float darkSunMaskRadius;
+uniform vec2 darkSunMaskViewport;`
+      )
+    if (shader.fragmentShader.includes("#include <opaque_fragment>")) {
+      shader.fragmentShader = shader.fragmentShader.replace(
+        "#include <opaque_fragment>",
+        `${darkSunMaskFragment}
+#include <opaque_fragment>`
+      );
+    } else {
+      shader.fragmentShader = shader.fragmentShader.replace(
+        "#include <output_fragment>",
+        `${darkSunMaskFragment}
+#include <output_fragment>`
+      );
+    }
+  };
+  material.customProgramCacheKey = () => "dark-sun-mask-v1";
+}
+
+function enhanceSunMaterialWithEclipseMask(material) {
+  material.userData.sunEclipseMaskState = {
+    active: 0,
+    centerNdc: new THREE.Vector2(),
+    radius: 0,
+    softnessPx: 1,
+    strength: 0,
+    viewport: new THREE.Vector2(1, 1)
+  };
+
+  material.onBeforeCompile = (shader) => {
+    const { sunEclipseMaskState } = material.userData;
+    shader.uniforms.sunEclipseMaskActive = { value: sunEclipseMaskState.active };
+    shader.uniforms.sunEclipseMaskCenterNdc = { value: sunEclipseMaskState.centerNdc };
+    shader.uniforms.sunEclipseMaskRadius = { value: sunEclipseMaskState.radius };
+    shader.uniforms.sunEclipseMaskSoftnessPx = { value: sunEclipseMaskState.softnessPx };
+    shader.uniforms.sunEclipseMaskStrength = { value: sunEclipseMaskState.strength };
+    shader.uniforms.sunEclipseMaskViewport = { value: sunEclipseMaskState.viewport };
+    material.userData.sunEclipseMaskShader = shader;
+
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        "#include <common>",
+        `#include <common>
+uniform float sunEclipseMaskActive;
+uniform vec2 sunEclipseMaskCenterNdc;
+uniform float sunEclipseMaskRadius;
+uniform float sunEclipseMaskSoftnessPx;
+uniform float sunEclipseMaskStrength;
+uniform vec2 sunEclipseMaskViewport;`
+      )
+      .replace(
+        "#include <opaque_fragment>",
+        `float sunEclipseMask = 0.0;
+if (sunEclipseMaskActive > 0.5 && sunEclipseMaskStrength > 0.5) {
+  vec2 sunEclipseFragNdc = vec2(
+    ((gl_FragCoord.x / max(sunEclipseMaskViewport.x, 1.0)) * 2.0) - 1.0,
+    ((gl_FragCoord.y / max(sunEclipseMaskViewport.y, 1.0)) * 2.0) - 1.0
+  );
+  vec2 sunEclipseDeltaPx = vec2(
+    (sunEclipseFragNdc.x - sunEclipseMaskCenterNdc.x) * max(sunEclipseMaskViewport.x, 1.0) * 0.5,
+    (sunEclipseFragNdc.y - sunEclipseMaskCenterNdc.y) * max(sunEclipseMaskViewport.y, 1.0) * 0.5
+  );
+  float sunEclipseDistancePx = length(sunEclipseDeltaPx);
+  float sunEclipseRadiusPx = sunEclipseMaskRadius * max(sunEclipseMaskViewport.x, 1.0) * 0.5;
+  sunEclipseMask = 1.0 - smoothstep(
+    sunEclipseRadiusPx - sunEclipseMaskSoftnessPx,
+    sunEclipseRadiusPx + sunEclipseMaskSoftnessPx,
+    sunEclipseDistancePx
+  );
+}
+outgoingLight *= (1.0 - sunEclipseMask);
+#include <opaque_fragment>`
+      );
+  };
+
+  material.customProgramCacheKey = () => "sun-eclipse-mask-v1";
+}
+
+const orbitDarkSun = createDarkSunGroup();
+scalableStage.add(orbitDarkSun);
+const orbitDarkSunBody = orbitDarkSun.children[0];
+const orbitDarkSunRim = orbitDarkSun.children[1];
+enhanceDarkSunMaterialWithSunMask(orbitDarkSunBody.material);
+enhanceDarkSunMaterialWithSunMask(orbitDarkSunRim.material);
+
+const observerDarkSun = orbitDarkSun.clone(true);
+const observerDarkSunBody = observerDarkSun.children[0];
+observerDarkSunBody.material = observerDarkSunBody.material.clone();
+observerDarkSunBody.renderOrder = orbitDarkSunBody.renderOrder;
+enhanceDarkSunMaterialWithSunMask(observerDarkSunBody.material);
+const observerDarkSunRim = observerDarkSun.children[1];
+observerDarkSunRim.material = observerDarkSunRim.material.clone();
+observerDarkSunRim.renderOrder = orbitDarkSunRim.renderOrder;
+enhanceDarkSunMaterialWithSunMask(observerDarkSunRim.material);
+observerDarkSun.visible = false;
+firstPersonScene.add(observerDarkSun);
 
 const sunAuraTexture = createSunAuraTexture();
 
@@ -1440,9 +1654,17 @@ scalableStage.add(createOrbitTrack(EQUATOR_RADIUS, 0x7fd8ff, 0.78, ORBIT_SUN_HEI
 scalableStage.add(createOrbitTrack(TROPIC_CAPRICORN_RADIUS, 0xff93b6, 0.88, ORBIT_SUN_HEIGHT_SOUTH));
 
 const simulationState = {
+  darkSunBandDirection: -1,
+  darkSunBandProgress: 0.88,
+  darkSunDebugVisible: false,
+  darkSunStageAltitudeLock: false,
+  darkSunStageHasEclipsed: false,
+  darkSunStageOffsetRadians: 0,
+  darkSunStageTransit: 0,
   demoPhaseDateMs: Date.now(),
   moonBandDirection: -1,
   moonBandProgress: 0.62,
+  orbitDarkSunAngle: Math.PI,
   orbitMoonAngle: Math.PI * 0.35,
   orbitMode: "auto",
   orbitSeasonPhase: -Math.PI / 2,
@@ -1513,6 +1735,15 @@ const renderState = {
   transitionDurationMs: FIRST_PERSON_RETURN_DURATION_MS,
   transitionToken: 0,
   visualScale: 1
+};
+const solarEclipseTrackingState = {
+  displayCoverage: 0,
+  displayStageElapsedMs: 0,
+  displayStageKey: "idle",
+  hasEnteredVisibleOverlap: false,
+  previousCoverage: 0,
+  previousStageKey: "idle",
+  recentActiveFrames: 0
 };
 
 const starCanvas = document.createElement("canvas");
@@ -1627,6 +1858,7 @@ const ui = {
   celestialTrailLengthValueEl,
   dayNightOverlayEl,
   dayNightSummaryEl,
+  darkSunDebugEl,
   firstPersonHorizonEl,
   firstPersonOverlayEl,
   magneticFieldOverlayEl,
@@ -1651,6 +1883,10 @@ const ui = {
   seasonalSunGridEl,
   seasonalSunSummaryEl,
   seasonalYearEl,
+  solarEclipseCoverageEl,
+  solarEclipseStageEl,
+  solarEclipseStateEl,
+  solarEclipseSummaryEl,
   skyAnalemmaOverlayEl,
   skyAnalemmaSummaryEl,
   statusEl,
@@ -1731,6 +1967,7 @@ astronomyApi = createAstronomyController({
   skyAnalemmaGeometry,
   skyAnalemmaPointsGeometry,
   orbitSun,
+  orbitDarkSun,
   orbitMoon,
   sunFullTrailGeometry,
   sunFullTrailPointsGeometry,
@@ -1820,6 +2057,8 @@ function getCurrentUiSnapshot() {
     sun: getGeoFromProjectedPosition(orbitSun.position, DISC_RADIUS),
     moon: getGeoFromProjectedPosition(orbitMoon.position, DISC_RADIUS),
     moonPhase: getMoonPhase(demoPhaseDate),
+    darkSunRenderPosition: orbitDarkSun.position.clone(),
+    solarEclipse: createSolarEclipseState(),
     sunPosition: orbitSun.position.clone(),
     sunRenderPosition: orbitSun.position.clone(),
     sunDisplayHorizontal: astronomyApi?.getSunDisplayHorizontalFromPosition?.(orbitSun.position),
@@ -1856,30 +2095,1220 @@ const tempObserverSkyPoint = new THREE.Vector3();
 const tempObserverRelative = new THREE.Vector3();
 const tempDemoSunSourceWorld = new THREE.Vector3();
 const tempDemoMoonSourceWorld = new THREE.Vector3();
+const tempDemoDarkSunSourceWorld = new THREE.Vector3();
 const tempDomeSunLocalPosition = new THREE.Vector3();
 const tempSunWorldPosition = new THREE.Vector3();
+const tempDarkSunWorldPosition = new THREE.Vector3();
 const tempSunViewDirection = new THREE.Vector3();
 const tempCameraForward = new THREE.Vector3();
+const tempCameraRight = new THREE.Vector3();
+const tempProjectedCenter = new THREE.Vector3();
+const tempProjectedEdge = new THREE.Vector3();
+const tempProjectedOffset = new THREE.Vector3();
+const tempBodyWorldScale = new THREE.Vector3();
+const tempProjectedSunNdc = new THREE.Vector3();
+const tempProjectedDarkSunNdc = new THREE.Vector3();
+const tempDarkSunPhaseOrigin = new THREE.Vector3();
+const tempSunPhaseDirection = new THREE.Vector3();
+const tempDarkSunPhaseDirection = new THREE.Vector3();
+const tempProjectedTargetWorld = new THREE.Vector3();
+const tempDarkSunLocalPosition = new THREE.Vector3();
+const tempDarkSunRawOffsetNdc = new THREE.Vector2();
+const tempDarkSunDesiredOffsetNdc = new THREE.Vector2();
+const tempDarkSunMaskViewport = new THREE.Vector2(1, 1);
+const tempSolarEclipseViewport = new THREE.Vector2(1, 1);
 
-function updateSunVisualEffects() {
+function createDarkSunOcclusionMotionState() {
+  return {
+    initialized: false,
+    lastDirection: new THREE.Vector2(1, 0),
+    offsetNdc: new THREE.Vector2()
+  };
+}
+
+const darkSunOcclusionState = {
+  observer: createDarkSunOcclusionMotionState(),
+  orbit: createDarkSunOcclusionMotionState()
+};
+
+function resetDarkSunOcclusionMotion(motionState) {
+  motionState.initialized = false;
+  motionState.lastDirection.set(1, 0);
+  motionState.offsetNdc.set(0, 0);
+}
+
+function getWorldBodyRadius(body, baseRadius) {
+  body.getWorldScale(tempBodyWorldScale);
+  return baseRadius * Math.max(tempBodyWorldScale.x, tempBodyWorldScale.y, tempBodyWorldScale.z);
+}
+
+function getProjectedDisc(worldPosition, worldRadius) {
+  tempProjectedCenter.copy(worldPosition).project(camera);
+  tempProjectedOffset.copy(worldPosition).applyMatrix4(camera.matrixWorldInverse);
+  if (!Number.isFinite(tempProjectedCenter.x) || tempProjectedOffset.z >= -0.0001) {
+    return {
+      centerX: tempProjectedCenter.x,
+      centerY: tempProjectedCenter.y,
+      radius: 0,
+      visible: false
+    };
+  }
+
+  camera.matrixWorld.extractBasis(tempCameraRight, tempProjectedOffset, tempCameraForward);
+  tempCameraRight.normalize();
+  tempProjectedEdge.copy(worldPosition)
+    .addScaledVector(tempCameraRight, worldRadius)
+    .project(camera);
+
+  const radius = Math.hypot(
+    tempProjectedEdge.x - tempProjectedCenter.x,
+    tempProjectedEdge.y - tempProjectedCenter.y
+  );
+  const visible = (
+    radius > 0.00001 &&
+    tempProjectedCenter.z >= -1.1 &&
+    tempProjectedCenter.z <= 1.1 &&
+    Math.abs(tempProjectedCenter.x) <= 1.25 &&
+    Math.abs(tempProjectedCenter.y) <= 1.25
+  );
+
+  return {
+    centerX: tempProjectedCenter.x,
+    centerY: tempProjectedCenter.y,
+    radius,
+    visible
+  };
+}
+
+function updateDarkSunMaskUniforms() {
+  const sunGroup = walkerState.enabled ? observerSun : orbitSun;
+  const darkSunGroup = walkerState.enabled ? observerDarkSun : orbitDarkSun;
+  const sunBody = walkerState.enabled ? observerSunBody : orbitSunBody;
+  const darkSunBody = walkerState.enabled ? observerDarkSunBody : orbitDarkSunBody;
+  sunGroup.getWorldPosition(tempSunWorldPosition);
+  darkSunGroup.getWorldPosition(tempDarkSunWorldPosition);
+  const sunDisc = getProjectedDisc(
+    tempSunWorldPosition,
+    getWorldBodyRadius(sunBody, ORBIT_SUN_SIZE)
+  );
+  const darkSunDisc = getProjectedDisc(
+    tempDarkSunWorldPosition,
+    getWorldBodyRadius(darkSunBody, ORBIT_DARK_SUN_SIZE)
+  );
+  renderer.getDrawingBufferSize(tempDarkSunMaskViewport);
+  const active = (
+    sunDisc.visible &&
+    sunDisc.radius > 0.00001 &&
+    tempDarkSunMaskViewport.x > 0 &&
+    tempDarkSunMaskViewport.y > 0
+  ) ? 1 : 0;
+  const materials = [
+    orbitDarkSunBody.material,
+    orbitDarkSunRim.material,
+    observerDarkSunBody.material,
+    observerDarkSunRim.material
+  ];
+
+  for (const material of materials) {
+    const { darkSunMaskState, darkSunMaskShader } = material.userData;
+    if (!darkSunMaskState) {
+      continue;
+    }
+
+    darkSunMaskState.active = active;
+    darkSunMaskState.centerNdc.set(sunDisc.centerX, sunDisc.centerY);
+    darkSunMaskState.radius = sunDisc.radius;
+    darkSunMaskState.viewport.copy(tempDarkSunMaskViewport);
+
+    if (darkSunMaskShader) {
+      darkSunMaskShader.uniforms.darkSunMaskActive.value = darkSunMaskState.active;
+      darkSunMaskShader.uniforms.darkSunMaskCenterNdc.value.copy(darkSunMaskState.centerNdc);
+      darkSunMaskShader.uniforms.darkSunMaskRadius.value = darkSunMaskState.radius;
+      darkSunMaskShader.uniforms.darkSunMaskViewport.value.copy(darkSunMaskState.viewport);
+    }
+  }
+
+  const eclipseMaskActive = (
+    darkSunDisc.visible &&
+    darkSunDisc.radius > 0.00001 &&
+    tempDarkSunMaskViewport.x > 0 &&
+    tempDarkSunMaskViewport.y > 0
+  ) ? 1 : 0;
+  const sunMaterials = [
+    orbitSunBody.material,
+    observerSunBody.material
+  ];
+
+  for (const material of sunMaterials) {
+    const { sunEclipseMaskState, sunEclipseMaskShader } = material.userData;
+    if (!sunEclipseMaskState) {
+      continue;
+    }
+
+    sunEclipseMaskState.active = eclipseMaskActive;
+    sunEclipseMaskState.centerNdc.set(darkSunDisc.centerX, darkSunDisc.centerY);
+    sunEclipseMaskState.radius = darkSunDisc.radius;
+    sunEclipseMaskState.viewport.copy(tempDarkSunMaskViewport);
+
+    if (sunEclipseMaskShader) {
+      sunEclipseMaskShader.uniforms.sunEclipseMaskActive.value = sunEclipseMaskState.active;
+      sunEclipseMaskShader.uniforms.sunEclipseMaskCenterNdc.value.copy(sunEclipseMaskState.centerNdc);
+      sunEclipseMaskShader.uniforms.sunEclipseMaskRadius.value = sunEclipseMaskState.radius;
+      sunEclipseMaskShader.uniforms.sunEclipseMaskViewport.value.copy(sunEclipseMaskState.viewport);
+    }
+  }
+}
+
+function getCircleOverlapArea(radiusA, radiusB, distance) {
+  if (distance >= (radiusA + radiusB)) {
+    return 0;
+  }
+
+  if (distance <= Math.abs(radiusA - radiusB)) {
+    const minRadius = Math.min(radiusA, radiusB);
+    return Math.PI * minRadius * minRadius;
+  }
+
+  const radiusASquared = radiusA * radiusA;
+  const radiusBSquared = radiusB * radiusB;
+  const alpha = Math.acos(
+    THREE.MathUtils.clamp(
+      ((distance * distance) + radiusASquared - radiusBSquared) / (2 * distance * radiusA),
+      -1,
+      1
+    )
+  );
+  const beta = Math.acos(
+    THREE.MathUtils.clamp(
+      ((distance * distance) + radiusBSquared - radiusASquared) / (2 * distance * radiusB),
+      -1,
+      1
+    )
+  );
+  const overlapCore = 0.5 * Math.sqrt(
+    Math.max(
+      0,
+      (-distance + radiusA + radiusB) *
+      (distance + radiusA - radiusB) *
+      (distance - radiusA + radiusB) *
+      (distance + radiusA + radiusB)
+    )
+  );
+
+  return (radiusASquared * alpha) + (radiusBSquared * beta) - overlapCore;
+}
+
+function applyDarkSunOcclusionAlignment({
+  motionState,
+  sunBody,
+  sunGroup,
+  sunRadius,
+  darkSunBody,
+  darkSunGroup,
+  darkSunRadius
+}) {
+  sunGroup.getWorldPosition(tempSunWorldPosition);
+  darkSunGroup.getWorldPosition(tempDarkSunWorldPosition);
+  const sunWorldRadius = getWorldBodyRadius(sunBody, sunRadius);
+  const darkSunWorldRadius = getWorldBodyRadius(darkSunBody, darkSunRadius);
+
+  const sunDisc = getProjectedDisc(
+    tempSunWorldPosition,
+    sunWorldRadius
+  );
+  const darkSunDisc = getProjectedDisc(
+    tempDarkSunWorldPosition,
+    darkSunWorldRadius
+  );
+
+  if (!sunDisc.visible || !darkSunDisc.visible || sunDisc.radius <= 0.00001 || darkSunDisc.radius <= 0.00001) {
+    resetDarkSunOcclusionMotion(motionState);
+    return null;
+  }
+
+  tempProjectedSunNdc.copy(tempSunWorldPosition).project(camera);
+  tempProjectedDarkSunNdc.copy(tempDarkSunWorldPosition).project(camera);
+  tempDarkSunRawOffsetNdc.set(
+    tempProjectedDarkSunNdc.x - tempProjectedSunNdc.x,
+    tempProjectedDarkSunNdc.y - tempProjectedSunNdc.y
+  );
+
+  const combinedRadius = sunDisc.radius + darkSunDisc.radius;
+  tempDarkSunPhaseOrigin.set(0, 0, 0);
+  if (walkerState.enabled) {
+    tempDarkSunPhaseOrigin.copy(camera.position);
+  }
+  tempSunPhaseDirection.copy(tempSunWorldPosition).sub(tempDarkSunPhaseOrigin);
+  tempDarkSunPhaseDirection.copy(tempDarkSunWorldPosition).sub(tempDarkSunPhaseOrigin);
+  const sunPhaseDistance = Math.max(tempSunPhaseDirection.length(), 0.0001);
+  const darkSunPhaseDistance = Math.max(tempDarkSunPhaseDirection.length(), 0.0001);
+  tempSunPhaseDirection.y = 0;
+  tempDarkSunPhaseDirection.y = 0;
+  let targetPhaseOffsetX = tempDarkSunRawOffsetNdc.x;
+  const sunPlanarLength = tempSunPhaseDirection.length();
+  const darkSunPlanarLength = tempDarkSunPhaseDirection.length();
+  if (sunPlanarLength > 0.0001 && darkSunPlanarLength > 0.0001) {
+    tempSunPhaseDirection.divideScalar(sunPlanarLength);
+    tempDarkSunPhaseDirection.divideScalar(darkSunPlanarLength);
+    const signedAngleDelta = Math.atan2(
+      (tempSunPhaseDirection.x * tempDarkSunPhaseDirection.z) -
+        (tempSunPhaseDirection.z * tempDarkSunPhaseDirection.x),
+      (tempSunPhaseDirection.x * tempDarkSunPhaseDirection.x) +
+        (tempSunPhaseDirection.z * tempDarkSunPhaseDirection.z)
+    );
+    const contactAngle = Math.max(
+      (sunWorldRadius + darkSunWorldRadius) / Math.max((sunPhaseDistance + darkSunPhaseDistance) * 0.5, 0.0001),
+      0.00001
+    );
+    targetPhaseOffsetX = THREE.MathUtils.clamp(
+      signedAngleDelta / contactAngle,
+      -4,
+      4
+    ) * combinedRadius;
+  }
+
+  const phaseDistance = Math.abs(targetPhaseOffsetX);
+  if (!motionState.initialized) {
+    motionState.initialized = true;
+    motionState.offsetNdc.set(targetPhaseOffsetX, 0);
+  }
+
+  if (phaseDistance > 0.000001) {
+    motionState.lastDirection.set(Math.sign(targetPhaseOffsetX) || 1, 0);
+  }
+
+  const attractionStart = combinedRadius * DARK_SUN_ATTRACTION_START_FACTOR;
+  const attractionEnd = combinedRadius * DARK_SUN_ATTRACTION_END_FACTOR;
+  const attraction = THREE.MathUtils.clamp(
+    1 - ((phaseDistance - attractionEnd) / Math.max(attractionStart - attractionEnd, 0.000001)),
+    0,
+    1
+  );
+  const eclipseTransit = THREE.MathUtils.clamp(
+    1 - (phaseDistance / Math.max(combinedRadius, 0.000001)),
+    0,
+    1
+  );
+  const centerHold = THREE.MathUtils.clamp(
+    1 - (phaseDistance / Math.max(combinedRadius * DARK_SUN_CENTER_HOLD_FACTOR, 0.000001)),
+    0,
+    1
+  );
+  const transitCompression = THREE.MathUtils.lerp(
+    1,
+    DARK_SUN_TRANSIT_ALONG_COMPRESSION,
+    Math.max(attraction * 0.72, centerHold * 0.58)
+  );
+  const captureCompression = THREE.MathUtils.lerp(
+    1,
+    DARK_SUN_TRANSIT_PERPENDICULAR_COMPRESSION,
+    Math.pow(attraction, 0.84)
+  );
+  const centerCompression = THREE.MathUtils.lerp(1, 0.42, centerHold);
+  tempDarkSunDesiredOffsetNdc.set(targetPhaseOffsetX, 0).multiplyScalar(
+    transitCompression *
+    THREE.MathUtils.lerp(1, DARK_SUN_ECLIPSE_TRANSIT_SLOW_FACTOR, eclipseTransit) *
+    captureCompression *
+    centerCompression
+  );
+
+  const followResponse = attraction > 0.001
+    ? (
+      THREE.MathUtils.lerp(0.36, 0.18, centerHold) *
+      THREE.MathUtils.lerp(1, DARK_SUN_ECLIPSE_RESPONSE_SLOW_FACTOR, eclipseTransit)
+    )
+    : DARK_SUN_RELEASE_RESPONSE;
+  motionState.offsetNdc.lerp(
+    tempDarkSunDesiredOffsetNdc,
+    followResponse
+  );
+  motionState.offsetNdc.y = 0;
+
+  if (attraction > 0.9) {
+    motionState.offsetNdc.multiplyScalar(
+      THREE.MathUtils.lerp(1, DARK_SUN_HOLD_DAMPING, Math.max(centerHold, attraction))
+    );
+  }
+
+  tempProjectedTargetWorld.set(
+    tempProjectedSunNdc.x + motionState.offsetNdc.x,
+    tempProjectedSunNdc.y + motionState.offsetNdc.y,
+    tempProjectedSunNdc.z
+  ).unproject(camera);
+
+  if (darkSunGroup.parent) {
+    tempDarkSunLocalPosition.copy(tempProjectedTargetWorld);
+    darkSunGroup.parent.worldToLocal(tempDarkSunLocalPosition);
+    darkSunGroup.position.copy(tempDarkSunLocalPosition);
+  } else {
+    darkSunGroup.position.copy(tempProjectedTargetWorld);
+  }
+
+  return {
+    attraction
+  };
+}
+
+function applyDarkSunStageTransitPosition({
+  sunBody,
+  sunGroup,
+  sunRadius,
+  darkSunBody,
+  darkSunGroup,
+  darkSunRadius
+}) {
+  sunGroup.getWorldPosition(tempSunWorldPosition);
+  darkSunGroup.getWorldPosition(tempDarkSunWorldPosition);
+  const sunWorldRadius = getWorldBodyRadius(sunBody, sunRadius);
+  const darkSunWorldRadius = getWorldBodyRadius(darkSunBody, darkSunRadius);
+  const sunDisc = getProjectedDisc(
+    tempSunWorldPosition,
+    sunWorldRadius
+  );
+  const darkSunDisc = getProjectedDisc(
+    tempDarkSunWorldPosition,
+    darkSunWorldRadius
+  );
+
+  if (!sunDisc.visible || sunDisc.radius <= 0.00001 || darkSunDisc.radius <= 0.00001) {
+    return false;
+  }
+
+  tempProjectedSunNdc.copy(tempSunWorldPosition).project(camera);
+  const transit = THREE.MathUtils.clamp(simulationState.darkSunStageTransit ?? 0, 0, 1);
+  const combinedRadius = sunDisc.radius + darkSunDisc.radius;
+  renderer.getDrawingBufferSize(tempSolarEclipseViewport);
+  const pixelNdcX = 2 / Math.max(tempSolarEclipseViewport.x, 1);
+  const approachStartOffsetX = combinedRadius + (pixelNdcX * 6);
+  const approachEndOffsetX = combinedRadius + (pixelNdcX * 0.4);
+  const egressStartOffsetX = -(combinedRadius + (pixelNdcX * 0.4));
+  const completeEndOffsetX = -(combinedRadius + (pixelNdcX * 6));
+  const approachEnd = DARK_SUN_STAGE_APPROACH_SHARE;
+  const ingressEnd = approachEnd + DARK_SUN_STAGE_INGRESS_SHARE;
+  const totalityEnd = ingressEnd + DARK_SUN_STAGE_TOTALITY_SHARE;
+  const egressEnd = totalityEnd + DARK_SUN_STAGE_EGRESS_SHARE;
+  const easeOutSine = (value) => Math.sin((THREE.MathUtils.clamp(value, 0, 1) * Math.PI) / 2);
+  const easeInOutCubic = (value) => {
+    const clampedValue = THREE.MathUtils.clamp(value, 0, 1);
+    return clampedValue < 0.5
+      ? 4 * clampedValue * clampedValue * clampedValue
+      : 1 - (Math.pow((-2 * clampedValue) + 2, 3) / 2);
+  };
+  let targetOffsetX = completeEndOffsetX;
+
+  if (transit <= approachEnd) {
+    targetOffsetX = THREE.MathUtils.lerp(
+      approachStartOffsetX,
+      approachEndOffsetX,
+      easeOutSine(transit / Math.max(approachEnd, 0.0001))
+    );
+  } else if (transit <= ingressEnd) {
+    targetOffsetX = THREE.MathUtils.lerp(
+      approachEndOffsetX,
+      0,
+      easeInOutCubic((transit - approachEnd) / Math.max(DARK_SUN_STAGE_INGRESS_SHARE, 0.0001))
+    );
+  } else if (transit <= totalityEnd) {
+    targetOffsetX = 0;
+  } else if (transit <= egressEnd) {
+    targetOffsetX = THREE.MathUtils.lerp(
+      0,
+      egressStartOffsetX,
+      easeInOutCubic((transit - totalityEnd) / Math.max(DARK_SUN_STAGE_EGRESS_SHARE, 0.0001))
+    );
+  } else {
+    targetOffsetX = THREE.MathUtils.lerp(
+      egressStartOffsetX,
+      completeEndOffsetX,
+      easeOutSine((transit - egressEnd) / Math.max(DARK_SUN_STAGE_COMPLETE_SHARE, 0.0001))
+    );
+  }
+
+  tempProjectedTargetWorld.set(
+    tempProjectedSunNdc.x + targetOffsetX,
+    tempProjectedSunNdc.y,
+    tempProjectedSunNdc.z
+  ).unproject(camera);
+
+  if (darkSunGroup.parent) {
+    tempDarkSunLocalPosition.copy(tempProjectedTargetWorld);
+    darkSunGroup.parent.worldToLocal(tempDarkSunLocalPosition);
+    darkSunGroup.position.copy(tempDarkSunLocalPosition);
+  } else {
+    darkSunGroup.position.copy(tempProjectedTargetWorld);
+  }
+
+  return true;
+}
+
+function getSolarEclipseLightScale(solarEclipse = createSolarEclipseState()) {
+  return getSolarEclipseVisualProfile(solarEclipse).sunLightScale;
+}
+
+function getSolarEclipseDirection(previousStageKey, coverageDelta) {
+  if (coverageDelta > SOLAR_ECLIPSE_DIRECTION_EPSILON) {
+    return "ingress";
+  }
+  if (coverageDelta < -SOLAR_ECLIPSE_DIRECTION_EPSILON) {
+    return "egress";
+  }
+
+  switch (previousStageKey) {
+    case "approach":
+    case "partialIngress":
+    case "totality":
+      return "ingress";
+    case "partialEgress":
+    case "complete":
+      return "egress";
+    default:
+      return "idle";
+  }
+}
+
+function getSolarEclipseStageLabelKey(stageKey) {
+  switch (stageKey) {
+    case "approach":
+      return "solarEclipseStageApproach";
+    case "partialIngress":
+      return "solarEclipseStagePartialIngress";
+    case "totality":
+      return "solarEclipseStageTotality";
+    case "partialEgress":
+      return "solarEclipseStagePartialEgress";
+    case "complete":
+      return "solarEclipseStageComplete";
+    default:
+      return "solarEclipseStageIdle";
+  }
+}
+
+function getSolarEclipseStageProgress({
+  coverage,
+  normalizedDistance,
+  stageElapsedMs,
+  stageKey
+}) {
+  switch (stageKey) {
+    case "approach":
+      return THREE.MathUtils.clamp(
+        Math.max(
+          stageElapsedMs / Math.max(SOLAR_ECLIPSE_APPROACH_MIN_MS, 1),
+          (SOLAR_ECLIPSE_APPROACH_DISTANCE_FACTOR - normalizedDistance) /
+            Math.max(SOLAR_ECLIPSE_APPROACH_DISTANCE_FACTOR - 1, 0.0001)
+        ),
+        0,
+        1
+      );
+    case "partialIngress":
+    case "partialEgress":
+      return THREE.MathUtils.clamp(
+        coverage / Math.max(SOLAR_ECLIPSE_TOTAL_COVERAGE, 0.0001),
+        0,
+        1
+      );
+    case "totality":
+      return THREE.MathUtils.clamp(
+        Math.max(
+          stageElapsedMs / Math.max(SOLAR_ECLIPSE_TOTALITY_MIN_MS, 1),
+          (coverage - SOLAR_ECLIPSE_TOTAL_COVERAGE) /
+            Math.max(1 - SOLAR_ECLIPSE_TOTAL_COVERAGE, 0.0001)
+        ),
+        0,
+        1
+      );
+    case "complete":
+      return THREE.MathUtils.clamp(
+        1 - (stageElapsedMs / Math.max(SOLAR_ECLIPSE_COMPLETE_FADE_MS, 1)),
+        0,
+        1
+      );
+    default:
+      return 0;
+  }
+}
+
+function stepValueToward(currentValue, targetValue, maxDelta) {
+  if (maxDelta <= 0) {
+    return currentValue;
+  }
+
+  return currentValue + THREE.MathUtils.clamp(
+    targetValue - currentValue,
+    -maxDelta,
+    maxDelta
+  );
+}
+
+function getProjectedSolarEclipseMetrics({
+  altitudeAligned,
+  darkSunDisc,
+  sunDisc
+}) {
+  renderer.getDrawingBufferSize(tempSolarEclipseViewport);
+  const viewportWidth = Math.max(tempSolarEclipseViewport.x, 1);
+  const viewportHeight = Math.max(tempSolarEclipseViewport.y, 1);
+  const deltaX = sunDisc.centerX - darkSunDisc.centerX;
+  const deltaY = sunDisc.centerY - darkSunDisc.centerY;
+  const centerDistance = Math.hypot(deltaX, deltaY);
+  const contactDistance = Math.max(sunDisc.radius + darkSunDisc.radius, 0.0001);
+  const normalizedDistance = centerDistance / contactDistance;
+  const centerDistancePx = Math.hypot(
+    deltaX * viewportWidth * 0.5,
+    deltaY * viewportHeight * 0.5
+  );
+  const sunRadiusPx = sunDisc.radius * viewportWidth * 0.5;
+  const darkSunRadiusPx = darkSunDisc.radius * viewportWidth * 0.5;
+  const contactDistancePx = Math.max(sunRadiusPx + darkSunRadiusPx, 0.0001);
+  const contactDepthPx = contactDistancePx - centerDistancePx;
+  const overlapArea = altitudeAligned
+    ? getCircleOverlapArea(sunDisc.radius, darkSunDisc.radius, centerDistance)
+    : 0;
+  const coverage = (
+    altitudeAligned && sunDisc.radius > 0
+      ? THREE.MathUtils.clamp(overlapArea / (Math.PI * sunDisc.radius * sunDisc.radius), 0, 1)
+      : 0
+  );
+
+  return {
+    contactDepthPx,
+    coverage,
+    normalizedDistance
+  };
+}
+
+function advanceSolarEclipsePresentation(rawSolarEclipse, deltaSeconds = 0) {
+  const deltaMs = Math.max(deltaSeconds, 0) * 1000;
+  const coverageStep = SOLAR_ECLIPSE_PRESENTATION_COVERAGE_RATE * Math.max(deltaSeconds, 0);
+  let displayCoverage = THREE.MathUtils.clamp(solarEclipseTrackingState.displayCoverage ?? 0, 0, 1);
+  let displayStageElapsedMs = (
+    solarEclipseTrackingState.displayStageKey === "idle"
+      ? 0
+      : Math.max(solarEclipseTrackingState.displayStageElapsedMs ?? 0, 0) + deltaMs
+  );
+  let displayStageKey = solarEclipseTrackingState.displayStageKey ?? "idle";
+  let hasEnteredVisibleOverlap = Boolean(solarEclipseTrackingState.hasEnteredVisibleOverlap);
+
+  if (rawSolarEclipse.hasVisibleOverlap) {
+    hasEnteredVisibleOverlap = true;
+  }
+
+  const setStage = (nextStageKey) => {
+    if (displayStageKey !== nextStageKey) {
+      displayStageKey = nextStageKey;
+      displayStageElapsedMs = 0;
+    }
+  };
+
+  if (!rawSolarEclipse.visibleInView || rawSolarEclipse.normalizedDistance > SOLAR_ECLIPSE_IDLE_DISTANCE_FACTOR) {
+    if (displayStageKey === "complete" && displayStageElapsedMs < SOLAR_ECLIPSE_COMPLETE_FADE_MS) {
+      displayCoverage = 0;
+    } else {
+      setStage("idle");
+      displayCoverage = 0;
+      hasEnteredVisibleOverlap = false;
+    }
+  } else {
+    switch (displayStageKey) {
+      case "idle":
+        displayCoverage = 0;
+        if (rawSolarEclipse.stageKey === "approach") {
+          setStage("approach");
+        } else if (
+          rawSolarEclipse.hasVisibleOverlap ||
+          ["partialIngress", "partialEgress", "totality"].includes(rawSolarEclipse.stageKey)
+        ) {
+          setStage("partialIngress");
+        } else if (rawSolarEclipse.stageKey === "complete" && hasEnteredVisibleOverlap) {
+          setStage("complete");
+        }
+        break;
+      case "approach":
+        displayCoverage = 0;
+        if (rawSolarEclipse.stageKey === "idle") {
+          setStage("idle");
+          hasEnteredVisibleOverlap = false;
+        } else if (rawSolarEclipse.hasVisibleOverlap) {
+          setStage("partialIngress");
+        }
+        break;
+      case "partialIngress":
+        displayCoverage = stepValueToward(
+          displayCoverage,
+          Math.max(rawSolarEclipse.rawCoverage, displayCoverage),
+          coverageStep
+        );
+        if (!rawSolarEclipse.hasVisibleOverlap && hasEnteredVisibleOverlap) {
+          setStage("partialEgress");
+        } else if (
+          rawSolarEclipse.stageKey === "partialEgress" &&
+          rawSolarEclipse.rawCoverage <= displayCoverage
+        ) {
+          setStage("partialEgress");
+        } else if (
+          rawSolarEclipse.stageKey === "totality" &&
+          displayCoverage >= (SOLAR_ECLIPSE_TOTAL_COVERAGE - 0.01)
+        ) {
+          setStage("totality");
+        }
+        break;
+      case "totality":
+        displayCoverage = stepValueToward(
+          displayCoverage,
+          Math.max(rawSolarEclipse.rawCoverage, SOLAR_ECLIPSE_TOTAL_COVERAGE),
+          Math.max(coverageStep, 0.015)
+        );
+        if (
+          displayStageElapsedMs >= SOLAR_ECLIPSE_TOTALITY_MIN_MS &&
+          ["partialEgress", "complete", "idle"].includes(rawSolarEclipse.stageKey)
+        ) {
+          setStage("partialEgress");
+        }
+        break;
+      case "partialEgress":
+        displayCoverage = stepValueToward(
+          displayCoverage,
+          rawSolarEclipse.rawCoverage,
+          coverageStep
+        );
+        if (
+          rawSolarEclipse.stageKey === "partialIngress" &&
+          rawSolarEclipse.rawCoverage > (displayCoverage + 0.001)
+        ) {
+          setStage("partialIngress");
+        } else if (!rawSolarEclipse.hasVisibleOverlap && displayCoverage <= 0.0005) {
+          setStage("complete");
+        }
+        break;
+      case "complete":
+        displayCoverage = 0;
+        if (displayStageElapsedMs >= SOLAR_ECLIPSE_COMPLETE_FADE_MS) {
+          setStage("idle");
+          hasEnteredVisibleOverlap = false;
+        }
+        break;
+      default:
+        setStage("idle");
+        displayCoverage = 0;
+        hasEnteredVisibleOverlap = false;
+        break;
+    }
+  }
+
+  if (displayStageKey === "idle") {
+    displayCoverage = 0;
+    displayStageElapsedMs = 0;
+  }
+
+  solarEclipseTrackingState.displayCoverage = displayCoverage;
+  solarEclipseTrackingState.displayStageElapsedMs = displayStageElapsedMs;
+  solarEclipseTrackingState.displayStageKey = displayStageKey;
+  solarEclipseTrackingState.hasEnteredVisibleOverlap = hasEnteredVisibleOverlap;
+
+  const stageProgress = getSolarEclipseStageProgress({
+    coverage: displayCoverage,
+    normalizedDistance: rawSolarEclipse.normalizedDistance,
+    stageElapsedMs: displayStageElapsedMs,
+    stageKey: displayStageKey
+  });
+  const total = displayStageKey === "totality";
+  const active = ["partialIngress", "partialEgress", "totality"].includes(displayStageKey);
+  const lightReduction = active
+    ? THREE.MathUtils.clamp(
+      total ? Math.max(displayCoverage, 0.82) : displayCoverage,
+      0,
+      1
+    )
+    : 0;
+
+  return createSolarEclipseState({
+    active,
+    total,
+    coverage: displayCoverage,
+    rawCoverage: rawSolarEclipse.rawCoverage,
+    direction: rawSolarEclipse.direction,
+    hasContact: rawSolarEclipse.hasContact,
+    hasVisibleOverlap: rawSolarEclipse.hasVisibleOverlap,
+    contactDepthPx: rawSolarEclipse.contactDepthPx,
+    lightReduction,
+    normalizedDistance: rawSolarEclipse.normalizedDistance,
+    recentlyActive: displayStageKey !== "idle",
+    rawStageKey: rawSolarEclipse.stageKey,
+    stageKey: displayStageKey,
+    stageLabelKey: getSolarEclipseStageLabelKey(displayStageKey),
+    stageProgress,
+    visibleInView: rawSolarEclipse.visibleInView
+  });
+}
+
+function getSolarEclipseVisualProfile(solarEclipse = createSolarEclipseState()) {
+  const stageKey = solarEclipse.stageKey ?? "idle";
+  const coverage = THREE.MathUtils.clamp(solarEclipse.coverage ?? 0, 0, 1);
+  const partialStrength = THREE.MathUtils.clamp(
+    coverage / Math.max(SOLAR_ECLIPSE_TOTAL_COVERAGE, 0.0001),
+    0,
+    1
+  );
+  const partialVisualStrength = partialStrength;
+  const profile = {
+    aureoleOpacityScale: 1,
+    aureoleScaleFactor: 1,
+    coronaOpacityScale: 1,
+    coronaScaleFactor: 1,
+    darkSunBodyOpacity: 0,
+    darkSunRimOpacity: 0,
+    environmentLightScale: 1,
+    sunBodyScale: 1,
+    sunEclipseMaskStrength: 0,
+    sunHaloScale: 1,
+    sunLightScale: 1,
+    sunRayScale: 1
+  };
+
+  if (stageKey === "partialIngress") {
+    profile.darkSunBodyOpacity = ORBIT_DARK_SUN_OCCLUSION_OPACITY;
+    profile.darkSunRimOpacity = ORBIT_DARK_SUN_RIM_OPACITY * 0.28;
+    profile.environmentLightScale = THREE.MathUtils.lerp(0.8, 0.56, partialVisualStrength);
+    profile.sunBodyScale = 1;
+    profile.sunEclipseMaskStrength = 1;
+    profile.sunHaloScale = THREE.MathUtils.lerp(0.22, 0.01, partialVisualStrength);
+    profile.sunLightScale = THREE.MathUtils.lerp(0.34, 0.06, partialVisualStrength);
+    profile.coronaOpacityScale = THREE.MathUtils.lerp(0.82, 1.18, partialVisualStrength);
+    profile.aureoleOpacityScale = THREE.MathUtils.lerp(0.42, 0.74, partialVisualStrength);
+    profile.coronaScaleFactor = THREE.MathUtils.lerp(0.98, 1.06, partialVisualStrength);
+    profile.aureoleScaleFactor = THREE.MathUtils.lerp(0.96, 1.02, partialVisualStrength);
+    profile.sunRayScale = THREE.MathUtils.lerp(0.28, 0.01, partialVisualStrength);
+    return profile;
+  }
+
+  if (stageKey === "partialEgress") {
+    const recoveryProgress = THREE.MathUtils.clamp(1 - partialStrength, 0, 1);
+    const recoveryStrength = recoveryProgress * recoveryProgress * (3 - (2 * recoveryProgress));
+    profile.darkSunBodyOpacity = ORBIT_DARK_SUN_OCCLUSION_OPACITY;
+    profile.darkSunRimOpacity = THREE.MathUtils.lerp(
+      ORBIT_DARK_SUN_RIM_OPACITY * 0.08,
+      ORBIT_DARK_SUN_RIM_OPACITY * 0.28,
+      recoveryStrength
+    );
+    profile.environmentLightScale = THREE.MathUtils.lerp(0.58, 1, recoveryStrength);
+    profile.sunBodyScale = 1;
+    profile.sunEclipseMaskStrength = 1;
+    profile.sunHaloScale = THREE.MathUtils.lerp(0.015, 1, recoveryStrength);
+    profile.sunLightScale = THREE.MathUtils.lerp(0.06, 1, recoveryStrength);
+    profile.coronaOpacityScale = THREE.MathUtils.lerp(2.3, 1, recoveryStrength);
+    profile.aureoleOpacityScale = THREE.MathUtils.lerp(1.24, 1, recoveryStrength);
+    profile.coronaScaleFactor = THREE.MathUtils.lerp(1.16, 1, recoveryStrength);
+    profile.aureoleScaleFactor = THREE.MathUtils.lerp(1.06, 1, recoveryStrength);
+    profile.sunRayScale = THREE.MathUtils.lerp(0.02, 1, recoveryStrength);
+    return profile;
+  }
+
+  if (stageKey === "totality") {
+    profile.darkSunBodyOpacity = ORBIT_DARK_SUN_OCCLUSION_OPACITY;
+    profile.darkSunRimOpacity = ORBIT_DARK_SUN_RIM_OPACITY * 0.08;
+    profile.environmentLightScale = 0.58;
+    profile.sunBodyScale = 1;
+    profile.sunEclipseMaskStrength = 1;
+    profile.sunHaloScale = 0.015;
+    profile.sunLightScale = 0.06;
+    profile.coronaOpacityScale = 2.3;
+    profile.aureoleOpacityScale = 1.24;
+    profile.coronaScaleFactor = 1.16;
+    profile.aureoleScaleFactor = 1.06;
+    profile.sunRayScale = 0.02;
+    return profile;
+  }
+
+  if (stageKey === "complete") {
+    return profile;
+  }
+
+  return profile;
+}
+
+function syncDarkSunPresentation(solarEclipse = createSolarEclipseState()) {
+  const visualProfile = getSolarEclipseVisualProfile(solarEclipse);
+  const debugVisible = Boolean(simulationState.darkSunDebugVisible);
+  const eclipseVisible = Boolean(
+    solarEclipse.visibleInView &&
+    solarEclipse.hasVisibleOverlap
+  );
+  const showDarkSun = debugVisible || eclipseVisible;
+  const bodyOpacity = debugVisible
+    ? ORBIT_DARK_SUN_DEBUG_OPACITY
+    : (eclipseVisible ? visualProfile.darkSunBodyOpacity : 0);
+  const rimOpacity = debugVisible
+    ? ORBIT_DARK_SUN_RIM_OPACITY
+    : (eclipseVisible ? visualProfile.darkSunRimOpacity : 0);
+
+  orbitDarkSun.visible = !walkerState.enabled && showDarkSun;
+  observerDarkSun.visible = walkerState.enabled && showDarkSun;
+  orbitDarkSunBody.material.opacity = bodyOpacity;
+  observerDarkSunBody.material.opacity = bodyOpacity;
+  orbitDarkSunRim.material.opacity = rimOpacity;
+  observerDarkSunRim.material.opacity = rimOpacity;
+
+  const eclipseMaskStrength = (
+    !debugVisible &&
+    solarEclipse.visibleInView &&
+    solarEclipse.hasVisibleOverlap
+  ) ? 1 : 0;
+  const sunMaterials = [
+    orbitSunBody.material,
+    observerSunBody.material
+  ];
+
+  for (const material of sunMaterials) {
+    const { sunEclipseMaskState, sunEclipseMaskShader } = material.userData;
+    if (!sunEclipseMaskState) {
+      continue;
+    }
+
+    sunEclipseMaskState.strength = eclipseMaskStrength;
+
+    if (sunEclipseMaskShader) {
+      sunEclipseMaskShader.uniforms.sunEclipseMaskStrength.value = sunEclipseMaskState.strength;
+    }
+  }
+}
+
+function evaluateSolarEclipse(snapshot, deltaSeconds = 0) {
+  if (!snapshot) {
+    return createSolarEclipseState();
+  }
+
+  const sunGroup = walkerState.enabled ? observerSun : orbitSun;
+  const darkSunGroup = walkerState.enabled ? observerDarkSun : orbitDarkSun;
+  const sunBody = walkerState.enabled ? observerSunBody : orbitSunBody;
+  const darkSunBody = walkerState.enabled ? observerDarkSunBody : orbitDarkSunBody;
+  const sunSceneVisible = walkerState.enabled ? observerSun.visible : true;
+
+  sunGroup.getWorldPosition(tempSunWorldPosition);
+  darkSunGroup.getWorldPosition(tempDarkSunWorldPosition);
+
+  const sunDisc = getProjectedDisc(
+    tempSunWorldPosition,
+    getWorldBodyRadius(sunBody, ORBIT_SUN_SIZE)
+  );
+  const darkSunDisc = getProjectedDisc(
+    tempDarkSunWorldPosition,
+    getWorldBodyRadius(darkSunBody, ORBIT_DARK_SUN_SIZE)
+  );
+  const visibleInView = sunSceneVisible && sunDisc.visible && darkSunDisc.visible;
+  const altitudeDelta = Math.abs(sunDisc.centerY - darkSunDisc.centerY);
+  const altitudeTolerance = Math.max(
+    0.0005,
+    sunDisc.radius * DARK_SUN_ALTITUDE_ALIGNMENT_TOLERANCE_FACTOR
+  );
+  const approachAligned = visibleInView && altitudeDelta <= (altitudeTolerance * 1.75);
+  const altitudeAligned = visibleInView && altitudeDelta <= altitudeTolerance;
+  const eclipseMetrics = getProjectedSolarEclipseMetrics({
+    altitudeAligned,
+    darkSunDisc,
+    sunDisc
+  });
+  const { contactDepthPx, coverage, normalizedDistance } = eclipseMetrics;
+  const coverageDelta = coverage - solarEclipseTrackingState.previousCoverage;
+  const previousStageKey = solarEclipseTrackingState.previousStageKey;
+  const direction = getSolarEclipseDirection(previousStageKey, coverageDelta);
+  const hasContact = visibleInView && contactDepthPx >= 0;
+  const hasVisibleOverlap = altitudeAligned && contactDepthPx >= SOLAR_ECLIPSE_VISIBLE_CONTACT_PX;
+  const active = hasVisibleOverlap;
+  const total = active && coverage >= SOLAR_ECLIPSE_TOTAL_COVERAGE && darkSunDisc.radius >= sunDisc.radius;
+  const hasSeenRawOverlap = (
+    solarEclipseTrackingState.hasEnteredVisibleOverlap ||
+    ["partialIngress", "partialEgress", "totality", "complete"].includes(previousStageKey)
+  );
+  const completeWindowActive = (
+    !hasVisibleOverlap &&
+    normalizedDistance <= SOLAR_ECLIPSE_APPROACH_DISTANCE_FACTOR &&
+    hasSeenRawOverlap &&
+    ["totality", "partialEgress", "complete"].includes(previousStageKey)
+  );
+  let rawStageKey = "idle";
+
+  if (!visibleInView || normalizedDistance > SOLAR_ECLIPSE_IDLE_DISTANCE_FACTOR) {
+  } else if (completeWindowActive) {
+    rawStageKey = "complete";
+  } else if (total) {
+    rawStageKey = "totality";
+  } else if (active) {
+    rawStageKey = direction === "egress" ? "partialEgress" : "partialIngress";
+  } else if (
+    approachAligned &&
+    !hasContact &&
+    normalizedDistance <= SOLAR_ECLIPSE_APPROACH_DISTANCE_FACTOR
+  ) {
+    rawStageKey = "approach";
+  }
+
+  const rawSolarEclipse = createSolarEclipseState({
+    active,
+    total,
+    coverage,
+    rawCoverage: coverage,
+    direction,
+    hasContact,
+    hasVisibleOverlap,
+    contactDepthPx,
+    lightReduction: 0,
+    normalizedDistance,
+    rawStageKey,
+    stageKey: rawStageKey,
+    stageLabelKey: getSolarEclipseStageLabelKey(rawStageKey),
+    stageProgress: 0,
+    visibleInView
+  });
+  snapshot.solarEclipse = advanceSolarEclipsePresentation(rawSolarEclipse, deltaSeconds);
+  solarEclipseTrackingState.previousCoverage = coverage;
+  solarEclipseTrackingState.previousStageKey = rawStageKey;
+  astronomyApi.syncSolarEclipseUi(snapshot.solarEclipse);
+  syncDarkSunPresentation(snapshot.solarEclipse);
+  return snapshot.solarEclipse;
+}
+
+function getProjectedSolarEclipseMetricsFromStates(sunRenderState, darkSunRenderState) {
+  const previousSunPosition = orbitSun.position.clone();
+  const previousDarkSunPosition = orbitDarkSun.position.clone();
+
+  orbitSun.position.copy(sunRenderState.position);
+  orbitDarkSun.position.copy(darkSunRenderState.position);
+  scene.updateMatrixWorld(true);
+  orbitSun.getWorldPosition(tempSunWorldPosition);
+  orbitDarkSun.getWorldPosition(tempDarkSunWorldPosition);
+
+  const sunDisc = getProjectedDisc(
+    tempSunWorldPosition,
+    getWorldBodyRadius(orbitSunBody, ORBIT_SUN_SIZE)
+  );
+  const darkSunDisc = getProjectedDisc(
+    tempDarkSunWorldPosition,
+    getWorldBodyRadius(orbitDarkSunBody, ORBIT_DARK_SUN_SIZE)
+  );
+  const visibleInView = sunDisc.visible && darkSunDisc.visible;
+  const altitudeDelta = Math.abs(sunDisc.centerY - darkSunDisc.centerY);
+  const altitudeTolerance = Math.max(
+    0.0005,
+    sunDisc.radius * DARK_SUN_ALTITUDE_ALIGNMENT_TOLERANCE_FACTOR
+  );
+  const altitudeAligned = visibleInView && altitudeDelta <= altitudeTolerance;
+  const metrics = getProjectedSolarEclipseMetrics({
+    altitudeAligned,
+    darkSunDisc,
+    sunDisc
+  });
+
+  orbitSun.position.copy(previousSunPosition);
+  orbitDarkSun.position.copy(previousDarkSunPosition);
+  scene.updateMatrixWorld(true);
+  return {
+    contactDepthPx: metrics.contactDepthPx,
+    coverage: metrics.coverage,
+    hasVisibleOverlap: altitudeAligned && metrics.contactDepthPx >= SOLAR_ECLIPSE_VISIBLE_CONTACT_PX,
+    visibleInView
+  };
+}
+
+function findPreEclipseAngleOffset(sunAngleRadians, sunProgress) {
+  const sunRenderState = astronomyApi.getSunRenderState({
+    orbitAngleRadians: sunAngleRadians,
+    orbitMode: "auto",
+    progress: sunProgress,
+    source: "demo"
+  });
+  const maxOffset = THREE.MathUtils.clamp(
+    ((ORBIT_SUN_SIZE + ORBIT_DARK_SUN_SIZE) / Math.max(sunRenderState.centerRadius, 0.0001)) * 1.4,
+    0.015,
+    0.12
+  );
+  const targetContactDepthPx = 0.75;
+  let bestOffset = maxOffset * 0.22;
+  let bestScore = Number.POSITIVE_INFINITY;
+
+  for (let stepIndex = 0; stepIndex < 96; stepIndex += 1) {
+    const progress = stepIndex / 95;
+    const offset = THREE.MathUtils.lerp(0.0008, maxOffset, progress);
+    const eclipseMetrics = getProjectedSolarEclipseMetricsFromStates(
+      sunRenderState,
+      astronomyApi.getDarkSunRenderState({
+        orbitAngleRadians: sunAngleRadians + offset,
+        orbitMode: "auto",
+        progress: sunProgress,
+        source: "demo"
+      })
+    );
+    const score = eclipseMetrics.hasVisibleOverlap
+      ? 40 + eclipseMetrics.contactDepthPx
+      : Math.abs(eclipseMetrics.contactDepthPx - targetContactDepthPx);
+
+    if (score < bestScore) {
+      bestScore = score;
+      bestOffset = offset;
+    }
+  }
+
+  return bestOffset;
+}
+
+function resetDarkSunStageState() {
+  simulationState.darkSunStageAltitudeLock = false;
+  simulationState.darkSunStageHasEclipsed = false;
+  simulationState.darkSunStageOffsetRadians = 0;
+  simulationState.darkSunStageTransit = 0;
+  solarEclipseTrackingState.displayCoverage = 0;
+  solarEclipseTrackingState.displayStageElapsedMs = 0;
+  solarEclipseTrackingState.displayStageKey = "idle";
+  solarEclipseTrackingState.hasEnteredVisibleOverlap = false;
+  solarEclipseTrackingState.previousCoverage = 0;
+  solarEclipseTrackingState.previousStageKey = "idle";
+  solarEclipseTrackingState.recentActiveFrames = 0;
+}
+
+function stagePreEclipseScene() {
+  const activeSnapshot = getCurrentUiSnapshot();
+  const sourceDate = activeSnapshot?.date ?? new Date();
+  const realitySnapshot = astronomyState.enabled ? astronomyApi.getAstronomySnapshot(sourceDate) : null;
+  const sunAngleRadians = Math.atan2(orbitSun.position.z, -orbitSun.position.x);
+  const sunProgress = realitySnapshot?.sunRenderState?.macroProgress ?? simulationState.sunBandProgress ?? 0.5;
+
+  if (walkerState.enabled || renderState.preparing) {
+    exitFirstPersonMode();
+  }
+
+  if (astronomyState.enabled) {
+    realitySyncEl.checked = false;
+    realityLiveEl.checked = false;
+    astronomyApi.disableRealityMode();
+  }
+
+  simulationState.demoPhaseDateMs = sourceDate.getTime();
+  simulationState.orbitMode = "auto";
+  simulationState.sunBandProgress = sunProgress;
+  simulationState.sunBandDirection = 1;
+  simulationState.darkSunBandProgress = sunProgress;
+  simulationState.darkSunBandDirection = simulationState.sunBandDirection;
+  simulationState.darkSunStageAltitudeLock = true;
+  simulationState.darkSunStageHasEclipsed = false;
+  simulationState.darkSunStageTransit = 0;
+  simulationState.orbitSunAngle = sunAngleRadians;
+  const sunRenderState = astronomyApi.getSunRenderState({
+    orbitAngleRadians: simulationState.orbitSunAngle,
+    orbitMode: simulationState.orbitMode,
+    progress: simulationState.sunBandProgress,
+    source: "demo"
+  });
+  const fixedStageOffset = THREE.MathUtils.clamp(
+    ((ORBIT_SUN_SIZE + ORBIT_DARK_SUN_SIZE) / Math.max(sunRenderState.centerRadius, 0.0001)) *
+      DARK_SUN_STAGE_PRE_ECLIPSE_DISTANCE_FACTOR,
+    0.01,
+    0.09
+  );
+  simulationState.orbitDarkSunAngle = sunAngleRadians + fixedStageOffset;
+  const darkSunRenderState = astronomyApi.getDarkSunRenderState({
+    orbitAngleRadians: simulationState.orbitDarkSunAngle,
+    orbitMode: simulationState.orbitMode,
+    progress: simulationState.darkSunBandProgress,
+    source: "demo"
+  });
+
+  orbitSun.position.copy(sunRenderState.position);
+  orbitDarkSun.position.copy(darkSunRenderState.position);
+  scene.updateMatrixWorld(true);
+  solarEclipseTrackingState.displayCoverage = 0;
+  solarEclipseTrackingState.displayStageElapsedMs = 0;
+  solarEclipseTrackingState.displayStageKey = "idle";
+  solarEclipseTrackingState.hasEnteredVisibleOverlap = false;
+  solarEclipseTrackingState.previousCoverage = 0;
+  solarEclipseTrackingState.previousStageKey = "idle";
+  solarEclipseTrackingState.recentActiveFrames = 0;
+  astronomyApi.updateMoonOrbit({
+    orbitMode: simulationState.orbitMode,
+    progress: simulationState.moonBandProgress
+  });
+  astronomyApi.updateSeasonPresentation(sunRenderState.centerRadius);
+  astronomyApi.updateOrbitModeUi();
+  astronomyApi.refreshTrailsForCurrentMode();
+  celestialTrackingCameraApi.setTarget("sun");
+  celestialTrackingCameraApi.update();
+  cameraApi.updateCamera();
+  const approachStageOffset = THREE.MathUtils.clamp(
+    findPreEclipseAngleOffset(sunAngleRadians, simulationState.sunBandProgress),
+    0.0008,
+    fixedStageOffset
+  );
+  simulationState.darkSunStageOffsetRadians = approachStageOffset;
+  simulationState.orbitDarkSunAngle = sunAngleRadians + approachStageOffset;
+  orbitDarkSun.position.copy(
+    astronomyApi.getDarkSunRenderState({
+      orbitAngleRadians: simulationState.orbitDarkSunAngle,
+      orbitMode: simulationState.orbitMode,
+      progress: simulationState.darkSunBandProgress,
+      source: "demo"
+    }).position
+  );
+  resetDarkSunOcclusionMotion(darkSunOcclusionState.orbit);
+  applyDarkSunStageTransitPosition({
+    sunBody: orbitSunBody,
+    sunGroup: orbitSun,
+    sunRadius: ORBIT_SUN_SIZE,
+    darkSunBody: orbitDarkSunBody,
+    darkSunGroup: orbitDarkSun,
+    darkSunRadius: ORBIT_DARK_SUN_SIZE
+  });
+  updateDarkSunMaskUniforms();
+
+  const stagedSnapshot = getCurrentUiSnapshot();
+  stagedSnapshot.darkSunRenderPosition = orbitDarkSun.position.clone();
+  astronomyApi.updateAstronomyUi(stagedSnapshot);
+  evaluateSolarEclipse(stagedSnapshot, 0);
+  updateSunVisualEffects(stagedSnapshot);
+}
+
+function updateSunVisualEffects(snapshot) {
   const pulse = 0.5 + (Math.sin(performance.now() * ORBIT_SUN_PULSE_SPEED) * 0.5);
   const bodyScale = THREE.MathUtils.lerp(0.96, 1.2, pulse);
   const haloScale = THREE.MathUtils.lerp(0.84, 1.34, pulse);
   const lightScale = THREE.MathUtils.lerp(0.94, 1.14, pulse);
+  const solarEclipse = snapshot?.solarEclipse ?? createSolarEclipseState();
+  const visualProfile = getSolarEclipseVisualProfile(solarEclipse);
+  const eclipseLightScale = getSolarEclipseLightScale(solarEclipse);
+  const topDownLightScale = visualProfile.environmentLightScale;
 
   if (walkerState.enabled) {
-    observerSunBody.material.emissiveIntensity *= bodyScale;
-    observerSunHalo.material.opacity *= haloScale;
-    observerSunLight.intensity *= lightScale;
+    observerSunBody.material.emissiveIntensity *= bodyScale * visualProfile.sunBodyScale;
+    observerSunHalo.material.opacity *= haloScale * visualProfile.sunHaloScale;
+    observerSunLight.intensity *= lightScale * eclipseLightScale;
   } else {
-    orbitSunBody.material.emissiveIntensity = ORBIT_SUN_BODY_EMISSIVE_INTENSITY * bodyScale;
-    orbitSunHalo.material.opacity = ORBIT_SUN_HALO_OPACITY * haloScale;
-    orbitSunLight.intensity = ORBIT_SUN_LIGHT_INTENSITY * lightScale;
-    orbitSunCorona.material.opacity = ORBIT_SUN_CORONA_OPACITY * THREE.MathUtils.lerp(0.88, 1.18, pulse);
-    orbitSunAureole.material.opacity = ORBIT_SUN_AUREOLE_OPACITY * THREE.MathUtils.lerp(0.82, 1.24, pulse);
-    orbitSunCorona.scale.setScalar(ORBIT_SUN_CORONA_SCALE * THREE.MathUtils.lerp(0.94, 1.08, pulse));
-    orbitSunAureole.scale.setScalar(ORBIT_SUN_AUREOLE_SCALE * THREE.MathUtils.lerp(0.96, 1.12, pulse));
+    orbitSunBody.material.emissiveIntensity = ORBIT_SUN_BODY_EMISSIVE_INTENSITY * bodyScale * visualProfile.sunBodyScale;
+    orbitSunHalo.material.opacity = ORBIT_SUN_HALO_OPACITY * haloScale * visualProfile.sunHaloScale;
+    orbitSunLight.intensity = ORBIT_SUN_LIGHT_INTENSITY * lightScale * eclipseLightScale;
+    orbitSunCorona.material.opacity = ORBIT_SUN_CORONA_OPACITY *
+      THREE.MathUtils.lerp(0.88, 1.18, pulse) *
+      visualProfile.coronaOpacityScale;
+    orbitSunAureole.material.opacity = ORBIT_SUN_AUREOLE_OPACITY *
+      THREE.MathUtils.lerp(0.82, 1.24, pulse) *
+      visualProfile.aureoleOpacityScale;
+    orbitSunCorona.scale.setScalar(
+      ORBIT_SUN_CORONA_SCALE *
+      THREE.MathUtils.lerp(0.94, 1.08, pulse) *
+      visualProfile.coronaScaleFactor
+    );
+    orbitSunAureole.scale.setScalar(
+      ORBIT_SUN_AUREOLE_SCALE *
+      THREE.MathUtils.lerp(0.96, 1.12, pulse) *
+      visualProfile.aureoleScaleFactor
+    );
     orbitSunAureole.material.rotation += 0.0016;
+  }
+
+  ambient.intensity += ((0.9 * topDownLightScale) - ambient.intensity) * 0.12;
+  keyLight.intensity += ((1.35 * topDownLightScale) - keyLight.intensity) * 0.12;
+  rimLight.intensity += ((0.42 * topDownLightScale) - rimLight.intensity) * 0.12;
+
+  if (walkerState.enabled && firstPersonSunRayGroup.visible) {
+    for (const rayMesh of firstPersonSunRayMeshes) {
+      rayMesh.material.opacity *= visualProfile.sunRayScale;
+    }
   }
 
   orbitSun.getWorldPosition(tempSunWorldPosition);
@@ -2141,6 +3570,7 @@ function syncMoonLightPresentation(
 
 function updateObserverCelestialPerspective(snapshot) {
   if (!walkerState.enabled || !snapshot) {
+    resetDarkSunOcclusionMotion(darkSunOcclusionState.observer);
     const moonRenderState = getMoonRenderState(snapshot);
     syncMoonMaterialPresentation(orbitMoonBody.material, moonRenderState);
     syncMoonMaterialPresentation(observerMoonBody.material, moonRenderState);
@@ -2165,6 +3595,7 @@ function updateObserverCelestialPerspective(snapshot) {
       moonRenderState
     );
     observerSun.visible = false;
+    observerDarkSun.visible = false;
     observerMoon.visible = false;
     firstPersonSunRayGroup.visible = false;
     orbitSun.visible = true;
@@ -2204,14 +3635,24 @@ function updateObserverCelestialPerspective(snapshot) {
     orbitSun.getWorldPosition(tempDemoSunSourceWorld),
     observerGeo
   );
+  const darkSunHorizontal = getHorizontalFromWorldPosition(
+    orbitDarkSun.getWorldPosition(tempDemoDarkSunSourceWorld),
+    observerGeo
+  );
   const moonHorizontal = getHorizontalFromWorldPosition(
     orbitMoon.getWorldPosition(tempDemoMoonSourceWorld),
     observerGeo
   );
   const adjustedSunHorizontal = applyCelestialAltitudeOffset(sunHorizontal);
+  const adjustedDarkSunHorizontal = applyCelestialAltitudeOffset(darkSunHorizontal);
   const adjustedMoonHorizontal = applyCelestialAltitudeOffset(moonHorizontal);
   const sunTargetVisibility = THREE.MathUtils.clamp(
     (adjustedSunHorizontal.altitudeDegrees + FIRST_PERSON_CELESTIAL_FADE_RANGE) / (FIRST_PERSON_CELESTIAL_FADE_RANGE * 2),
+    0,
+    1
+  );
+  const darkSunTargetVisibility = THREE.MathUtils.clamp(
+    (adjustedDarkSunHorizontal.altitudeDegrees + FIRST_PERSON_CELESTIAL_FADE_RANGE) / (FIRST_PERSON_CELESTIAL_FADE_RANGE * 2),
     0,
     1
   );
@@ -2225,19 +3666,28 @@ function updateObserverCelestialPerspective(snapshot) {
     0,
     1
   );
+  const darkSunHorizonLift = THREE.MathUtils.clamp(
+    adjustedDarkSunHorizontal.altitudeDegrees / constants.FIRST_PERSON_HORIZON_OCCLUSION_RANGE,
+    0,
+    1
+  );
   const moonHorizonLift = THREE.MathUtils.clamp(
     adjustedMoonHorizontal.altitudeDegrees / constants.FIRST_PERSON_HORIZON_OCCLUSION_RANGE,
     0,
     1
   );
   const sunOcclusionVisibility = sunTargetVisibility * sunHorizonLift;
+  const darkSunOcclusionVisibility = darkSunTargetVisibility * darkSunHorizonLift;
   const moonOcclusionVisibility = moonTargetVisibility * moonHorizonLift;
 
   positionBodyInObserverSky(observerSun, adjustedSunHorizontal, observerGeo);
+  positionBodyInObserverSky(observerDarkSun, adjustedDarkSunHorizontal, observerGeo);
   positionBodyInObserverSky(observerMoon, adjustedMoonHorizontal, observerGeo);
   observerSun.position.y -= (1 - sunHorizonLift) * constants.FIRST_PERSON_HORIZON_SINK;
+  observerDarkSun.position.y -= (1 - darkSunHorizonLift) * constants.FIRST_PERSON_HORIZON_SINK;
   observerMoon.position.y -= (1 - moonHorizonLift) * (constants.FIRST_PERSON_HORIZON_SINK * 0.65);
   observerSun.scale.setScalar(FIRST_PERSON_SUN_SCALE);
+  observerDarkSun.scale.setScalar(FIRST_PERSON_SUN_SCALE * (ORBIT_DARK_SUN_SIZE / ORBIT_SUN_SIZE));
   observerMoon.scale.setScalar(FIRST_PERSON_MOON_SCALE);
   syncMoonMaterialPresentation(orbitMoonBody.material, moonRenderState);
   syncMoonMaterialPresentation(observerMoonBody.material, moonRenderState);
@@ -2283,6 +3733,9 @@ function updateObserverCelestialPerspective(snapshot) {
   observerSunLight.intensity += (
     (ORBIT_SUN_LIGHT_INTENSITY * sunOcclusionVisibility) - observerSunLight.intensity
   ) * 0.18;
+  observerDarkSun.renderOrder = 26;
+  observerDarkSunBody.material.opacity += (darkSunOcclusionVisibility - observerDarkSunBody.material.opacity) * 0.18;
+  observerDarkSunRim.material.opacity += ((ORBIT_DARK_SUN_RIM_OPACITY * darkSunOcclusionVisibility) - observerDarkSunRim.material.opacity) * 0.18;
   tempSunWorldPosition.copy(observerSun.position);
   tempSunViewDirection.copy(observerSun.position).sub(camera.position);
   const sunDistance = Math.max(tempSunViewDirection.length(), 0.0001);
@@ -2586,6 +4039,7 @@ routeResetButton.addEventListener("click", () => {
 
 realitySyncEl.addEventListener("change", () => {
   if (realitySyncEl.checked) {
+    resetDarkSunStageState();
     const nextDate = realityLiveEl.checked ? new Date() : new Date(observationTimeEl.value);
     astronomyApi.enableRealityMode({
       live: realityLiveEl.checked,
@@ -2603,6 +4057,7 @@ realityLiveEl.addEventListener("change", () => {
     return;
   }
   if (realityLiveEl.checked) {
+    resetDarkSunStageState();
     astronomyApi.enableRealityMode({ live: true, date: new Date() });
     return;
   }
@@ -2628,6 +4083,7 @@ applyObservationTimeButton.addEventListener("click", () => {
 setCurrentTimeButton.addEventListener("click", () => {
   realitySyncEl.checked = true;
   realityLiveEl.checked = true;
+  resetDarkSunStageState();
   astronomyApi.enableRealityMode({ live: true, date: new Date() });
 });
 
@@ -2658,6 +4114,19 @@ if (magneticFieldOverlayEl) {
   magneticFieldOverlayEl.addEventListener("change", () => {
     magneticFieldState.enabled = magneticFieldOverlayEl.checked;
     magneticFieldApi.syncUi();
+  });
+}
+
+if (darkSunDebugEl) {
+  darkSunDebugEl.addEventListener("change", () => {
+    simulationState.darkSunDebugVisible = darkSunDebugEl.checked;
+    syncDarkSunPresentation(getCurrentUiSnapshot().solarEclipse ?? createSolarEclipseState());
+  });
+}
+
+if (stagePreEclipseButton) {
+  stagePreEclipseButton.addEventListener("click", () => {
+    stagePreEclipseScene();
   });
 }
 
@@ -2750,10 +4219,16 @@ window.addEventListener("keyup", (event) => {
 });
 
 function getBodyBandProgressStep(body) {
-  const turns = Math.max(magneticFieldApi.getCoilOrbitProfile(body).turns, 1);
-  const baseSpeed = body === "moon"
-    ? ORBIT_SUN_SEASON_SPEED * ORBIT_MOON_BAND_SPEED_FACTOR
-    : ORBIT_SUN_SEASON_SPEED;
+  const normalizedBody = body === "darkSun" ? "sun" : body;
+  const turns = Math.max(magneticFieldApi.getCoilOrbitProfile(normalizedBody).turns, 1);
+  let baseSpeed = ORBIT_SUN_SEASON_SPEED;
+
+  if (body === "moon") {
+    baseSpeed *= ORBIT_MOON_BAND_SPEED_FACTOR;
+  } else if (body === "darkSun") {
+    baseSpeed *= ORBIT_DARK_SUN_BAND_SPEED_FACTOR;
+  }
+
   return baseSpeed / turns;
 }
 
@@ -2797,7 +4272,31 @@ function animate() {
     simulationState.orbitSunAngle += ORBIT_SUN_SPEED * speedMultiplier;
     if (simulationState.orbitMode === "auto") {
       advanceBandProgress("sunBandProgress", "sunBandDirection", getBodyBandProgressStep("sun") * speedMultiplier);
+      if (simulationState.darkSunStageAltitudeLock) {
+        simulationState.darkSunBandProgress = simulationState.sunBandProgress;
+        simulationState.darkSunBandDirection = simulationState.sunBandDirection ?? 1;
+      } else {
+        simulationState.darkSunBandProgress = 1 - simulationState.sunBandProgress;
+        simulationState.darkSunBandDirection = -(simulationState.sunBandDirection ?? 1);
+      }
       advanceBandProgress("moonBandProgress", "moonBandDirection", getBodyBandProgressStep("moon") * speedMultiplier);
+    }
+    if (simulationState.darkSunStageAltitudeLock) {
+      const transitStep = (
+        ORBIT_SUN_SPEED + ORBIT_DARK_SUN_SPEED
+      ) * speedMultiplier * DARK_SUN_STAGE_TRANSIT_ANGLE_SPEED_FACTOR;
+      simulationState.darkSunStageOffsetRadians -= transitStep;
+      simulationState.darkSunStageTransit = THREE.MathUtils.clamp(
+        simulationState.darkSunStageTransit + (
+          (deltaSeconds / Math.max(DARK_SUN_STAGE_TIMELINE_SECONDS, 0.0001)) *
+          Math.max(speedMultiplier, 0.2)
+        ),
+        0,
+        1
+      );
+      simulationState.orbitDarkSunAngle = simulationState.orbitSunAngle + simulationState.darkSunStageOffsetRadians;
+    } else {
+      simulationState.orbitDarkSunAngle -= ORBIT_DARK_SUN_SPEED * speedMultiplier;
     }
     simulationState.orbitMoonAngle += ORBIT_MOON_SPEED * speedMultiplier;
     simulationState.demoPhaseDateMs += deltaSeconds * DEMO_MOON_PHASE_MS_PER_SECOND * speedMultiplier;
@@ -2809,6 +4308,13 @@ function animate() {
       source: "demo"
     });
     orbitSun.position.copy(sunRenderState.position);
+    const darkSunRenderState = astronomyApi.getDarkSunRenderState({
+      orbitAngleRadians: simulationState.orbitDarkSunAngle,
+      orbitMode: simulationState.orbitMode,
+      progress: simulationState.darkSunBandProgress,
+      source: "demo"
+    });
+    orbitDarkSun.position.copy(darkSunRenderState.position);
     astronomyApi.updateSunTrail();
     astronomyApi.updateMoonOrbit({
       orbitMode: simulationState.orbitMode,
@@ -2824,6 +4330,8 @@ function animate() {
       sun: demoSunGeo,
       moon: demoMoonGeo,
       moonPhase: getMoonPhase(projectionDate),
+      darkSunRenderPosition: orbitDarkSun.position.clone(),
+      solarEclipse: createSolarEclipseState(),
       sunPosition: orbitSun.position.clone(),
       sunRenderPosition: orbitSun.position.clone(),
       sunDisplayHorizontal: astronomyApi.getSunDisplayHorizontalFromPosition(orbitSun.position),
@@ -2846,11 +4354,51 @@ function animate() {
   syncPreparationPresentation();
   celestialTrackingCameraApi.update();
   cameraApi.updateCamera();
-  firstPersonWorldApi.update(snapshot);
   if (snapshot) {
+    if (!walkerState.enabled) {
+      if (simulationState.darkSunStageAltitudeLock) {
+        applyDarkSunStageTransitPosition({
+          sunBody: orbitSunBody,
+          sunGroup: orbitSun,
+          sunRadius: ORBIT_SUN_SIZE,
+          darkSunBody: orbitDarkSunBody,
+          darkSunGroup: orbitDarkSun,
+          darkSunRadius: ORBIT_DARK_SUN_SIZE
+        });
+      } else {
+        applyDarkSunOcclusionAlignment({
+          motionState: darkSunOcclusionState.orbit,
+          sunBody: orbitSunBody,
+          sunGroup: orbitSun,
+          sunRadius: ORBIT_SUN_SIZE,
+          darkSunBody: orbitDarkSunBody,
+          darkSunGroup: orbitDarkSun,
+          darkSunRadius: ORBIT_DARK_SUN_SIZE
+        });
+      }
+      snapshot.darkSunRenderPosition = orbitDarkSun.position.clone();
+    } else {
+      resetDarkSunOcclusionMotion(darkSunOcclusionState.orbit);
+    }
     updateObserverCelestialPerspective(snapshot);
+    updateDarkSunMaskUniforms();
+    evaluateSolarEclipse(snapshot, deltaSeconds);
+    if (simulationState.darkSunStageAltitudeLock) {
+      if (snapshot.solarEclipse.hasVisibleOverlap) {
+        simulationState.darkSunStageHasEclipsed = true;
+      } else if (
+        simulationState.darkSunStageHasEclipsed &&
+        snapshot.solarEclipse.stageKey === "idle"
+      ) {
+        simulationState.darkSunStageAltitudeLock = false;
+        simulationState.darkSunStageHasEclipsed = false;
+      }
+    }
+    firstPersonWorldApi.update(snapshot);
+  } else {
+    firstPersonWorldApi.update(snapshot);
   }
-  updateSunVisualEffects();
+  updateSunVisualEffects(snapshot);
   magneticFieldApi.update(performance.now());
   renderer.render(walkerState.enabled ? firstPersonScene : scene, camera);
 }
@@ -2866,9 +4414,11 @@ astronomyApi.syncAnalemmaUi(astronomyState.selectedDate, true);
 magneticFieldApi.syncUi();
 astronomyApi.syncSeasonalMoonUi();
 astronomyApi.syncSeasonalSunUi(true);
+astronomyApi.syncSolarEclipseUi(createSolarEclipseState());
 walkerApi.syncWalkerUi();
 routeSimulationApi.initialize();
 syncFullTrailVisibility();
+resetDarkSunStageState();
 astronomyApi.enableRealityMode({ live: true, date: astronomyState.selectedDate });
 animate();
 
