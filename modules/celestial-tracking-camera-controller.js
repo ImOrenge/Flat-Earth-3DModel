@@ -24,9 +24,11 @@ export function createCelestialTrackingCameraController({
     }
   };
   const state = {
+    mode: "free",
     targetKey: "off"
   };
 
+  cameraState.mode = cameraState.mode ?? "free";
   cameraState.lookTarget = cameraState.lookTarget ?? defaultLookTarget.clone();
   cameraState.targetLookTarget = cameraState.targetLookTarget ?? defaultLookTarget.clone();
 
@@ -34,15 +36,22 @@ export function createCelestialTrackingCameraController({
     return Object.prototype.hasOwnProperty.call(targets, key) ? key : "off";
   }
 
+  function syncMode(hasTrackableTarget) {
+    state.mode = hasTrackableTarget ? "tracking" : "free";
+    cameraState.mode = state.mode;
+  }
+
   function updateLookTarget({ immediate = false } = {}) {
     const config = targets[state.targetKey];
+    const hasTrackableTarget = state.targetKey !== "off" && Boolean(config?.object);
 
-    if (state.targetKey === "off" || !config?.object) {
+    if (!hasTrackableTarget) {
       tempWorldPosition.copy(defaultLookTarget);
     } else {
       config.object.getWorldPosition(tempWorldPosition);
     }
 
+    syncMode(hasTrackableTarget);
     cameraState.targetLookTarget.copy(tempWorldPosition);
 
     if (immediate) {
@@ -83,11 +92,14 @@ export function createCelestialTrackingCameraController({
 
   return {
     clearTracking,
+    getMode() {
+      return state.mode;
+    },
     getTargetKey() {
       return state.targetKey;
     },
     isTrackingActive() {
-      return state.targetKey !== "off";
+      return state.mode === "tracking";
     },
     refreshLocalizedUi,
     setTarget,

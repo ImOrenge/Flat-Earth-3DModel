@@ -203,7 +203,7 @@
               </label>
             </div>
             <p class="sync-copy subtle" id="magnetic-field-summary">
-              Radial magnetic field lines flow from the north polar mountain toward the southern boundary.
+              Magnetic field lines keep a toroidal donut opening at the center and wrap as a symmetric upper and lower torus structure around the disc.
             </p>
             <section class="sun-audit-panel">
               <p class="orbit-title" data-i18n="solarEclipseTitle">Solar Eclipse</p>
@@ -239,6 +239,7 @@
                   <span class="toggle-text" data-i18n="toggleDarkSunDebug">Show</span>
                 </label>
               </div>
+              <p class="sync-copy subtle" id="dark-sun-debug-summary" hidden></p>
             </section>
             <div class="sync-row overlay-row" hidden>
               <span class="sync-title" data-i18n="skyOrbitTitle">Sky Orbit</span>
@@ -355,14 +356,14 @@
           </section>
 
           <section class="orbit-panel">
-            <p class="orbit-title" data-i18n="celestialTrackingTitle">Celestial Tracking</p>
+            <p class="orbit-title" data-i18n="celestialTrackingTitle">Camera Mode</p>
             <div class="track-mode-grid">
               <button class="orbit-mode active" data-camera-track="off" type="button" data-i18n="trackCameraOff">Free Camera</button>
-              <button class="orbit-mode" data-camera-track="sun" type="button" data-i18n="trackCameraSun">Track Sun</button>
-              <button class="orbit-mode" data-camera-track="moon" type="button" data-i18n="trackCameraMoon">Track Moon</button>
+              <button class="orbit-mode" data-camera-track="sun" type="button" data-i18n="trackCameraSun">Sun Angle</button>
+              <button class="orbit-mode" data-camera-track="moon" type="button" data-i18n="trackCameraMoon">Moon Angle</button>
             </div>
             <p class="orbit-copy" id="camera-track-summary">
-              Top-down camera is free. Select the sun or moon to keep it centered.
+              Free camera mode. Drag to orbit around the disc and zoom independently.
             </p>
           </section>
         </div>
@@ -436,6 +437,6 @@
     </div>
   </div>
 
-  <script type="module" src="./app.js?v=20260313-darksun-lightpct1"></script>
+  <script type="module" src="./app.js?v=20260313-tracking-angle1"></script>
 </body>
 </html>

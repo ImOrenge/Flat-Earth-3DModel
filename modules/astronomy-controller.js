@@ -17,7 +17,7 @@ import {
   getMoonHorizontalCoordinates,
   getSunHorizontalCoordinates,
   SEASONAL_EVENT_DEFINITIONS
-} from "./astronomy-utils.js?v=20260312-darksun-stages1";
+} from "./astronomy-utils.js?v=20260313-natural-eclipse1";
 
 export function createAstronomyController({
   constants,
@@ -103,6 +103,18 @@ export function createAstronomyController({
   function formatAltitude(value) {
     const prefix = value > 0 ? "+" : "";
     return `${prefix}${value.toFixed(1)}deg`;
+  }
+
+  function formatAngleDegrees(value) {
+    const normalizedDegrees = THREE.MathUtils.radToDeg(
+      THREE.MathUtils.euclideanModulo(value ?? 0, Math.PI * 2)
+    );
+    return `${normalizedDegrees.toFixed(1)}deg`;
+  }
+
+  function formatModelHeight(value) {
+    const prefix = value > 0 ? "+" : "";
+    return `${prefix}${(value ?? 0).toFixed(2)}`;
   }
 
   function formatIllumination(fraction) {
@@ -235,6 +247,117 @@ export function createAstronomyController({
       default:
         return "solarEclipseSummaryIdle";
     }
+  }
+
+  function getDarkSunDebugBandLabel(orbitMode = "auto") {
+    switch (orbitMode) {
+      case "north":
+        return i18n.t("darkSunDebugBandNorth");
+      case "equator":
+        return i18n.t("darkSunDebugBandEquator");
+      case "south":
+        return i18n.t("darkSunDebugBandSouth");
+      default:
+        return i18n.t("darkSunDebugBandAuto");
+    }
+  }
+
+  function getDarkSunDebugBandLabelFromIndex(bandIndex = 1) {
+    switch (bandIndex) {
+      case 0:
+        return i18n.t("darkSunDebugBandNorth");
+      case 2:
+        return i18n.t("darkSunDebugBandSouth");
+      default:
+        return i18n.t("darkSunDebugBandEquator");
+    }
+  }
+
+  function getSolarEclipseTierFromRenderStates(sunRenderState, darkSunRenderState) {
+    const sunBandIndex = Number.isFinite(sunRenderState?.bandIndex) ? sunRenderState.bandIndex : null;
+    const darkBandIndex = Number.isFinite(darkSunRenderState?.bandIndex) ? darkSunRenderState.bandIndex : null;
+    const sunLaneIndex = Number.isFinite(sunRenderState?.laneIndex) ? sunRenderState.laneIndex : null;
+    const darkLaneIndex = Number.isFinite(darkSunRenderState?.laneIndex) ? darkSunRenderState.laneIndex : null;
+    const bandDelta = (sunBandIndex === null || darkBandIndex === null)
+      ? Number.POSITIVE_INFINITY
+      : Math.abs(sunBandIndex - darkBandIndex);
+    const laneDelta = (sunLaneIndex === null || darkLaneIndex === null)
+      ? Number.POSITIVE_INFINITY
+      : Math.abs(sunLaneIndex - darkLaneIndex);
+    let eclipseTier = "none";
+
+    if (bandDelta === 0) {
+      if (laneDelta <= 1) {
+        eclipseTier = "total-eligible";
+      } else if (laneDelta === 2) {
+        eclipseTier = "partial-eligible-2";
+      } else if (laneDelta === 3) {
+        eclipseTier = "partial-eligible-3";
+      }
+    }
+
+    return {
+      bandDelta,
+      eclipseTier,
+      laneDelta
+    };
+  }
+
+  function syncDarkSunDebugUi(snapshot) {
+    if (!ui.darkSunDebugSummaryEl) {
+      return;
+    }
+
+    const debugVisible = Boolean(simulationState.darkSunDebugVisible);
+    ui.darkSunDebugSummaryEl.hidden = !debugVisible;
+
+    if (!debugVisible) {
+      ui.darkSunDebugSummaryEl.textContent = "";
+      return;
+    }
+
+    const darkSunPosition = snapshot?.darkSunRenderPosition ?? orbitDarkSun?.position;
+    if (!darkSunPosition) {
+      ui.darkSunDebugSummaryEl.textContent = i18n.t("darkSunDebugUnavailable");
+      return;
+    }
+
+    const darkSunRenderState = snapshot?.darkSunRenderState ?? null;
+    const sunRenderState = snapshot?.sunRenderState ?? null;
+    const darkSunGeo = getGeoFromProjectedPosition(darkSunPosition, constants.DISC_RADIUS);
+    const orbitAngleRadians = darkSunRenderState?.orbitAngleRadians ?? simulationState.orbitDarkSunAngle;
+    const phaseOffsetRadians = simulationState.darkSunOrbitPhaseOffsetRadians ?? DARK_SUN_START_ANGLE;
+    const bandMode = darkSunRenderState?.orbitMode ?? getMirroredOrbitMode(simulationState.orbitMode);
+    const bandLabel = getDarkSunDebugBandLabel(bandMode);
+    const bandProgress = THREE.MathUtils.clamp(
+      darkSunRenderState?.corridorProgress ?? darkSunRenderState?.macroProgress ?? simulationState.darkSunBandProgress ?? 0.5,
+      0,
+      1
+    );
+    const sunBandLabel = getDarkSunDebugBandLabelFromIndex(sunRenderState?.bandIndex);
+    const darkBandLabel = getDarkSunDebugBandLabelFromIndex(darkSunRenderState?.bandIndex);
+    const sunLaneIndex = Number.isFinite(sunRenderState?.laneIndex) ? (sunRenderState.laneIndex + 1) : null;
+    const darkLaneIndex = Number.isFinite(darkSunRenderState?.laneIndex) ? (darkSunRenderState.laneIndex + 1) : null;
+    const eclipseEligibility = getSolarEclipseTierFromRenderStates(sunRenderState, darkSunRenderState);
+    const sourceLabel = astronomyState.enabled
+      ? i18n.t("darkSunDebugSourceReality")
+      : i18n.t("darkSunDebugSourceDemo");
+    const lockLabel = simulationState.darkSunStageAltitudeLock
+      ? i18n.t("darkSunDebugLockStage")
+      : i18n.t("darkSunDebugLockMirrored");
+
+    ui.darkSunDebugSummaryEl.textContent = [
+      `Geo ${formatGeoPair(darkSunGeo.latitudeDegrees, darkSunGeo.longitudeDegrees)}`,
+      `Y ${formatModelHeight(darkSunPosition.y)}`,
+      `orbit ${formatAngleDegrees(orbitAngleRadians)}`,
+      `phase ${formatAngleDegrees(phaseOffsetRadians)}`,
+      `band ${bandLabel} ${Math.round(bandProgress * 100)}%`,
+      `corridor ${sunBandLabel}/${darkBandLabel}`,
+      `lane ${(sunLaneIndex ?? "--")}/${(darkLaneIndex ?? "--")}`,
+      `lane-delta ${Number.isFinite(eclipseEligibility.laneDelta) ? eclipseEligibility.laneDelta : "--"}`,
+      `tier ${eclipseEligibility.eclipseTier}`,
+      `${sourceLabel} / ${lockLabel}`
+    ].join(" | ");
   }
 
   function syncMoonPhaseUi(snapshot) {
@@ -421,10 +544,114 @@ export function createAstronomyController({
     );
   }
 
+  function getBodyCorridorProgress(body, centerRadius) {
+    const corridor = getBodyCorridorRange(body);
+    return THREE.MathUtils.clamp(
+      THREE.MathUtils.inverseLerp(corridor.min, corridor.max, centerRadius),
+      0,
+      1
+    );
+  }
+
+  function getBodyBandIndex(body, centerRadius) {
+    return Math.min(2, Math.floor(getBodyCorridorProgress(body, centerRadius) * 3));
+  }
+
+  function getBodyLaneCount(body) {
+    const normalizedBody = body === "darkSun" ? "sun" : body;
+    return Math.max(magneticFieldApi.getCoilOrbitProfile(normalizedBody).turns, 1);
+  }
+
+  function getBodyLaneIndex(body, corridorProgress) {
+    const laneCount = getBodyLaneCount(body);
+    return Math.min(
+      laneCount - 1,
+      Math.floor(THREE.MathUtils.clamp(corridorProgress, 0, 1) * laneCount)
+    );
+  }
+
   function getBodyBaseHeight(body, radius) {
     return body === "moon"
       ? getMoonBaseHeight(radius)
       : getSunOrbitHeight(radius);
+  }
+
+  function getMirroredOrbitMode(orbitMode = "auto") {
+    if (orbitMode === "north") {
+      return "south";
+    }
+    if (orbitMode === "south") {
+      return "north";
+    }
+    if (orbitMode === "equator") {
+      return "equator";
+    }
+    return "auto";
+  }
+
+  function getMirroredDarkSunDirection(sunDirection = simulationState.sunBandDirection ?? 1) {
+    return (sunDirection ?? 1) >= 0 ? -1 : 1;
+  }
+
+  function getMirroredDarkSunProgress(sunProgress = simulationState.sunBandProgress ?? 0.5) {
+    return THREE.MathUtils.clamp(1 - (sunProgress ?? 0.5), 0, 1);
+  }
+
+  function getMirroredDarkSunOrbitAngleRadians({
+    sunOrbitAngleRadians = simulationState.orbitSunAngle ?? 0,
+    phaseOffsetRadians = simulationState.darkSunOrbitPhaseOffsetRadians ?? DARK_SUN_START_ANGLE
+  } = {}) {
+    return phaseOffsetRadians - (sunOrbitAngleRadians * DARK_SUN_ORBIT_SPEED_FACTOR);
+  }
+
+  function syncDarkSunMirrorPhaseOffset({
+    sunOrbitAngleRadians = simulationState.orbitSunAngle ?? 0,
+    darkSunOrbitAngleRadians = simulationState.orbitDarkSunAngle ?? DARK_SUN_START_ANGLE
+  } = {}) {
+    const nextPhaseOffsetRadians = darkSunOrbitAngleRadians +
+      (sunOrbitAngleRadians * DARK_SUN_ORBIT_SPEED_FACTOR);
+    simulationState.darkSunOrbitPhaseOffsetRadians = nextPhaseOffsetRadians;
+    return nextPhaseOffsetRadians;
+  }
+
+  function inferRealitySunBandDirection(date) {
+    const sampleWindowMs = 12 * 60 * 60 * 1000;
+    const currentSun = getSunSubpoint(date);
+    const sampleSun = getSunSubpoint(new Date(date.getTime() + sampleWindowMs));
+    const currentProjectedRadius = projectedRadiusFromLatitude(
+      currentSun.latitudeDegrees,
+      constants.DISC_RADIUS
+    );
+    const sampleProjectedRadius = projectedRadiusFromLatitude(
+      sampleSun.latitudeDegrees,
+      constants.DISC_RADIUS
+    );
+    const currentProgress = getBodyProgressFromProjectedRadius("sun", currentProjectedRadius);
+    const sampleProgress = getBodyProgressFromProjectedRadius("sun", sampleProjectedRadius);
+
+    if (Math.abs(sampleProgress - currentProgress) <= 0.0001) {
+      return 1;
+    }
+
+    return sampleProgress >= currentProgress ? 1 : -1;
+  }
+
+  function getMirroredDarkSunState({
+    orbitMode = simulationState.orbitMode ?? "auto",
+    phaseOffsetRadians = simulationState.darkSunOrbitPhaseOffsetRadians ?? DARK_SUN_START_ANGLE,
+    sunDirection = simulationState.sunBandDirection ?? 1,
+    sunOrbitAngleRadians = simulationState.orbitSunAngle ?? 0,
+    sunProgress = simulationState.sunBandProgress ?? 0.5
+  } = {}) {
+    return {
+      direction: getMirroredDarkSunDirection(sunDirection),
+      orbitAngleRadians: getMirroredDarkSunOrbitAngleRadians({
+        phaseOffsetRadians,
+        sunOrbitAngleRadians
+      }),
+      orbitMode: getMirroredOrbitMode(orbitMode),
+      progress: getMirroredDarkSunProgress(sunProgress)
+    };
   }
 
   function getBodyCoilRenderState({
@@ -442,6 +669,7 @@ export function createAstronomyController({
       : getBodyModeProgress(body, orbitMode, progress);
     const config = getBodyCoilConfig(body);
     const centerRadius = THREE.MathUtils.lerp(bandRange.min, bandRange.max, bodyProgress);
+    const corridorProgress = getBodyCorridorProgress(body, centerRadius);
     const macroAngle = source === "demo"
       ? orbitAngleRadians
       : THREE.MathUtils.degToRad(longitudeDegrees);
@@ -460,10 +688,16 @@ export function createAstronomyController({
 
     return {
       baseHeight,
+      bandIndex: getBodyBandIndex(body, centerRadius),
       centerRadius,
       coilHeight,
+      corridorProgress,
+      laneCount: getBodyLaneCount(body),
+      laneIndex: getBodyLaneIndex(body, corridorProgress),
       localCoilRadius: 0,
       macroProgress: bodyProgress,
+      orbitAngleRadians: macroAngle,
+      orbitMode,
       position: new THREE.Vector3(
         planarX,
         coilHeight,
@@ -517,44 +751,62 @@ export function createAstronomyController({
       currentSun.latitudeDegrees,
       constants.DISC_RADIUS
     );
-    const elapsedFrames = Math.max(
-      0,
-      (date.getTime() - DARK_SUN_REFERENCE_TIME_MS) / (1000 / 60)
-    );
+    const elapsedFrames = (date.getTime() - DARK_SUN_REFERENCE_TIME_MS) / (1000 / 60);
+    const sunProgress = getBodyProgressFromProjectedRadius("sun", currentProjectedRadius);
 
-    return {
-      direction: DARK_SUN_START_DIRECTION,
-      orbitAngleRadians: THREE.MathUtils.degToRad(referenceSun.longitudeDegrees + 180) -
-        (constants.ORBIT_SUN_SPEED * DARK_SUN_ORBIT_SPEED_FACTOR * elapsedFrames),
-      progress: 1 - getBodyProgressFromProjectedRadius("darkSun", currentProjectedRadius)
-    };
+    return getMirroredDarkSunState({
+      orbitMode: "auto",
+      phaseOffsetRadians: THREE.MathUtils.degToRad(referenceSun.longitudeDegrees + 180),
+      sunDirection: inferRealitySunBandDirection(date),
+      sunOrbitAngleRadians: elapsedFrames * constants.ORBIT_SUN_SPEED,
+      sunProgress
+    });
   }
 
   function getDarkSunRenderState({
     date = astronomyState.selectedDate,
+    direction = simulationState.darkSunBandDirection ?? DARK_SUN_START_DIRECTION,
     orbitAngleRadians = simulationState.orbitDarkSunAngle ?? DARK_SUN_START_ANGLE,
+    phaseOffsetRadians = simulationState.darkSunOrbitPhaseOffsetRadians ?? DARK_SUN_START_ANGLE,
     progress = simulationState.darkSunBandProgress ?? DARK_SUN_START_PROGRESS,
     source = "reality",
+    sunDirection = simulationState.sunBandDirection ?? 1,
+    sunOrbitAngleRadians = simulationState.orbitSunAngle ?? 0,
+    sunProgress = simulationState.sunBandProgress ?? 0.5,
+    useExplicitOrbit = false,
     orbitMode = source === "demo" ? simulationState.orbitMode : "auto"
   } = {}) {
-    if (source === "demo") {
-      return getBodyCoilRenderState({
-        body: "darkSun",
-        orbitAngleRadians,
-        orbitMode,
-        progress,
-        source: "demo"
-      });
-    }
-
-    const realityState = getRealityDarkSunState(date);
-    return getBodyCoilRenderState({
+    const darkSunState = source === "demo"
+      ? (
+        useExplicitOrbit
+          ? {
+            direction,
+            orbitAngleRadians,
+            orbitMode,
+            progress
+          }
+          : getMirroredDarkSunState({
+            orbitMode,
+            phaseOffsetRadians,
+            sunDirection,
+            sunOrbitAngleRadians,
+            sunProgress
+          })
+      )
+      : getRealityDarkSunState(date);
+    const renderState = getBodyCoilRenderState({
       body: "darkSun",
-      orbitAngleRadians: realityState.orbitAngleRadians,
-      orbitMode: "auto",
-      progress: realityState.progress,
+      orbitAngleRadians: darkSunState.orbitAngleRadians,
+      orbitMode: darkSunState.orbitMode,
+      progress: darkSunState.progress,
       source: "demo"
     });
+    return {
+      ...renderState,
+      direction: darkSunState.direction,
+      orbitAngleRadians: darkSunState.orbitAngleRadians,
+      orbitMode: darkSunState.orbitMode
+    };
   }
 
   function getAstronomySnapshot(date) {
@@ -663,6 +915,9 @@ export function createAstronomyController({
     ui.applyObservationTimeButton.disabled = !astronomyState.enabled || astronomyState.live;
     if (ui.darkSunDebugEl) {
       ui.darkSunDebugEl.checked = Boolean(simulationState.darkSunDebugVisible);
+    }
+    if (ui.darkSunDebugSummaryEl) {
+      ui.darkSunDebugSummaryEl.hidden = !simulationState.darkSunDebugVisible;
     }
     syncCelestialMotionUi();
 
@@ -1220,6 +1475,7 @@ export function createAstronomyController({
       phaseLabel: getMoonPhaseLabel(snapshot.moonPhase)
     });
     syncMoonPhaseUi(snapshot);
+    syncDarkSunDebugUi(snapshot);
     ui.orbitLabelEl.textContent = astronomyState.enabled
       ? i18n.t("orbitLabelRealitySync")
       : i18n.t(orbitModes[simulationState.orbitMode].labelKey);
@@ -1503,6 +1759,7 @@ export function createAstronomyController({
     syncAnalemmaUi,
     syncSkyAnalemmaUi,
     syncDayNightOverlayUi,
+    syncDarkSunMirrorPhaseOffset,
     syncSolarEclipseUi,
     syncSeasonalMoonUi,
     syncSeasonalSunUi,

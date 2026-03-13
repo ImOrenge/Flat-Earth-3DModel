@@ -11,9 +11,20 @@ export function createCameraController({
   const modelScale = constants.MODEL_SCALE ?? 1;
   const tempCameraLookTarget = new THREE.Vector3();
   const defaultLookTarget = new THREE.Vector3(0, constants.SURFACE_Y * (5 / 6), 0);
+  const trackingDiscCenter = new THREE.Vector3(0, constants.SURFACE_Y, 0);
+  const tempTrackingRadial = new THREE.Vector3();
+  const tempTrackingTangent = new THREE.Vector3();
+  const tempTrackingOffset = new THREE.Vector3();
 
+  cameraState.mode = cameraState.mode ?? "free";
   cameraState.lookTarget = cameraState.lookTarget ?? defaultLookTarget.clone();
   cameraState.targetLookTarget = cameraState.targetLookTarget ?? defaultLookTarget.clone();
+  cameraState.trackingAzimuth = cameraState.trackingAzimuth ?? constants.CAMERA_TRACKING_DEFAULT_AZIMUTH;
+  cameraState.trackingElevation = cameraState.trackingElevation ?? constants.CAMERA_TRACKING_DEFAULT_ELEVATION;
+  cameraState.trackingDistance = cameraState.trackingDistance ?? constants.CAMERA_TRACKING_DEFAULT_DISTANCE;
+  cameraState.targetTrackingAzimuth = cameraState.targetTrackingAzimuth ?? constants.CAMERA_TRACKING_DEFAULT_AZIMUTH;
+  cameraState.targetTrackingElevation = cameraState.targetTrackingElevation ?? constants.CAMERA_TRACKING_DEFAULT_ELEVATION;
+  cameraState.targetTrackingDistance = cameraState.targetTrackingDistance ?? constants.CAMERA_TRACKING_DEFAULT_DISTANCE;
 
   function clampCamera() {
     cameraState.targetPhi = Math.min(Math.max(cameraState.targetPhi, 0.3), 1.48);
@@ -21,6 +32,49 @@ export function createCameraController({
       Math.max(cameraState.targetRadius, constants.CAMERA_TOPDOWN_MIN_RADIUS),
       constants.CAMERA_TOPDOWN_MAX_RADIUS
     );
+    cameraState.targetTrackingElevation = Math.min(
+      Math.max(cameraState.targetTrackingElevation, constants.CAMERA_TRACKING_MIN_ELEVATION),
+      constants.CAMERA_TRACKING_MAX_ELEVATION
+    );
+    cameraState.targetTrackingDistance = Math.min(
+      Math.max(cameraState.targetTrackingDistance, constants.CAMERA_TRACKING_MIN_DISTANCE),
+      constants.CAMERA_TRACKING_MAX_DISTANCE
+    );
+  }
+
+  function updateTrackingCamera() {
+    cameraState.trackingAzimuth += (cameraState.targetTrackingAzimuth - cameraState.trackingAzimuth) * 0.08;
+    cameraState.trackingElevation += (cameraState.targetTrackingElevation - cameraState.trackingElevation) * 0.08;
+    cameraState.trackingDistance += (cameraState.targetTrackingDistance - cameraState.trackingDistance) * 0.08;
+    cameraState.lookTarget.lerp(cameraState.targetLookTarget, 0.16);
+
+    tempTrackingRadial.copy(cameraState.lookTarget).sub(trackingDiscCenter);
+    tempTrackingRadial.y = 0;
+    if (tempTrackingRadial.lengthSq() < 0.0001) {
+      tempTrackingRadial.set(0, 0, 1);
+    } else {
+      tempTrackingRadial.normalize();
+    }
+
+    tempTrackingTangent.set(-tempTrackingRadial.z, 0, tempTrackingRadial.x);
+
+    const horizontalDistance = Math.max(
+      cameraState.trackingDistance * Math.cos(cameraState.trackingElevation),
+      0.01
+    );
+    const verticalDistance = cameraState.trackingDistance * Math.sin(cameraState.trackingElevation);
+
+    tempTrackingOffset.copy(tempTrackingRadial).multiplyScalar(
+      Math.cos(cameraState.trackingAzimuth) * horizontalDistance
+    );
+    tempTrackingOffset.addScaledVector(
+      tempTrackingTangent,
+      Math.sin(cameraState.trackingAzimuth) * horizontalDistance
+    );
+    tempTrackingOffset.y += verticalDistance;
+
+    camera.position.copy(cameraState.lookTarget).add(tempTrackingOffset);
+    camera.lookAt(cameraState.lookTarget);
   }
 
   function updateCamera() {
@@ -54,6 +108,11 @@ export function createCameraController({
         camera.position.z + (Math.cos(walkerState.heading) * horizontalDistance)
       );
       camera.lookAt(tempCameraLookTarget);
+      return;
+    }
+
+    if (cameraState.mode === "tracking") {
+      updateTrackingCamera();
       return;
     }
 
