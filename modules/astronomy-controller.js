@@ -1233,6 +1233,7 @@ export function createAstronomyController({
     const stateLabel = i18n.t(stateKey);
     const stageLabel = getSolarEclipseStageLabel(nextState);
     const coverageLabel = `${Math.round(THREE.MathUtils.clamp(nextState.coverage, 0, 1) * 100)}%`;
+    const sunlightLabel = `${Math.round(THREE.MathUtils.clamp(nextState.sunlightPercent ?? 100, 0, 100))}%`;
 
     lastSolarEclipseState = nextState;
     if (ui.solarEclipseStateEl) {
@@ -1244,9 +1245,13 @@ export function createAstronomyController({
     if (ui.solarEclipseCoverageEl) {
       ui.solarEclipseCoverageEl.textContent = coverageLabel;
     }
+    if (ui.solarEclipseLightEl) {
+      ui.solarEclipseLightEl.textContent = sunlightLabel;
+    }
     if (ui.solarEclipseSummaryEl) {
       ui.solarEclipseSummaryEl.textContent = i18n.t(getSolarEclipseSummaryKey(nextState), {
         coverage: coverageLabel,
+        light: sunlightLabel,
         state: stateLabel,
         stage: stageLabel
       });

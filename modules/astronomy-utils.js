@@ -387,6 +387,8 @@ export function createSolarEclipseState(overrides = {}) {
     rawCoverage: 0,
     direction: "idle",
     lightReduction: 0,
+    sunlightScale: 1,
+    sunlightPercent: 100,
     normalizedDistance: Number.POSITIVE_INFINITY,
     recentlyActive: false,
     hasContact: false,

@@ -7,12 +7,12 @@ import {
   createSolarEclipseState,
   getMoonPhase,
   getSolarAltitudeFactor,
-} from "./modules/astronomy-utils.js?v=20260312-darksun-stages1";
-import { createAstronomyController } from "./modules/astronomy-controller.js?v=20260312-darksun-stages1";
+} from "./modules/astronomy-utils.js?v=20260313-darksun-lightpct1";
+import { createAstronomyController } from "./modules/astronomy-controller.js?v=20260313-darksun-lightpct1";
 import { createCameraController } from "./modules/camera-controller.js";
 import { createCelestialTrackingCameraController } from "./modules/celestial-tracking-camera-controller.js";
 import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js?v=20260312-darksun-eclipse1";
-import { createI18n } from "./modules/i18n.js?v=20260312-darksun-stages1";
+import { createI18n } from "./modules/i18n.js?v=20260313-darksun-lightpct1";
 import { createMagneticFieldController } from "./modules/magnetic-field-controller.js?v=20260312-darksun-eclipse1";
 import { createRouteSimulationController } from "./modules/route-simulation-controller.js";
 import { createTextureManager } from "./modules/texture-manager.js?v=20260311-gpu-daynight";
@@ -93,6 +93,7 @@ const SOLAR_ECLIPSE_TOTALITY_MIN_MS = 1200;
 const SOLAR_ECLIPSE_COMPLETE_FADE_MS = 900;
 const SOLAR_ECLIPSE_PRESENTATION_COVERAGE_RATE = 0.22;
 const SOLAR_ECLIPSE_COMPLETE_HOLD_FRAMES = 72;
+const DARK_SUN_STAGE_TOTALITY_HOLD_MS = 3200;
 const DARK_SUN_STAGE_TRANSIT_ANGLE_SPEED_FACTOR = 0.42;
 const DARK_SUN_STAGE_TRANSIT_PROGRESS_SPEED = 0.16;
 const DARK_SUN_STAGE_TIMELINE_SECONDS = 10.5;
@@ -270,6 +271,7 @@ const magneticFieldSummaryEl = document.getElementById("magnetic-field-summary")
 const solarEclipseStateEl = document.getElementById("solar-eclipse-state");
 const solarEclipseStageEl = document.getElementById("solar-eclipse-stage");
 const solarEclipseCoverageEl = document.getElementById("solar-eclipse-coverage");
+const solarEclipseLightEl = document.getElementById("solar-eclipse-light");
 const solarEclipseSummaryEl = document.getElementById("solar-eclipse-summary");
 const stagePreEclipseButton = document.getElementById("stage-pre-eclipse");
 const darkSunDebugEl = document.getElementById("dark-sun-debug");
@@ -1660,6 +1662,7 @@ const simulationState = {
   darkSunStageAltitudeLock: false,
   darkSunStageHasEclipsed: false,
   darkSunStageOffsetRadians: 0,
+  darkSunStageTotalityHoldMs: 0,
   darkSunStageTransit: 0,
   demoPhaseDateMs: Date.now(),
   moonBandDirection: -1,
@@ -1884,6 +1887,7 @@ const ui = {
   seasonalSunSummaryEl,
   seasonalYearEl,
   solarEclipseCoverageEl,
+  solarEclipseLightEl,
   solarEclipseStageEl,
   solarEclipseStateEl,
   solarEclipseSummaryEl,
@@ -2640,6 +2644,32 @@ function stepValueToward(currentValue, targetValue, maxDelta) {
   );
 }
 
+function easeEclipseLightValue(
+  currentValue,
+  targetValue,
+  stageKey,
+  {
+    riseBlend = 0.12,
+    eclipseRiseBlend = 0.035,
+    totalityRiseBlend = 0.008,
+    fallBlend = 0.18
+  } = {}
+) {
+  const current = Number.isFinite(currentValue) ? currentValue : 0;
+  const target = Number.isFinite(targetValue) ? targetValue : 0;
+  const blend = target > current
+    ? (
+      stageKey === "partialEgress"
+        ? eclipseRiseBlend
+        : stageKey === "totality"
+          ? totalityRiseBlend
+          : riseBlend
+    )
+    : fallBlend;
+
+  return current + ((target - current) * THREE.MathUtils.clamp(blend, 0, 1));
+}
+
 function getProjectedSolarEclipseMetrics({
   altitudeAligned,
   darkSunDisc,
@@ -2820,8 +2850,7 @@ function advanceSolarEclipsePresentation(rawSolarEclipse, deltaSeconds = 0) {
       1
     )
     : 0;
-
-  return createSolarEclipseState({
+  const presentationSolarEclipse = createSolarEclipseState({
     active,
     total,
     coverage: displayCoverage,
@@ -2838,6 +2867,17 @@ function advanceSolarEclipsePresentation(rawSolarEclipse, deltaSeconds = 0) {
     stageLabelKey: getSolarEclipseStageLabelKey(displayStageKey),
     stageProgress,
     visibleInView: rawSolarEclipse.visibleInView
+  });
+  const sunlightScale = THREE.MathUtils.clamp(
+    getSolarEclipseVisualProfile(presentationSolarEclipse).sunLightScale ?? 1,
+    0,
+    1
+  );
+
+  return createSolarEclipseState({
+    ...presentationSolarEclipse,
+    sunlightScale,
+    sunlightPercent: Math.round(sunlightScale * 100)
   });
 }
 
@@ -2858,6 +2898,7 @@ function getSolarEclipseVisualProfile(solarEclipse = createSolarEclipseState()) 
     darkSunBodyOpacity: 0,
     darkSunRimOpacity: 0,
     environmentLightScale: 1,
+    pulseSuppression: 0,
     sunBodyScale: 1,
     sunEclipseMaskStrength: 0,
     sunHaloScale: 1,
@@ -2868,54 +2909,59 @@ function getSolarEclipseVisualProfile(solarEclipse = createSolarEclipseState()) 
   if (stageKey === "partialIngress") {
     profile.darkSunBodyOpacity = ORBIT_DARK_SUN_OCCLUSION_OPACITY;
     profile.darkSunRimOpacity = ORBIT_DARK_SUN_RIM_OPACITY * 0.28;
-    profile.environmentLightScale = THREE.MathUtils.lerp(0.8, 0.56, partialVisualStrength);
+    profile.environmentLightScale = THREE.MathUtils.lerp(0.8, 0.46, partialVisualStrength);
+    profile.pulseSuppression = THREE.MathUtils.lerp(0.45, 0.96, partialVisualStrength);
     profile.sunBodyScale = 1;
     profile.sunEclipseMaskStrength = 1;
-    profile.sunHaloScale = THREE.MathUtils.lerp(0.22, 0.01, partialVisualStrength);
-    profile.sunLightScale = THREE.MathUtils.lerp(0.34, 0.06, partialVisualStrength);
-    profile.coronaOpacityScale = THREE.MathUtils.lerp(0.82, 1.18, partialVisualStrength);
-    profile.aureoleOpacityScale = THREE.MathUtils.lerp(0.42, 0.74, partialVisualStrength);
-    profile.coronaScaleFactor = THREE.MathUtils.lerp(0.98, 1.06, partialVisualStrength);
+    profile.sunHaloScale = THREE.MathUtils.lerp(0.22, 0.004, partialVisualStrength);
+    profile.sunLightScale = THREE.MathUtils.lerp(0.34, 0.025, partialVisualStrength);
+    profile.coronaOpacityScale = THREE.MathUtils.lerp(0.82, 1.32, partialVisualStrength);
+    profile.aureoleOpacityScale = THREE.MathUtils.lerp(0.42, 0.76, partialVisualStrength);
+    profile.coronaScaleFactor = THREE.MathUtils.lerp(0.98, 1.08, partialVisualStrength);
     profile.aureoleScaleFactor = THREE.MathUtils.lerp(0.96, 1.02, partialVisualStrength);
-    profile.sunRayScale = THREE.MathUtils.lerp(0.28, 0.01, partialVisualStrength);
+    profile.sunRayScale = THREE.MathUtils.lerp(0.28, 0, partialVisualStrength);
     return profile;
   }
 
   if (stageKey === "partialEgress") {
     const recoveryProgress = THREE.MathUtils.clamp(1 - partialStrength, 0, 1);
-    const recoveryStrength = recoveryProgress * recoveryProgress * (3 - (2 * recoveryProgress));
+    const environmentRecoveryStrength = Math.pow(recoveryProgress, 1.9);
+    const recoveryStrength = Math.pow(recoveryProgress, 3.4);
+    const lateRecoveryStrength = Math.pow(recoveryProgress, 4.1);
     profile.darkSunBodyOpacity = ORBIT_DARK_SUN_OCCLUSION_OPACITY;
     profile.darkSunRimOpacity = THREE.MathUtils.lerp(
       ORBIT_DARK_SUN_RIM_OPACITY * 0.08,
       ORBIT_DARK_SUN_RIM_OPACITY * 0.28,
       recoveryStrength
     );
-    profile.environmentLightScale = THREE.MathUtils.lerp(0.58, 1, recoveryStrength);
+    profile.environmentLightScale = THREE.MathUtils.lerp(0.26, 1, environmentRecoveryStrength);
+    profile.pulseSuppression = THREE.MathUtils.lerp(1, 0, Math.pow(recoveryProgress, 2.25));
     profile.sunBodyScale = 1;
     profile.sunEclipseMaskStrength = 1;
-    profile.sunHaloScale = THREE.MathUtils.lerp(0.015, 1, recoveryStrength);
-    profile.sunLightScale = THREE.MathUtils.lerp(0.06, 1, recoveryStrength);
-    profile.coronaOpacityScale = THREE.MathUtils.lerp(2.3, 1, recoveryStrength);
-    profile.aureoleOpacityScale = THREE.MathUtils.lerp(1.24, 1, recoveryStrength);
-    profile.coronaScaleFactor = THREE.MathUtils.lerp(1.16, 1, recoveryStrength);
-    profile.aureoleScaleFactor = THREE.MathUtils.lerp(1.06, 1, recoveryStrength);
-    profile.sunRayScale = THREE.MathUtils.lerp(0.02, 1, recoveryStrength);
+    profile.sunHaloScale = THREE.MathUtils.lerp(0.003, 1, lateRecoveryStrength);
+    profile.sunLightScale = THREE.MathUtils.lerp(0.012, 1, Math.pow(recoveryProgress, 2.95));
+    profile.coronaOpacityScale = THREE.MathUtils.lerp(1.32, 1, Math.pow(recoveryProgress, 2.2));
+    profile.aureoleOpacityScale = THREE.MathUtils.lerp(0.76, 1, Math.pow(recoveryProgress, 2.4));
+    profile.coronaScaleFactor = THREE.MathUtils.lerp(1.08, 1, Math.pow(recoveryProgress, 2.4));
+    profile.aureoleScaleFactor = THREE.MathUtils.lerp(1.02, 1, Math.pow(recoveryProgress, 2.6));
+    profile.sunRayScale = THREE.MathUtils.lerp(0, 1, Math.pow(recoveryProgress, 4.5));
     return profile;
   }
 
   if (stageKey === "totality") {
     profile.darkSunBodyOpacity = ORBIT_DARK_SUN_OCCLUSION_OPACITY;
     profile.darkSunRimOpacity = ORBIT_DARK_SUN_RIM_OPACITY * 0.08;
-    profile.environmentLightScale = 0.58;
+    profile.environmentLightScale = 0.26;
+    profile.pulseSuppression = 1;
     profile.sunBodyScale = 1;
     profile.sunEclipseMaskStrength = 1;
-    profile.sunHaloScale = 0.015;
-    profile.sunLightScale = 0.06;
-    profile.coronaOpacityScale = 2.3;
-    profile.aureoleOpacityScale = 1.24;
-    profile.coronaScaleFactor = 1.16;
-    profile.aureoleScaleFactor = 1.06;
-    profile.sunRayScale = 0.02;
+    profile.sunHaloScale = 0.003;
+    profile.sunLightScale = 0.012;
+    profile.coronaOpacityScale = 1.32;
+    profile.aureoleOpacityScale = 0.76;
+    profile.coronaScaleFactor = 1.08;
+    profile.aureoleScaleFactor = 1.02;
+    profile.sunRayScale = 0;
     return profile;
   }
 
@@ -2929,9 +2975,13 @@ function getSolarEclipseVisualProfile(solarEclipse = createSolarEclipseState()) 
 function syncDarkSunPresentation(solarEclipse = createSolarEclipseState()) {
   const visualProfile = getSolarEclipseVisualProfile(solarEclipse);
   const debugVisible = Boolean(simulationState.darkSunDebugVisible);
+  const presentationOverlapVisible = Boolean(
+    ["partialIngress", "partialEgress", "totality"].includes(solarEclipse.stageKey) &&
+    (solarEclipse.coverage ?? 0) > 0.0005
+  );
   const eclipseVisible = Boolean(
     solarEclipse.visibleInView &&
-    solarEclipse.hasVisibleOverlap
+    (solarEclipse.hasVisibleOverlap || presentationOverlapVisible)
   );
   const showDarkSun = debugVisible || eclipseVisible;
   const bodyOpacity = debugVisible
@@ -2951,7 +3001,7 @@ function syncDarkSunPresentation(solarEclipse = createSolarEclipseState()) {
   const eclipseMaskStrength = (
     !debugVisible &&
     solarEclipse.visibleInView &&
-    solarEclipse.hasVisibleOverlap
+    (solarEclipse.hasVisibleOverlap || presentationOverlapVisible)
   ) ? 1 : 0;
   const sunMaterials = [
     orbitSunBody.material,
@@ -3154,6 +3204,7 @@ function resetDarkSunStageState() {
   simulationState.darkSunStageAltitudeLock = false;
   simulationState.darkSunStageHasEclipsed = false;
   simulationState.darkSunStageOffsetRadians = 0;
+  simulationState.darkSunStageTotalityHoldMs = 0;
   simulationState.darkSunStageTransit = 0;
   solarEclipseTrackingState.displayCoverage = 0;
   solarEclipseTrackingState.displayStageElapsedMs = 0;
@@ -3189,6 +3240,7 @@ function stagePreEclipseScene() {
   simulationState.darkSunBandDirection = simulationState.sunBandDirection;
   simulationState.darkSunStageAltitudeLock = true;
   simulationState.darkSunStageHasEclipsed = false;
+  simulationState.darkSunStageTotalityHoldMs = 0;
   simulationState.darkSunStageTransit = 0;
   simulationState.orbitSunAngle = sunAngleRadians;
   const sunRenderState = astronomyApi.getSunRenderState({
@@ -3266,11 +3318,63 @@ function stagePreEclipseScene() {
 
 function updateSunVisualEffects(snapshot) {
   const pulse = 0.5 + (Math.sin(performance.now() * ORBIT_SUN_PULSE_SPEED) * 0.5);
-  const bodyScale = THREE.MathUtils.lerp(0.96, 1.2, pulse);
-  const haloScale = THREE.MathUtils.lerp(0.84, 1.34, pulse);
-  const lightScale = THREE.MathUtils.lerp(0.94, 1.14, pulse);
   const solarEclipse = snapshot?.solarEclipse ?? createSolarEclipseState();
+  const stageKey = solarEclipse.stageKey ?? "idle";
   const visualProfile = getSolarEclipseVisualProfile(solarEclipse);
+  const sunlightScale = THREE.MathUtils.clamp(
+    solarEclipse.sunlightScale ?? visualProfile.sunLightScale ?? 1,
+    0,
+    1
+  );
+  const pulseSuppression = THREE.MathUtils.clamp(visualProfile.pulseSuppression ?? 0, 0, 1);
+  const sunlightPulseResponse = Math.pow(sunlightScale, 0.6);
+  const combinedPulseSuppression = THREE.MathUtils.clamp(
+    Math.max(pulseSuppression, 1 - sunlightPulseResponse),
+    0,
+    1
+  );
+  const coronaLightResponse = Math.pow(sunlightScale, 0.72);
+  const aureoleLightResponse = Math.pow(sunlightScale, 0.82);
+  const coronaOpacityLightScale = THREE.MathUtils.lerp(0.03, 1, coronaLightResponse);
+  const aureoleOpacityLightScale = THREE.MathUtils.lerp(0.05, 1, aureoleLightResponse);
+  const coronaScaleLightScale = THREE.MathUtils.lerp(0.74, 1, Math.pow(sunlightScale, 0.92));
+  const aureoleScaleLightScale = THREE.MathUtils.lerp(0.78, 1, Math.pow(sunlightScale, 0.96));
+  const bodyScale = THREE.MathUtils.lerp(
+    THREE.MathUtils.lerp(0.96, 1.2, pulse),
+    1,
+    combinedPulseSuppression
+  );
+  const haloScale = THREE.MathUtils.lerp(
+    THREE.MathUtils.lerp(0.84, 1.34, pulse),
+    1,
+    combinedPulseSuppression
+  );
+  const lightScale = THREE.MathUtils.lerp(
+    THREE.MathUtils.lerp(0.94, 1.14, pulse),
+    1,
+    combinedPulseSuppression
+  );
+  const coronaOpacityPulseScale = THREE.MathUtils.lerp(
+    THREE.MathUtils.lerp(0.88, 1.18, pulse),
+    1,
+    combinedPulseSuppression
+  );
+  const aureoleOpacityPulseScale = THREE.MathUtils.lerp(
+    THREE.MathUtils.lerp(0.82, 1.24, pulse),
+    1,
+    combinedPulseSuppression
+  );
+  const coronaScalePulseScale = THREE.MathUtils.lerp(
+    THREE.MathUtils.lerp(0.94, 1.08, pulse),
+    1,
+    combinedPulseSuppression
+  );
+  const aureoleScalePulseScale = THREE.MathUtils.lerp(
+    THREE.MathUtils.lerp(0.96, 1.12, pulse),
+    1,
+    combinedPulseSuppression
+  );
+  const domePulse = THREE.MathUtils.lerp(pulse, 0.5, combinedPulseSuppression);
   const eclipseLightScale = getSolarEclipseLightScale(solarEclipse);
   const topDownLightScale = visualProfile.environmentLightScale;
 
@@ -3279,35 +3383,91 @@ function updateSunVisualEffects(snapshot) {
     observerSunHalo.material.opacity *= haloScale * visualProfile.sunHaloScale;
     observerSunLight.intensity *= lightScale * eclipseLightScale;
   } else {
-    orbitSunBody.material.emissiveIntensity = ORBIT_SUN_BODY_EMISSIVE_INTENSITY * bodyScale * visualProfile.sunBodyScale;
-    orbitSunHalo.material.opacity = ORBIT_SUN_HALO_OPACITY * haloScale * visualProfile.sunHaloScale;
-    orbitSunLight.intensity = ORBIT_SUN_LIGHT_INTENSITY * lightScale * eclipseLightScale;
-    orbitSunCorona.material.opacity = ORBIT_SUN_CORONA_OPACITY *
-      THREE.MathUtils.lerp(0.88, 1.18, pulse) *
-      visualProfile.coronaOpacityScale;
-    orbitSunAureole.material.opacity = ORBIT_SUN_AUREOLE_OPACITY *
-      THREE.MathUtils.lerp(0.82, 1.24, pulse) *
-      visualProfile.aureoleOpacityScale;
+    const orbitSunBodyTarget = ORBIT_SUN_BODY_EMISSIVE_INTENSITY * bodyScale * visualProfile.sunBodyScale;
+    const orbitSunHaloTarget = ORBIT_SUN_HALO_OPACITY * haloScale * visualProfile.sunHaloScale;
+    const orbitSunLightTarget = ORBIT_SUN_LIGHT_INTENSITY * lightScale * eclipseLightScale;
+    const orbitSunCoronaTarget = ORBIT_SUN_CORONA_OPACITY *
+      coronaOpacityPulseScale *
+      visualProfile.coronaOpacityScale *
+      coronaOpacityLightScale;
+    const orbitSunAureoleTarget = ORBIT_SUN_AUREOLE_OPACITY *
+      aureoleOpacityPulseScale *
+      visualProfile.aureoleOpacityScale *
+      aureoleOpacityLightScale;
+    orbitSunBody.material.emissiveIntensity = easeEclipseLightValue(
+      orbitSunBody.material.emissiveIntensity,
+      orbitSunBodyTarget,
+      stageKey,
+      { riseBlend: 0.16, eclipseRiseBlend: 0.06, totalityRiseBlend: 0.01, fallBlend: 0.24 }
+    );
+    orbitSunHalo.material.opacity = easeEclipseLightValue(
+      orbitSunHalo.material.opacity,
+      orbitSunHaloTarget,
+      stageKey,
+      { riseBlend: 0.14, eclipseRiseBlend: 0.028, totalityRiseBlend: 0.006, fallBlend: 0.22 }
+    );
+    orbitSunLight.intensity = easeEclipseLightValue(
+      orbitSunLight.intensity,
+      orbitSunLightTarget,
+      stageKey,
+      { riseBlend: 0.16, eclipseRiseBlend: 0.024, totalityRiseBlend: 0.004, fallBlend: 0.24 }
+    );
+    orbitSunCorona.material.opacity = easeEclipseLightValue(
+      orbitSunCorona.material.opacity,
+      orbitSunCoronaTarget,
+      stageKey,
+      { riseBlend: 0.12, eclipseRiseBlend: 0.03, totalityRiseBlend: 0.008, fallBlend: 0.18 }
+    );
+    orbitSunAureole.material.opacity = easeEclipseLightValue(
+      orbitSunAureole.material.opacity,
+      orbitSunAureoleTarget,
+      stageKey,
+      { riseBlend: 0.12, eclipseRiseBlend: 0.03, totalityRiseBlend: 0.008, fallBlend: 0.18 }
+    );
     orbitSunCorona.scale.setScalar(
       ORBIT_SUN_CORONA_SCALE *
-      THREE.MathUtils.lerp(0.94, 1.08, pulse) *
-      visualProfile.coronaScaleFactor
+      coronaScalePulseScale *
+      visualProfile.coronaScaleFactor *
+      coronaScaleLightScale
     );
     orbitSunAureole.scale.setScalar(
       ORBIT_SUN_AUREOLE_SCALE *
-      THREE.MathUtils.lerp(0.96, 1.12, pulse) *
-      visualProfile.aureoleScaleFactor
+      aureoleScalePulseScale *
+      visualProfile.aureoleScaleFactor *
+      aureoleScaleLightScale
     );
     orbitSunAureole.material.rotation += 0.0016;
   }
 
-  ambient.intensity += ((0.9 * topDownLightScale) - ambient.intensity) * 0.12;
-  keyLight.intensity += ((1.35 * topDownLightScale) - keyLight.intensity) * 0.12;
-  rimLight.intensity += ((0.42 * topDownLightScale) - rimLight.intensity) * 0.12;
+  ambient.intensity = easeEclipseLightValue(
+    ambient.intensity,
+    0.9 * topDownLightScale,
+    stageKey,
+    { riseBlend: 0.12, eclipseRiseBlend: 0.026, totalityRiseBlend: 0.006, fallBlend: 0.16 }
+  );
+  keyLight.intensity = easeEclipseLightValue(
+    keyLight.intensity,
+    1.35 * topDownLightScale,
+    stageKey,
+    { riseBlend: 0.12, eclipseRiseBlend: 0.024, totalityRiseBlend: 0.006, fallBlend: 0.16 }
+  );
+  rimLight.intensity = easeEclipseLightValue(
+    rimLight.intensity,
+    0.42 * topDownLightScale,
+    stageKey,
+    { riseBlend: 0.12, eclipseRiseBlend: 0.024, totalityRiseBlend: 0.006, fallBlend: 0.16 }
+  );
 
   if (walkerState.enabled && firstPersonSunRayGroup.visible) {
-    for (const rayMesh of firstPersonSunRayMeshes) {
-      rayMesh.material.opacity *= visualProfile.sunRayScale;
+    if (visualProfile.sunRayScale <= 0.05) {
+      firstPersonSunRayGroup.visible = false;
+      for (const rayMesh of firstPersonSunRayMeshes) {
+        rayMesh.material.opacity = 0;
+      }
+    } else {
+      for (const rayMesh of firstPersonSunRayMeshes) {
+        rayMesh.material.opacity *= visualProfile.sunRayScale;
+      }
     }
   }
 
@@ -3316,7 +3476,7 @@ function updateSunVisualEffects(snapshot) {
   dome.worldToLocal(tempDomeSunLocalPosition);
   if (dome.material.userData.shader) {
     dome.material.userData.shader.uniforms.sunLocalPosition.value.copy(tempDomeSunLocalPosition);
-    dome.material.userData.shader.uniforms.sunPulse.value = pulse;
+    dome.material.userData.shader.uniforms.sunPulse.value = domePulse;
   }
 }
 
@@ -4282,18 +4442,35 @@ function animate() {
       advanceBandProgress("moonBandProgress", "moonBandDirection", getBodyBandProgressStep("moon") * speedMultiplier);
     }
     if (simulationState.darkSunStageAltitudeLock) {
+      const totalityHoldTransit = (
+        DARK_SUN_STAGE_APPROACH_SHARE +
+        DARK_SUN_STAGE_INGRESS_SHARE +
+        (DARK_SUN_STAGE_TOTALITY_SHARE * 0.5)
+      );
+      const totalityHoldActive = (
+        solarEclipseTrackingState.displayStageKey === "totality" &&
+        simulationState.darkSunStageTotalityHoldMs < DARK_SUN_STAGE_TOTALITY_HOLD_MS
+      );
       const transitStep = (
         ORBIT_SUN_SPEED + ORBIT_DARK_SUN_SPEED
       ) * speedMultiplier * DARK_SUN_STAGE_TRANSIT_ANGLE_SPEED_FACTOR;
-      simulationState.darkSunStageOffsetRadians -= transitStep;
-      simulationState.darkSunStageTransit = THREE.MathUtils.clamp(
-        simulationState.darkSunStageTransit + (
-          (deltaSeconds / Math.max(DARK_SUN_STAGE_TIMELINE_SECONDS, 0.0001)) *
-          Math.max(speedMultiplier, 0.2)
-        ),
-        0,
-        1
-      );
+      if (totalityHoldActive) {
+        simulationState.darkSunStageTotalityHoldMs = Math.min(
+          DARK_SUN_STAGE_TOTALITY_HOLD_MS,
+          simulationState.darkSunStageTotalityHoldMs + (deltaSeconds * 1000)
+        );
+        simulationState.darkSunStageTransit = totalityHoldTransit;
+      } else {
+        simulationState.darkSunStageOffsetRadians -= transitStep;
+        simulationState.darkSunStageTransit = THREE.MathUtils.clamp(
+          simulationState.darkSunStageTransit + (
+            (deltaSeconds / Math.max(DARK_SUN_STAGE_TIMELINE_SECONDS, 0.0001)) *
+            Math.max(speedMultiplier, 0.2)
+          ),
+          0,
+          1
+        );
+      }
       simulationState.orbitDarkSunAngle = simulationState.orbitSunAngle + simulationState.darkSunStageOffsetRadians;
     } else {
       simulationState.orbitDarkSunAngle -= ORBIT_DARK_SUN_SPEED * speedMultiplier;
