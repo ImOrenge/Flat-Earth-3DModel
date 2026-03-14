@@ -71,6 +71,46 @@ code {
   opacity: 1;
 }
 
+.solar-eclipse-toast {
+  position: absolute;
+  left: 50%;
+  top: 24px;
+  z-index: 6;
+  width: min(420px, calc(100vw - 48px));
+  padding: 16px 18px 15px;
+  border-radius: 20px;
+  border: 1px solid rgba(248, 213, 147, 0.3);
+  background:
+    linear-gradient(180deg, rgba(28, 20, 11, 0.96), rgba(9, 12, 24, 0.92));
+  box-shadow: 0 22px 56px rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(18px);
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, -10px);
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.solar-eclipse-toast.active {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.solar-eclipse-toast-title {
+  display: block;
+  color: #ffe8b7;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.solar-eclipse-toast-copy {
+  margin: 8px 0 0;
+  color: #f4f7ff;
+  line-height: 1.5;
+  font-size: 0.95rem;
+}
+
 .first-person-prep-card {
   width: min(420px, calc(100vw - 48px));
   padding: 22px 22px 18px;
@@ -923,5 +963,10 @@ h1 {
 
   .track-mode-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .solar-eclipse-toast {
+    top: 16px;
+    width: min(420px, calc(100vw - 32px));
   }
 }

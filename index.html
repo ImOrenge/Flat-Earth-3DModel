@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./styles.css?v=20260313-eclipse-toast1">
 </head>
 <body>
   <div class="app-shell">
@@ -32,6 +32,12 @@
         </div>
         <p class="first-person-prep-progress" id="first-person-prep-progress">0%</p>
       </div>
+    </div>
+    <div class="solar-eclipse-toast" id="solar-eclipse-toast" aria-live="polite" aria-atomic="true" hidden>
+      <strong class="solar-eclipse-toast-title" id="solar-eclipse-toast-title">Eclipse Imminent</strong>
+      <p class="solar-eclipse-toast-copy" id="solar-eclipse-toast-copy">
+        A natural eclipse contact is about to begin. Motion has slowed for observation.
+      </p>
     </div>
 
     <div class="panel-layout">
@@ -203,7 +209,7 @@
               </label>
             </div>
             <p class="sync-copy subtle" id="magnetic-field-summary">
-              Magnetic field lines keep a toroidal donut opening at the center and wrap as a symmetric upper and lower torus structure around the disc.
+              Magnetic field lines keep a toroidal donut opening at the center while diagonal spiral overlays form a diamond pattern across the torus surface.
             </p>
             <section class="sun-audit-panel">
               <p class="orbit-title" data-i18n="solarEclipseTitle">Solar Eclipse</p>
@@ -211,10 +217,6 @@
                 <div class="coord-card">
                   <span class="coord-label" data-i18n="solarEclipseTitle">Solar Eclipse</span>
                   <strong class="coord-value" id="solar-eclipse-state">None</strong>
-                </div>
-                <div class="coord-card">
-                  <span class="coord-label" data-i18n="solarEclipseStage">Stage</span>
-                  <strong class="coord-value" id="solar-eclipse-stage">Idle</strong>
                 </div>
                 <div class="coord-card">
                   <span class="coord-label" data-i18n="solarEclipseCoverage">Coverage</span>
@@ -437,6 +439,6 @@
     </div>
   </div>
 
-  <script type="module" src="./app.js?v=20260313-tracking-angle1"></script>
+<script type="module" src="./app.js?v=20260314-magnetic-circulation1"></script>
 </body>
 </html>

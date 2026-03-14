@@ -233,20 +233,9 @@ export function createAstronomyController({
   }
 
   function getSolarEclipseSummaryKey(solarEclipse) {
-    switch (solarEclipse?.stageKey) {
-      case "approach":
-        return "solarEclipseSummaryApproach";
-      case "partialIngress":
-        return "solarEclipseSummaryPartialIngress";
-      case "totality":
-        return "solarEclipseSummaryTotality";
-      case "partialEgress":
-        return "solarEclipseSummaryPartialEgress";
-      case "complete":
-        return "solarEclipseSummaryComplete";
-      default:
-        return "solarEclipseSummaryIdle";
-    }
+    return solarEclipse?.active
+      ? "solarEclipseSummaryActive"
+      : "solarEclipseSummaryHidden";
   }
 
   function getDarkSunDebugBandLabel(orbitMode = "auto") {
@@ -1487,16 +1476,12 @@ export function createAstronomyController({
       ? (nextState.total ? "solarEclipseStateTotal" : "solarEclipseStatePartial")
       : "solarEclipseStateNone";
     const stateLabel = i18n.t(stateKey);
-    const stageLabel = getSolarEclipseStageLabel(nextState);
     const coverageLabel = `${Math.round(THREE.MathUtils.clamp(nextState.coverage, 0, 1) * 100)}%`;
     const sunlightLabel = `${Math.round(THREE.MathUtils.clamp(nextState.sunlightPercent ?? 100, 0, 100))}%`;
 
     lastSolarEclipseState = nextState;
     if (ui.solarEclipseStateEl) {
       ui.solarEclipseStateEl.textContent = stateLabel;
-    }
-    if (ui.solarEclipseStageEl) {
-      ui.solarEclipseStageEl.textContent = stageLabel;
     }
     if (ui.solarEclipseCoverageEl) {
       ui.solarEclipseCoverageEl.textContent = coverageLabel;
@@ -1508,8 +1493,7 @@ export function createAstronomyController({
       ui.solarEclipseSummaryEl.textContent = i18n.t(getSolarEclipseSummaryKey(nextState), {
         coverage: coverageLabel,
         light: sunlightLabel,
-        state: stateLabel,
-        stage: stageLabel
+        state: stateLabel
       });
     }
   }

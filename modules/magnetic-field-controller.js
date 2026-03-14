@@ -5,6 +5,8 @@ const MAGNETIC_FIELD_MERIDIAN_LOOP_COUNT = Math.round((Math.PI * 2) / MAGNETIC_F
 const MAGNETIC_FIELD_CARDINAL_MERIDIAN_INTERVAL = MAGNETIC_FIELD_MERIDIAN_LOOP_COUNT / 4;
 const MAGNETIC_FIELD_RING_GUIDE_FACTORS = [0.176, 0.284, 0.392, 0.5, 0.608, 0.716, 0.824];
 const MAGNETIC_FIELD_RING_LOOP_COUNT = MAGNETIC_FIELD_RING_GUIDE_FACTORS.length * 2;
+const MAGNETIC_FIELD_SPIRAL_LOOP_COUNT = 12;
+const MAGNETIC_FIELD_SPIRAL_TURNS = 1;
 const MAGNETIC_FIELD_SEGMENTS = 96;
 const MAGNETIC_FIELD_CYCLE_SECONDS = 2.4;
 const MAGNETIC_SECONDARY_COIL_TURNS = 32;
@@ -56,7 +58,11 @@ export function createMagneticFieldController({
       yEnd: secondaryCoilTopY - scaleDimension(0.18)
     }
   };
-  const magneticFieldLineCount = MAGNETIC_FIELD_MERIDIAN_LOOP_COUNT + MAGNETIC_FIELD_RING_LOOP_COUNT;
+  const magneticFieldLineCount = (
+    MAGNETIC_FIELD_MERIDIAN_LOOP_COUNT +
+    MAGNETIC_FIELD_RING_LOOP_COUNT +
+    (MAGNETIC_FIELD_SPIRAL_LOOP_COUNT * 2)
+  );
 
   const magneticFieldGroup = new THREE.Group();
   const magneticAxisGroup = new THREE.Group();
@@ -108,10 +114,12 @@ export function createMagneticFieldController({
       varying float vLineEmphasis;
 
       void main() {
-        float pulseHead = fract((uTime / uPulseCycleSeconds) + vPhase);
-        float pulseDistance = abs(vProgress - pulseHead);
-        float pulse = 1.0 - smoothstep(0.0, 0.16, pulseDistance);
-        float trail = 1.0 - smoothstep(0.04, 0.28, pulseDistance);
+        float circulationHead = fract((uTime / (uPulseCycleSeconds * 1.45)) + vPhase);
+        float circulationDistance = abs(vProgress - circulationHead);
+        circulationDistance = min(circulationDistance, 1.0 - circulationDistance);
+        float circulationCore = 1.0 - smoothstep(0.0, 0.12, circulationDistance);
+        float circulationHalo = 1.0 - smoothstep(0.02, 0.32, circulationDistance);
+        float circulationWave = 0.5 + (0.5 * sin((vProgress * 6.28318530718 * 2.0) - ((uTime / uPulseCycleSeconds) * 1.4) + (vPhase * 6.28318530718)));
         float rotationFocus = smoothstep(0.18, 0.995, cos(vLineAngle));
         vec3 innerColor = mix(uMeridianInnerColor, uRingInnerColor, vLineFamily);
         vec3 outerColor = mix(uMeridianOuterColor, uRingOuterColor, vLineFamily);
@@ -119,9 +127,14 @@ export function createMagneticFieldController({
         float familyBrightness = mix(1.12, 0.96, vLineFamily);
         float emphasisBoost = mix(1.0, 1.18, vLineEmphasis);
         vec3 baseColor = mix(outerColor, innerColor, pow(1.0 - vProgress, 0.74));
-        vec3 pulseColor = mix(outerColor, innerColor, max(pulse, rotationFocus));
-        vec3 color = ((baseColor * parityBrightness * familyBrightness) + (pulseColor * pulse * 0.92)) * emphasisBoost;
-        float alpha = mix(0.05, 0.19, 1.0 - vProgress) + (trail * 0.12) + (pulse * 0.28);
+        vec3 pulseColor = mix(outerColor, innerColor, max(circulationCore, rotationFocus));
+        vec3 circulationTint = mix(outerColor, innerColor, circulationWave);
+        vec3 color = (
+          (baseColor * parityBrightness * familyBrightness) +
+          (pulseColor * circulationCore * 0.78) +
+          (circulationTint * circulationHalo * 0.2)
+        ) * emphasisBoost;
+        float alpha = mix(0.05, 0.19, 1.0 - vProgress) + (circulationHalo * 0.1) + (circulationCore * 0.24);
         alpha *= mix(0.74, 1.0, rotationFocus);
         alpha *= mix(1.08, 0.94, vLineFamily);
         alpha *= parityBrightness;
@@ -184,6 +197,7 @@ export function createMagneticFieldController({
     lineFamilyValue,
     lineParityValue,
     lineEmphasisValue,
+    renderOrderValue = 18,
     pointFactory
   }) {
     const points = [];
@@ -216,7 +230,7 @@ export function createMagneticFieldController({
     geometry.setAttribute("lineEmphasis", new THREE.BufferAttribute(lineEmphasis, 1));
 
     const line = new THREE.Line(geometry, lineMaterial);
-    line.renderOrder = 18;
+    line.renderOrder = renderOrderValue;
     magneticFieldGroup.add(line);
   }
 
@@ -278,6 +292,66 @@ export function createMagneticFieldController({
         lineIndex += 1;
       });
     });
+
+    return lineIndex;
+  }
+
+  function buildSpiralOverlayLines(startingLineIndex = 0) {
+    let lineIndex = startingLineIndex;
+
+    for (let spiralIndex = 0; spiralIndex < MAGNETIC_FIELD_SPIRAL_LOOP_COUNT; spiralIndex += 1) {
+      const phaseOffset = (spiralIndex / MAGNETIC_FIELD_SPIRAL_LOOP_COUNT) * Math.PI * 2;
+
+      addFieldLine({
+        lineIndex,
+        lineFamilyValue: 0,
+        lineParityValue: spiralIndex % 2,
+        lineEmphasisValue: 0.82,
+        renderOrderValue: 19,
+        pointFactory(segmentProgress, segmentIndex) {
+          const angleRadians = segmentProgress * Math.PI * 2;
+          if (segmentIndex === MAGNETIC_FIELD_SEGMENTS) {
+            return {
+              point: createToroidalPoint(0, phaseOffset),
+              fallbackAngle: 0
+            };
+          }
+          return {
+            point: createToroidalPoint(
+              angleRadians,
+              (angleRadians * MAGNETIC_FIELD_SPIRAL_TURNS) + phaseOffset
+            ),
+            fallbackAngle: angleRadians
+          };
+        }
+      });
+      lineIndex += 1;
+
+      addFieldLine({
+        lineIndex,
+        lineFamilyValue: 1,
+        lineParityValue: (spiralIndex + 1) % 2,
+        lineEmphasisValue: 0.82,
+        renderOrderValue: 19,
+        pointFactory(segmentProgress, segmentIndex) {
+          const angleRadians = segmentProgress * Math.PI * 2;
+          if (segmentIndex === MAGNETIC_FIELD_SEGMENTS) {
+            return {
+              point: createToroidalPoint(0, phaseOffset),
+              fallbackAngle: 0
+            };
+          }
+          return {
+            point: createToroidalPoint(
+              angleRadians,
+              phaseOffset - (angleRadians * MAGNETIC_FIELD_SPIRAL_TURNS)
+            ),
+            fallbackAngle: angleRadians
+          };
+        }
+      });
+      lineIndex += 1;
+    }
   }
 
   function getCoilOrbitProfile(body = "sun") {
@@ -332,7 +406,8 @@ export function createMagneticFieldController({
     syncVisibility();
   }
 
-  buildToroidalFieldLines();
+  const spiralLineIndex = buildToroidalFieldLines();
+  buildSpiralOverlayLines(spiralLineIndex);
   scalableStage.add(magneticFieldGroup);
   scalableStage.add(magneticAxisGroup);
   syncUi();
