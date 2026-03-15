@@ -17,7 +17,7 @@ import {
   getMoonHorizontalCoordinates,
   getSunHorizontalCoordinates,
   SEASONAL_EVENT_DEFINITIONS
-} from "./astronomy-utils.js?v=20260313-natural-eclipse1";
+} from "./astronomy-utils.js?v=20260314-natural-eclipse2";
 
 export function createAstronomyController({
   constants,
@@ -233,9 +233,24 @@ export function createAstronomyController({
   }
 
   function getSolarEclipseSummaryKey(solarEclipse) {
-    return solarEclipse?.active
-      ? "solarEclipseSummaryActive"
-      : "solarEclipseSummaryHidden";
+    switch (solarEclipse?.stageKey) {
+      case "approach":
+        return "solarEclipseSummaryApproach";
+      case "partialIngress":
+        return "solarEclipseSummaryPartialIngress";
+      case "totality":
+        return "solarEclipseSummaryTotality";
+      case "partialEgress":
+        return "solarEclipseSummaryPartialEgress";
+      case "complete":
+        return "solarEclipseSummaryComplete";
+      case "idle":
+        return solarEclipse?.visibleInView ? "solarEclipseSummaryIdle" : "solarEclipseSummaryHidden";
+      default:
+        return solarEclipse?.active
+          ? "solarEclipseSummaryActive"
+          : "solarEclipseSummaryHidden";
+    }
   }
 
   function getDarkSunDebugBandLabel(orbitMode = "auto") {
@@ -1472,9 +1487,15 @@ export function createAstronomyController({
 
   function syncSolarEclipseUi(solarEclipse = lastSolarEclipseState) {
     const nextState = createSolarEclipseState(solarEclipse);
-    const stateKey = nextState.active
-      ? (nextState.total ? "solarEclipseStateTotal" : "solarEclipseStatePartial")
-      : "solarEclipseStateNone";
+    const stateKey = nextState.total
+      ? "solarEclipseStateTotal"
+      : (
+        nextState.eventWindowActive ||
+        nextState.active ||
+        nextState.eclipseTier !== "none"
+          ? "solarEclipseStatePartial"
+          : "solarEclipseStateNone"
+      );
     const stateLabel = i18n.t(stateKey);
     const coverageLabel = `${Math.round(THREE.MathUtils.clamp(nextState.coverage, 0, 1) * 100)}%`;
     const sunlightLabel = `${Math.round(THREE.MathUtils.clamp(nextState.sunlightPercent ?? 100, 0, 100))}%`;

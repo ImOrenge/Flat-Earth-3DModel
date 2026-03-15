@@ -5,8 +5,12 @@ const MAGNETIC_FIELD_MERIDIAN_LOOP_COUNT = Math.round((Math.PI * 2) / MAGNETIC_F
 const MAGNETIC_FIELD_CARDINAL_MERIDIAN_INTERVAL = MAGNETIC_FIELD_MERIDIAN_LOOP_COUNT / 4;
 const MAGNETIC_FIELD_RING_GUIDE_FACTORS = [0.176, 0.284, 0.392, 0.5, 0.608, 0.716, 0.824];
 const MAGNETIC_FIELD_RING_LOOP_COUNT = MAGNETIC_FIELD_RING_GUIDE_FACTORS.length * 2;
-const MAGNETIC_FIELD_SPIRAL_LOOP_COUNT = 12;
-const MAGNETIC_FIELD_SPIRAL_TURNS = 1;
+const MAGNETIC_FIELD_SPIRAL_LOOP_COUNT = 16;
+const MAGNETIC_FIELD_SPIRAL_TURNS = 2;
+const MAGNETIC_FIELD_SPIRAL_PRIMARY_WAVE_FREQUENCY = 6;
+const MAGNETIC_FIELD_SPIRAL_PRIMARY_WAVE_AMPLITUDE = 0.18;
+const MAGNETIC_FIELD_SPIRAL_SECONDARY_WAVE_FREQUENCY = 3;
+const MAGNETIC_FIELD_SPIRAL_SECONDARY_WAVE_AMPLITUDE = 0.08;
 const MAGNETIC_FIELD_SEGMENTS = 96;
 const MAGNETIC_FIELD_CYCLE_SECONDS = 2.4;
 const MAGNETIC_SECONDARY_COIL_TURNS = 32;
@@ -61,7 +65,7 @@ export function createMagneticFieldController({
   const magneticFieldLineCount = (
     MAGNETIC_FIELD_MERIDIAN_LOOP_COUNT +
     MAGNETIC_FIELD_RING_LOOP_COUNT +
-    (MAGNETIC_FIELD_SPIRAL_LOOP_COUNT * 2)
+    MAGNETIC_FIELD_SPIRAL_LOOP_COUNT
   );
 
   const magneticFieldGroup = new THREE.Group();
@@ -192,6 +196,19 @@ export function createMagneticFieldController({
     return upperHalf ? baseProfile : ((Math.PI * 2) - baseProfile);
   }
 
+  function getPineconeSpiralProfile(angleRadians, phaseOffset) {
+    const primaryWave = Math.sin((angleRadians * MAGNETIC_FIELD_SPIRAL_PRIMARY_WAVE_FREQUENCY) + phaseOffset);
+    const secondaryWave = Math.sin(
+      (angleRadians * MAGNETIC_FIELD_SPIRAL_SECONDARY_WAVE_FREQUENCY) - (phaseOffset * 0.5)
+    );
+    return (
+      phaseOffset +
+      (angleRadians * MAGNETIC_FIELD_SPIRAL_TURNS) +
+      (primaryWave * MAGNETIC_FIELD_SPIRAL_PRIMARY_WAVE_AMPLITUDE) +
+      (secondaryWave * MAGNETIC_FIELD_SPIRAL_SECONDARY_WAVE_AMPLITUDE)
+    );
+  }
+
   function addFieldLine({
     lineIndex,
     lineFamilyValue,
@@ -301,50 +318,26 @@ export function createMagneticFieldController({
 
     for (let spiralIndex = 0; spiralIndex < MAGNETIC_FIELD_SPIRAL_LOOP_COUNT; spiralIndex += 1) {
       const phaseOffset = (spiralIndex / MAGNETIC_FIELD_SPIRAL_LOOP_COUNT) * Math.PI * 2;
+      const lineEmphasisValue = (spiralIndex % 4) === 0 ? 0.96 : 0.76;
 
       addFieldLine({
         lineIndex,
-        lineFamilyValue: 0,
+        lineFamilyValue: spiralIndex % 2,
         lineParityValue: spiralIndex % 2,
-        lineEmphasisValue: 0.82,
+        lineEmphasisValue,
         renderOrderValue: 19,
         pointFactory(segmentProgress, segmentIndex) {
           const angleRadians = segmentProgress * Math.PI * 2;
           if (segmentIndex === MAGNETIC_FIELD_SEGMENTS) {
             return {
-              point: createToroidalPoint(0, phaseOffset),
+              point: createToroidalPoint(0, getPineconeSpiralProfile(0, phaseOffset)),
               fallbackAngle: 0
             };
           }
           return {
             point: createToroidalPoint(
               angleRadians,
-              (angleRadians * MAGNETIC_FIELD_SPIRAL_TURNS) + phaseOffset
-            ),
-            fallbackAngle: angleRadians
-          };
-        }
-      });
-      lineIndex += 1;
-
-      addFieldLine({
-        lineIndex,
-        lineFamilyValue: 1,
-        lineParityValue: (spiralIndex + 1) % 2,
-        lineEmphasisValue: 0.82,
-        renderOrderValue: 19,
-        pointFactory(segmentProgress, segmentIndex) {
-          const angleRadians = segmentProgress * Math.PI * 2;
-          if (segmentIndex === MAGNETIC_FIELD_SEGMENTS) {
-            return {
-              point: createToroidalPoint(0, phaseOffset),
-              fallbackAngle: 0
-            };
-          }
-          return {
-            point: createToroidalPoint(
-              angleRadians,
-              phaseOffset - (angleRadians * MAGNETIC_FIELD_SPIRAL_TURNS)
+              getPineconeSpiralProfile(angleRadians, phaseOffset)
             ),
             fallbackAngle: angleRadians
           };

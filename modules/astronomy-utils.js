@@ -404,6 +404,9 @@ export function createSolarEclipseState(overrides = {}) {
     stageKey: "idle",
     stageLabelKey: "solarEclipseStageIdle",
     stageProgress: 0,
+    eventWindowActive: false,
+    eventWindowJustOpened: false,
+    eventWindowJustClosed: false,
     visibleInView: false,
     ...overrides
   };
