@@ -1739,13 +1739,13 @@ export function createSolarEclipseController(deps) {
     const viewportHeight = Math.max(tempSolarEclipseViewport.y, 1);
     const deltaX = sunDisc.centerX - darkSunDisc.centerX;
     const deltaY = sunDisc.centerY - darkSunDisc.centerY;
-    const centerDistance = Math.hypot(deltaX, deltaY);
+    
+    // Ignore vertical separation (deltaY) when triggering eclipse states, as the Dark Sun 
+    // is manually animated to the Sun's altitude during the transit phase anyway.
+    const centerDistance = Math.abs(deltaX);
     const triggerContactDistance = Math.max(triggerSunDisc.radius + darkSunDisc.radius, 0.0001);
     const normalizedDistance = centerDistance / triggerContactDistance;
-    const centerDistancePx = Math.hypot(
-      deltaX * viewportWidth * 0.5,
-      deltaY * viewportHeight * 0.5
-    );
+    const centerDistancePx = Math.abs(deltaX * viewportWidth * 0.5);
     const sunRadiusPx = sunDisc.radius * viewportWidth * 0.5;
     const triggerSunRadiusPx = triggerSunDisc.radius * viewportWidth * 0.5;
     const darkSunRadiusPx = darkSunDisc.radius * viewportWidth * 0.5;
@@ -2226,10 +2226,11 @@ export function createSolarEclipseController(deps) {
       0.0005,
       triggerSunDisc.radius * DARK_SUN_ALTITUDE_ALIGNMENT_TOLERANCE_FACTOR
     );
-    const altitudeAligned = visibleInView && altitudeDelta <= altitudeTolerance;
+    // Ignore vertical altitude differences to allow eclipses between bodies at different seasonal heights.
+    const altitudeAligned = visibleInView;
     const eligibility = getSolarEclipseEligibility(sunRenderState, darkSunRenderState);
     const eligibleForEclipse = eligibility.eclipseTier !== SOLAR_ECLIPSE_TIER_NONE;
-    const approachAligned = eligibleForEclipse && visibleInView && altitudeDelta <= (altitudeTolerance * 1.75);
+    const approachAligned = eligibleForEclipse && visibleInView;
     const eclipseMetrics = getProjectedSolarEclipseMetrics({
       altitudeAligned,
       darkSunDisc,
@@ -2383,7 +2384,8 @@ export function createSolarEclipseController(deps) {
       0.0005,
       triggerSunDisc.radius * DARK_SUN_ALTITUDE_ALIGNMENT_TOLERANCE_FACTOR
     );
-    const altitudeAligned = visibleInView && altitudeDelta <= altitudeTolerance;
+    // Ignore vertical altitude differences to allow eclipses between bodies at different seasonal heights.
+    const altitudeAligned = visibleInView;
     const eligibility = getSolarEclipseEligibility(sunRenderState, darkSunRenderState);
     const metrics = getProjectedSolarEclipseMetrics({
       altitudeAligned,
@@ -2395,7 +2397,7 @@ export function createSolarEclipseController(deps) {
       ? 0
       : Math.min(metrics.coverage, eligibility.tierCap);
     const eligibleForEclipse = eligibility.eclipseTier !== SOLAR_ECLIPSE_TIER_NONE;
-    const approachAligned = eligibleForEclipse && visibleInView && altitudeDelta <= (altitudeTolerance * 1.75);
+    const approachAligned = eligibleForEclipse && visibleInView;
     const hasContact = (
       eligibleForEclipse &&
       altitudeAligned &&
