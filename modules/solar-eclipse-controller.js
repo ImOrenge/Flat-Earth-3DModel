@@ -718,10 +718,18 @@ export function createSolarEclipseController(deps) {
     let predictedSunAngle = simulationState.orbitSunAngle ?? 0;
     let predictedSunProgress = simulationState.sunBandProgress ?? 0.5;
     let predictedSunDirection = simulationState.sunBandDirection ?? 1;
-    const predictedSunAngleStep = ORBIT_SUN_SPEED * baseSpeedMultiplier;
-    const predictedSunBandStep = getBodyBandProgressStep("sun") * baseSpeedMultiplier;
+
+    // Use a capped step size to prevent skipping the narrow natural eclipse window at high simulation speeds.
+    const maxStepMultiplier = 1.5;
+    const testStepMultiplier = Math.min(baseSpeedMultiplier, maxStepMultiplier);
+    const testIterations = Math.ceil((frameCount * baseSpeedMultiplier) / testStepMultiplier);
+    
+    const predictedSunAngleStep = ORBIT_SUN_SPEED * testStepMultiplier;
+    const predictedSunBandStep = getBodyBandProgressStep("sun") * testStepMultiplier;
+    const expectedBaseDarkPhase = simulationState.darkSunOrbitPhaseOffsetRadians ?? Math.PI;
+    const darkSunSpeedRatio = ORBIT_DARK_SUN_SPEED / Math.max(ORBIT_SUN_SPEED, 0.0001);
   
-    for (let frameIndex = 1; frameIndex <= frameCount; frameIndex += 1) {
+    for (let testIndex = 1; testIndex <= testIterations; testIndex += 1) {
       predictedSunAngle += predictedSunAngleStep;
       if (orbitMode === "auto") {
         const nextBandState = getAdvancedBandState(
@@ -733,6 +741,13 @@ export function createSolarEclipseController(deps) {
         predictedSunDirection = nextBandState.direction;
       }
   
+      // Fast mathematical culling: don't allocate or compute full metrics if they are nowhere near each other horizontally.
+      const predictedDarkSunAngle = expectedBaseDarkPhase - (predictedSunAngle * darkSunSpeedRatio);
+      const angularDistance = getWrappedAngularDistance(predictedSunAngle, predictedDarkSunAngle);
+      if (angularDistance > 0.4) {
+        continue;
+      }
+
       const predictedSunRenderState = astronomyApi.getSunRenderState({
         orbitAngleRadians: predictedSunAngle,
         orbitMode,
@@ -756,7 +771,7 @@ export function createSolarEclipseController(deps) {
         predictedMetrics.hasContact ||
         predictedMetrics.hasVisibleOverlap
       ) {
-        return frameIndex;
+        return (testIndex * testStepMultiplier) / baseSpeedMultiplier;
       }
     }
   
