@@ -598,7 +598,7 @@ export function createAstronomyController({
   }
 
   function getMirroredDarkSunProgress(sunProgress = simulationState.sunBandProgress ?? 0.5) {
-    return THREE.MathUtils.clamp(1 - (sunProgress ?? 0.5), 0, 1);
+    return THREE.MathUtils.clamp((sunProgress ?? 0.5), 0, 1);
   }
 
   function getMirroredDarkSunOrbitAngleRadians({
