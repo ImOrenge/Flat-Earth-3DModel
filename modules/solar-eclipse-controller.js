@@ -1798,17 +1798,9 @@ export function createSolarEclipseController(deps) {
     const laneDelta = (sunLaneIndex === null || darkSunLaneIndex === null)
       ? Number.POSITIVE_INFINITY
       : Math.abs(sunLaneIndex - darkSunLaneIndex);
-    let eclipseTier = SOLAR_ECLIPSE_TIER_NONE;
-  
-    if (bandDelta === 0) {
-      if (laneDelta <= 1) {
-        eclipseTier = SOLAR_ECLIPSE_TIER_TOTAL;
-      } else if (laneDelta === 2) {
-        eclipseTier = SOLAR_ECLIPSE_TIER_PARTIAL_2;
-      } else if (laneDelta === 3) {
-        eclipseTier = SOLAR_ECLIPSE_TIER_PARTIAL_3;
-      }
-    }
+    // Ignore band and lane differences because the shadow visually transits the sun
+    // via animation even if they start orbiting at different seasonal altitudes.
+    let eclipseTier = SOLAR_ECLIPSE_TIER_TOTAL;
   
     return {
       bandIndex: darkSunBandIndex ?? sunBandIndex ?? 1,
