@@ -2903,6 +2903,97 @@ export function createSolarEclipseController(deps) {
   
     if (!preEclipseCandidate?.sunRenderState) {
       return;
+    }
+
+    const targetSunAngleRadians = preEclipseCandidate.sunAngleRadians ?? sunAngleRadians;
+    const targetSunProgress = preEclipseCandidate.sunProgress ?? sunProgress;
+    const targetSunDirection = preEclipseCandidate.sunDirection ?? sunDirection;
+    const alignedSunRenderState = preEclipseCandidate.sunRenderState ?? astronomyApi.getSunRenderState({
+      orbitAngleRadians: targetSunAngleRadians,
+      orbitMode: "auto",
+      progress: targetSunProgress,
+      source: "demo"
+    });
+    const stagedMirroredCandidate = findMirroredDarkSunStageStartCandidate({
+      phaseOffsetRadians,
+      sunDirection: targetSunDirection,
+      sunProgress: targetSunProgress,
+      sunRenderState: alignedSunRenderState,
+      targetVisibleCoverage: constants.STAGE_PRE_ECLIPSE_TARGET_VISIBLE_COVERAGE,
+      trackCandidateSun: true
+    });
+    const stagedVisibleOverlapCandidate = findDarkSunStagePreContactOffsetRadians({
+      preferVisibleOverlap: true,
+      sunDirection: targetSunDirection,
+      sunProgress: targetSunProgress,
+      sunRenderState: alignedSunRenderState,
+      targetVisibleCoverage: constants.STAGE_PRE_ECLIPSE_TARGET_VISIBLE_COVERAGE,
+      trackCandidateSun: true
+    });
+    const targetDarkSunRenderState = stagedMirroredCandidate?.eclipseMetrics?.hasVisibleOverlap
+      ? stagedMirroredCandidate.darkSunRenderState
+      : (
+        stagedVisibleOverlapCandidate?.eclipseMetrics?.hasVisibleOverlap
+          ? stagedVisibleOverlapCandidate.darkSunRenderState
+          : (preEclipseCandidate.darkSunRenderState ?? null)
+      );
+    const targetDarkSunDirection = targetDarkSunRenderState?.direction ??
+      ((targetSunDirection ?? 1) >= 0 ? -1 : 1);
+    const preContactDarkSunAngle = Number.isFinite(targetDarkSunRenderState?.orbitAngleRadians)
+      ? targetDarkSunRenderState.orbitAngleRadians
+      : (targetSunAngleRadians + constants.DARK_SUN_STAGE_START_OFFSET_RADIANS);
+  
+    simulationState.demoPhaseDateMs = sourceDate.getTime();
+    simulationState.orbitMode = "auto";
+    resetDarkSunStageState();
+    simulationState.darkSunStageAltitudeLock = true;
+    simulationState.darkSunStageHasEclipsed = false;
+    setDemoMoonOrbitOffsetFromPhase(simulationState.demoPhaseDateMs);
+    simulationState.orbitSunAngle = targetSunAngleRadians;
+    simulationState.sunBandProgress = targetSunProgress;
+    simulationState.sunBandDirection = targetSunDirection;
+    syncDemoMoonOrbitToSun();
+    astronomyApi.syncDarkSunMirrorPhaseOffset({
+      sunOrbitAngleRadians: targetSunAngleRadians,
+      darkSunOrbitAngleRadians: preContactDarkSunAngle
+    });
+    simulationState.darkSunBandProgress = targetSunProgress;
+    simulationState.darkSunBandDirection = targetDarkSunDirection;
+    const preContactDarkSunRenderState = astronomyApi.getDarkSunRenderState({
+      direction: simulationState.darkSunBandDirection,
+      orbitAngleRadians: preContactDarkSunAngle,
+      orbitMode: simulationState.orbitMode,
+      progress: simulationState.darkSunBandProgress,
+      source: "demo",
+      useExplicitOrbit: true
+    });
+    simulationState.orbitDarkSunAngle = preContactDarkSunRenderState.orbitAngleRadians;
+    astronomyApi.updateMoonOrbit({
+      orbitMode: simulationState.orbitMode,
+      progress: simulationState.moonBandProgress
+    });
+    astronomyApi.updateSeasonPresentation(alignedSunRenderState.centerRadius);
+    astronomyApi.updateOrbitModeUi();
+    astronomyApi.refreshTrailsForCurrentMode();
+    celestialTrackingCameraApi.setTarget("sun");
+    orbitSun.position.copy(alignedSunRenderState.position);
+    orbitDarkSun.position.copy(preContactDarkSunRenderState.position);
+    scene.updateMatrixWorld(true);
+    celestialTrackingCameraApi.update();
+    cameraApi.updateCamera();
+    resetDarkSunOcclusionMotion(darkSunOcclusionState.orbit);
+  
+    const stagedSnapshot = getCurrentUiSnapshot();
+    stagedSnapshot.sunRenderState = alignedSunRenderState;
+    stagedSnapshot.darkSunRenderState = preContactDarkSunRenderState;
+    stagedSnapshot.darkSunRenderPosition = orbitDarkSun.position.clone();
+    astronomyApi.updateAstronomyUi(stagedSnapshot);
+    evaluateSolarEclipse(stagedSnapshot, 0);
+    updateDarkSunMaskUniforms(stagedSnapshot.solarEclipse);
+    updateSolarEclipseEventFeedback(stagedSnapshot.solarEclipse);
+    updateSolarEclipseAnimationPacing(0);
+    updateSunVisualEffects(stagedSnapshot);
+  }
   return {
     createSolarEclipseWindowSolverState,
     getCurrentDarkSunRenderStateSnapshot,
