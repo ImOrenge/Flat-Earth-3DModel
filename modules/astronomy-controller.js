@@ -52,6 +52,10 @@ export function createAstronomyController({
   moonFullTrailPointsGeometry,
   moonTrailGeometry,
   moonTrailPointsGeometry,
+  darkSunFullTrailGeometry,
+  darkSunFullTrailPointsGeometry,
+  darkSunTrailGeometry,
+  darkSunTrailPointsGeometry,
   northSeasonOverlay,
   southSeasonOverlay
 }) {
@@ -63,6 +67,8 @@ export function createAstronomyController({
   const sunTrailPoints = [];
   const moonFullTrailPoints = [];
   const moonTrailPoints = [];
+  const darkSunFullTrailPoints = [];
+  const darkSunTrailPoints = [];
   const analemmaPoints = [];
   const skyAnalemmaPoints = [];
   const skyAnalemmaSegments = [];
@@ -608,15 +614,6 @@ export function createAstronomyController({
     return phaseOffsetRadians - (sunOrbitAngleRadians * DARK_SUN_ORBIT_SPEED_FACTOR);
   }
 
-  function syncDarkSunMirrorPhaseOffset({
-    sunOrbitAngleRadians = simulationState.orbitSunAngle ?? 0,
-    darkSunOrbitAngleRadians = simulationState.orbitDarkSunAngle ?? DARK_SUN_START_ANGLE
-  } = {}) {
-    const nextPhaseOffsetRadians = darkSunOrbitAngleRadians +
-      (sunOrbitAngleRadians * DARK_SUN_ORBIT_SPEED_FACTOR);
-    simulationState.darkSunOrbitPhaseOffsetRadians = nextPhaseOffsetRadians;
-    return nextPhaseOffsetRadians;
-  }
 
   function inferRealitySunBandDirection(date) {
     const sampleWindowMs = 12 * 60 * 60 * 1000;
@@ -737,8 +734,10 @@ export function createAstronomyController({
     source = "reality",
     orbitMode = source === "demo" ? simulationState.orbitMode : "auto"
   }) {
+    // Use 'sun' corridor so the moon rides exactly the same orbital track as the sun.
+    // The angular offset (orbitMoonAngle vs orbitSunAngle) keeps them apart on the same ring.
     return getBodyCoilRenderState({
-      body: "moon",
+      body: "sun",
       longitudeDegrees,
       orbitAngleRadians,
       orbitMode,
@@ -1364,7 +1363,14 @@ export function createAstronomyController({
     const orbitSpeed = body === "moon" ? constants.ORBIT_MOON_SPEED : constants.ORBIT_SUN_SPEED;
     const orbitMode = simulationState.orbitMode;
     const orbitFrames = (Math.PI * 2) / Math.max(orbitSpeed, 0.000001);
-    const bandStep = getBodyBandProgressStep(body);
+    
+    // Use sun's band step for the shape, but if it's the moon, scale it down by the speed ratio 
+    // to maintain the identical parametric spiral.
+    const baseStep = getBodyBandProgressStep("sun");
+    const bandStep = body === "moon"
+      ? baseStep * (constants.ORBIT_MOON_SPEED / constants.ORBIT_SUN_SPEED)
+      : baseStep;
+
     const totalFrames = orbitMode === "auto"
       ? Math.max(orbitFrames, 2 / Math.max(bandStep, 0.000001))
       : orbitFrames;
@@ -1374,13 +1380,13 @@ export function createAstronomyController({
     const frameAdvance = totalFrames / Math.max(normalizedSampleCount - 1, 1);
     let orbitAngle = body === "moon"
       ? simulationState.orbitMoonAngle
-      : simulationState.orbitSunAngle;
+      : (body === "darkSun" ? simulationState.orbitDarkSunAngle : simulationState.orbitSunAngle);
     let progress = body === "moon"
       ? (simulationState.moonBandProgress ?? 0.5)
-      : (simulationState.sunBandProgress ?? 0.5);
+      : (body === "darkSun" ? (simulationState.darkSunBandProgress ?? 0.5) : (simulationState.sunBandProgress ?? 0.5));
     let direction = body === "moon"
       ? (simulationState.moonBandDirection ?? 1)
-      : (simulationState.sunBandDirection ?? 1);
+      : (body === "darkSun" ? (simulationState.darkSunBandDirection ?? -1) : (simulationState.sunBandDirection ?? 1));
     const progressStep = bandStep * frameAdvance;
     const points = [];
 
@@ -1392,12 +1398,21 @@ export function createAstronomyController({
           progress,
           source: "demo"
         })
-        : getSunRenderState({
-          orbitAngleRadians: orbitAngle,
-          orbitMode,
-          progress,
-          source: "demo"
-        });
+        : (body === "darkSun"
+          ? getDarkSunRenderState({
+            orbitAngleRadians: orbitAngle,
+            direction,
+            orbitMode,
+            progress,
+            source: "demo",
+            useExplicitOrbit: true
+          })
+          : getSunRenderState({
+            orbitAngleRadians: orbitAngle,
+            orbitMode,
+            progress,
+            source: "demo"
+          }));
       points.push(renderState.position.clone());
 
       if (index === normalizedSampleCount - 1) {
@@ -1436,6 +1451,12 @@ export function createAstronomyController({
       moonFullTrailGeometry,
       moonFullTrailPointsGeometry,
       buildDemoFullTrailPoints("moon", constants.MOON_TRAIL_MAX_POINTS)
+    );
+    setTrailPoints(
+      darkSunFullTrailPoints,
+      darkSunFullTrailGeometry,
+      darkSunFullTrailPointsGeometry,
+      buildDemoFullTrailPoints("darkSun", constants.SUN_TRAIL_MAX_POINTS)
     );
   }
 
@@ -1612,6 +1633,24 @@ export function createAstronomyController({
     setTrailPoints(moonTrailPoints, moonTrailGeometry, moonTrailPointsGeometry, []);
   }
 
+  function updateDarkSunTrail() {
+    const pointLimit = getCurrentTrailPointLimit(constants.SUN_TRAIL_MAX_POINTS);
+    if (pointLimit <= 0) {
+      resetDarkSunTrail();
+      return;
+    }
+    darkSunTrailPoints.push(orbitDarkSun.position.clone());
+    while (darkSunTrailPoints.length > pointLimit) {
+      darkSunTrailPoints.shift();
+    }
+    darkSunTrailGeometry.setFromPoints(darkSunTrailPoints);
+    darkSunTrailPointsGeometry.setFromPoints(darkSunTrailPoints);
+  }
+
+  function resetDarkSunTrail() {
+    setTrailPoints(darkSunTrailPoints, darkSunTrailGeometry, darkSunTrailPointsGeometry, []);
+  }
+
   function refreshTrailsForCurrentMode() {
     if (astronomyState.enabled) {
       const activeDate = astronomyState.live ? new Date() : astronomyState.selectedDate;
@@ -1623,6 +1662,7 @@ export function createAstronomyController({
     astronomyState.lastTrailRebuildMs = 0;
     resetSunTrail();
     resetMoonTrail();
+    resetDarkSunTrail();
     rebuildFullDemoTrails();
   }
 
@@ -1764,7 +1804,6 @@ export function createAstronomyController({
     syncAnalemmaUi,
     syncSkyAnalemmaUi,
     syncDayNightOverlayUi,
-    syncDarkSunMirrorPhaseOffset,
     syncSolarEclipseUi,
     syncSeasonalMoonUi,
     syncSeasonalSunUi,
@@ -1773,6 +1812,7 @@ export function createAstronomyController({
     updateDayNightOverlayFromSunPosition,
     updateMoonOrbit,
     updateMoonTrail,
+    updateDarkSunTrail,
     updateOrbitModeUi,
     updateSeasonPresentation,
     updateSunTrail,

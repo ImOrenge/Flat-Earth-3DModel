@@ -412,6 +412,37 @@ export function createSolarEclipseState(overrides = {}) {
   };
 }
 
+export function createLunarEclipseState(overrides = {}) {
+  return {
+    active: false,
+    total: false,
+    coverage: 0,
+    projectionCoverage: 0,
+    rawCoverage: 0,
+    direction: "idle",
+    lightReduction: 0,
+    normalizedDistance: Number.POSITIVE_INFINITY,
+    recentlyActive: false,
+    bandIndex: 1,
+    bandDelta: Number.POSITIVE_INFINITY,
+    hasContact: false,
+    hasVisibleOverlap: false,
+    contactDepthPx: 0,
+    laneIndex: 0,
+    laneDelta: Number.POSITIVE_INFINITY,
+    eclipseTier: "none",
+    rawStageKey: "idle",
+    stageKey: "idle",
+    stageLabelKey: "lunarEclipseStageIdle",
+    stageProgress: 0,
+    eventWindowActive: false,
+    eventWindowJustOpened: false,
+    eventWindowJustClosed: false,
+    visibleInView: false,
+    ...overrides
+  };
+}
+
 export function getAstronomySnapshot({
   date,
   discRadius,

@@ -388,6 +388,7 @@ Object.assign(TRANSLATIONS.en, {
   solarEclipseToastImminentTitle: "Eclipse Approaching",
   solarEclipseToastImminentBody: "{state} eclipse alignment is approaching. Contact will begin soon.",
   stagePreEclipseButton: "Seek Pre-Eclipse",
+  stagePreLunarEclipseButton: "Seek Pre-Lunar Eclipse",
   darkSunDebugTitle: "Dark Sun Debug",
   toggleDarkSunDebug: "Show",
   darkSunDebugSummary: "Geo {geo} · Y {height} · orbit {orbitAngle} · phase {phaseOffset} · band {band} {progress} · {source} / {lock}",

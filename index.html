@@ -105,6 +105,7 @@
         <div class="panel-tabs" role="tablist" aria-label="Detail control sections" id="detail-tabs">
           <button class="panel-tab active" data-control-tab="astronomy" type="button" data-i18n="tabAstronomy">Astronomy</button>
           <button class="panel-tab" data-control-tab="routes" type="button" data-i18n="tabRoutes">Route Control</button>
+          <button class="panel-tab" data-control-tab="rockets" type="button">Rockets</button>
         </div>
 
         <div class="panel-tab-content active" data-control-panel="astronomy">
@@ -232,6 +233,7 @@
               </p>
               <div class="button-row compact">
                 <button class="button secondary compact-button" id="stage-pre-eclipse" type="button" data-i18n="stagePreEclipseButton">Stage Pre-Eclipse</button>
+                <button class="button secondary compact-button" id="stage-pre-lunar-eclipse" type="button" data-i18n="stagePreLunarEclipseButton">Stage Pre-Lunar Eclipse</button>
               </div>
               <div class="sync-row overlay-row">
                 <span class="sync-title" data-i18n="darkSunDebugTitle">Dark Sun Debug</span>
@@ -432,6 +434,20 @@
                 <span class="coord-label" data-i18n="routeGeoPathLabel">Geo Path</span>
                 <strong class="coord-value" id="route-geo-summary">-</strong>
               </div>
+            </div>
+          </section>
+        </div>
+
+        <div class="panel-tab-content" data-control-panel="rockets" hidden>
+          <section class="route-panel">
+            <p class="orbit-title">Rocket Simulation</p>
+            <p class="sync-copy">Select a real-world spaceport and launch a rocket toward the Bermuda Triangle.</p>
+            <label class="field" for="rocket-spaceport-select">
+              <span class="field-label">Launchpad</span>
+              <select class="select-input" id="rocket-spaceport-select"></select>
+            </label>
+            <div class="button-row compact" style="margin-top: 16px;">
+              <button class="button primary compact-button" id="rocket-launch-btn" type="button">Launch Rocket</button>
             </div>
           </section>
         </div>

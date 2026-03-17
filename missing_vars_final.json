@@ -1,0 +1,21 @@
+{
+  "modules/celestial-visuals-controller.js": [
+    "observerSunBody",
+    "observerMoonHalo",
+    "observerMoonCoolGlow",
+    "observerMoonCorona",
+    "observerMoonAureole",
+    "observerMoonWarmFringe",
+    "observerMoonLight",
+    "observerMoon",
+    "orbitMoon",
+    "observerDarkSunBody",
+    "observerDarkSunRim"
+  ],
+  "modules/input-handler.js": [
+    "DISC_RADIUS"
+  ],
+  "modules/route-simulation-controller.js": [
+    "Map"
+  ]
+}

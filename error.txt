@@ -1,0 +1,11 @@
+file:///C:/Users/user/Flat-Earth/modules/celestial-visuals-controller.js:5
+  const {\n    constants,\n    i18n,\n    ui,\n    orbitSun,\n    orbitDarkSun,\n    observerSun,\n    observerDarkSun,\n    orbitSunBody,\n    orbitDarkSunRim,\n    orbitDarkSunBody,\n    orbitSunHalo,\n    orbitSunAureole,\n    orbitSunCorona,\n    orbitMoonBody,\n    orbitMoonHalo,\n    orbitMoonCoolGlow,\n    orbitMoonCorona,\n    orbitMoonAureole,\n    orbitMoonWarmFringe,\n    orbitMoonLight,\n    observerMoonBody,\n    scene,\n    firstPersonScene,\n    camera,\n    stage,\n    scalableStage,\n    dome,\n    dayNightOverlayMaterial,\n    firstPersonSunRayGroup,\n    firstPersonSunRayMeshes,\n    simulationState,\n    astronomyState,\n    renderState,\n    walkerState,\n    movementState,\n    astronomyApi,\n    walkerApi,\n    ambient,\n    keyLight,\n    rimLight,\n    renderer,\n    firstPersonPrepEl,\n    firstPersonPrepTitleEl,\n    firstPersonPrepCopyEl,\n    firstPersonPrepBarFillEl,\n    firstPersonPrepProgressEl,\n    resetDarkSunOcclusionMotion,\n    darkSunOcclusionState,\n    getSolarAltitudeFactor,\n    setMoonMaterialPhase,\n    tempPreparationLookTarget,\n    stopDrag,\n    easeEclipseLightValue,\n    getSolarEclipsePhaseKey,\n    getSolarEclipseVisualProfile
+         ^
+
+SyntaxError: Invalid or unexpected token
+    at compileSourceTextModule (node:internal/modules/esm/utils:338:16)
+    at ModuleLoader.moduleStrategy (node:internal/modules/esm/translators:102:18)
+    at #translate (node:internal/modules/esm/loader:437:12)
+    at ModuleLoader.loadAndTranslate (node:internal/modules/esm/loader:484:27)
+
+Node.js v22.13.1
