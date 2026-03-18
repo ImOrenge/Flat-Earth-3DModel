@@ -22,7 +22,7 @@ import * as constants from "./modules/constants.js";
 import { createEclipseController } from "./modules/eclipse-controller.js?v=20260314-natural-eclipse2";
 import { createCelestialVisualsController } from "./modules/celestial-visuals-controller.js";
 import { setupInputHandlers } from "./modules/input-handler.js";
-import { createRocketController, SPACEPORTS } from "./modules/rocket-controller.js";
+import { createRocketController, SPACEPORTS } from "./modules/rocket-controller.js?v=20260318-rapier1";
 const {
   DEFAULT_MAP_PATH,
   DEFAULT_MAP_LABEL,
