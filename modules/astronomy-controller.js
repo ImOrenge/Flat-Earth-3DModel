@@ -739,26 +739,18 @@ export function createAstronomyController({
     sunDirection = simulationState.sunBandDirection ?? 1,
     sunOrbitAngleRadians = simulationState.orbitSunAngle ?? 0,
     sunProgress = simulationState.sunBandProgress ?? 0.5,
-    useExplicitOrbit = false,
+    useExplicitOrbit = true,
     orbitMode = source === "demo" ? simulationState.orbitMode : "auto"
   } = {}) {
+    // Dark sun always uses independent orbit (both reality and demo modes)
     const darkSunState = source === "demo"
-      ? (
-        useExplicitOrbit
-          ? {
-            direction,
-            orbitAngleRadians,
-            orbitMode,
-            progress
-          }
-          : getMirroredDarkSunState({
-            orbitMode,
-            phaseOffsetRadians,
-            sunDirection,
-            sunOrbitAngleRadians,
-            sunProgress
-          })
-      )
+      ? {
+        // Demo mode: use explicit state from simulationState (independent orbit)
+        direction,
+        orbitAngleRadians,
+        orbitMode,
+        progress
+      }
       : getRealityDarkSunState(date);
     const renderState = getBodyCoilRenderState({
       body: "darkSun",
