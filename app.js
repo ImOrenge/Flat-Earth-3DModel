@@ -743,6 +743,8 @@ const ui = {
   seasonalMoonAnchorEl,
   seasonalMoonDriftEl,
   seasonalMoonSummaryEl,
+  stagePreEclipseBtn: document.getElementById("stage-pre-eclipse"),
+  stagePreLunarEclipseBtn: document.getElementById("stage-pre-lunar-eclipse"),
   seasonalSunGridEl,
   seasonalSunSummaryEl,
   seasonalYearEl,
@@ -947,6 +949,7 @@ const rocketApi = createRocketController({
     getSolarEclipseAnimationTargetFactor,
     updateSolarEclipseAnimationPacing,
     updateSolarEclipseEventFeedback,
+    updateLunarEclipseEventFeedback,
     updateDarkSunMaskUniforms,
     solveSolarEclipseEventWindow,
     evaluateSolarEclipse,
@@ -1285,6 +1288,13 @@ function animate() {
     }
     updateObserverCelestialPerspective(snapshot);
     evaluateLunarEclipse(snapshot);
+    
+    // Global trap for playwright
+    window.__E2E_SNAPSHOT = { 
+        moonPos: snapshot.moonPosition, 
+        darkSunPos: snapshot.darkSunRenderPosition 
+    };
+
     evaluateSolarEclipse(snapshot, deltaSeconds);
     
     // Automatically engage the 5-stage eclipse control during natural orbit
@@ -1323,11 +1333,13 @@ function animate() {
     }
 
     updateDarkSunMaskUniforms(snapshot.solarEclipse);
-    updateSolarEclipseEventFeedback(snapshot.solarEclipse, performance.now(), snapshot.activeLunarEclipseData);
+    updateSolarEclipseEventFeedback(snapshot.solarEclipse, performance.now());
+    updateLunarEclipseEventFeedback(snapshot, performance.now());
     firstPersonWorldApi.update(snapshot);
   } else {
     updateDarkSunMaskUniforms(createSolarEclipseState());
     updateSolarEclipseEventFeedback(createSolarEclipseState());
+    updateLunarEclipseEventFeedback(null);
     firstPersonWorldApi.update(snapshot);
   }
   updateSunVisualEffects(snapshot);

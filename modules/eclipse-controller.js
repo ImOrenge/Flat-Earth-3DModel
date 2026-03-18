@@ -3116,6 +3116,8 @@ export function createEclipseController(deps) {
   };
 
   function evaluateLunarEclipse(snapshot) {
+    if (window.__E2E_DEBUG_LUNAR) console.log("LUNAR_EVAL_ENTERED", !!snapshot);
+
     if (!snapshot) {
       lunarEclipseState.currentTint *= 0.92;
       return 0;
@@ -3127,12 +3129,15 @@ export function createEclipseController(deps) {
     const moonBody = orbitMoonBody ?? moonGroup.children[0];
     const darkSunBody = walkerState.enabled ? observerDarkSunBody : orbitDarkSunBody;
 
-    moonGroup.getWorldPosition(tempLunarEclipseMoonWorldPos);
-    darkSunGroup.getWorldPosition(tempLunarEclipseDarkSunWorldPos);
+    moonBody.updateMatrixWorld(true);
+    darkSunBody.updateMatrixWorld(true);
+    moonBody.getWorldPosition(tempLunarEclipseMoonWorldPos);
+    darkSunBody.getWorldPosition(tempLunarEclipseDarkSunWorldPos);
 
     // Apply virtual projection trick:
     // Move the dark sun's Y altitude and XZ orbital radius exactly to the moon's track
     // so that when they cross azimuthally, they perfectly overlap in the 2D projection.
+    // This is required because the Dark Sun is physically behind Earth during a Lunar Eclipse, and would be culled by the camera otherwise.
     const moonRadiusXZ = Math.hypot(tempLunarEclipseMoonWorldPos.x, tempLunarEclipseMoonWorldPos.z);
     const darkSunRadiusXZ = Math.hypot(tempLunarEclipseDarkSunWorldPos.x, tempLunarEclipseDarkSunWorldPos.z);
     
@@ -3152,7 +3157,18 @@ export function createEclipseController(deps) {
       getWorldBodyRadius(darkSunBody, ORBIT_DARK_SUN_SIZE)
     );
 
-    const visibleInView = moonDisc.visible && darkSunDisc.visible && moonDisc.radius > 0.00001 && darkSunDisc.radius > 0.00001;
+    // Only strictly require the moon to be visible. The Dark Sun might still technically cull due to frustum depending on FOV, but it's fine if the moon is visible.
+    const visibleInView = moonDisc.visible && moonDisc.radius > 0.00001;
+    
+    // Always log early returns so the tests can parse it
+    window.DEBUG_LUNAR_MASK_EARLY = {
+      moonVis: moonDisc.visible,
+      moonRad: moonDisc.radius,
+      sunVis: darkSunDisc.visible,
+      sunRad: darkSunDisc.radius,
+      sunWorldPos: tempLunarEclipseDarkSunWorldPos,
+      moonWorldPos: tempLunarEclipseMoonWorldPos
+    };
 
     if (!visibleInView) {
       // Smoothly fade out
@@ -3169,6 +3185,22 @@ export function createEclipseController(deps) {
 
     const projectionCoverage = eclipseMetrics.coverage;
     const effectiveCoverage = projectionCoverage;
+    
+    // Always expose the raw state for playwright debugging
+    window.DEBUG_LUNAR_MASK = {
+      moonRadius: moonDisc.radius,
+      darkSunRadius: darkSunDisc.radius,
+      dist: Math.hypot(moonDisc.centerX - darkSunDisc.centerX, moonDisc.centerY - darkSunDisc.centerY),
+      coverage: effectiveCoverage,
+      visibleContactDepthPx: eclipseMetrics.visibleContactDepthPx,
+      contactDepthPx: eclipseMetrics.contactDepthPx,
+      moonVisible: moonDisc.visible,
+      darkSunVisible: darkSunDisc.visible,
+      overallVisibleInView: visibleInView,
+      sunAngle: simulationState.orbitSunAngle,
+      moonAngle: simulationState.orbitMoonAngle,
+      darkSunAngle: simulationState.orbitDarkSunAngle
+    };
     const { contactDepthPx, normalizedDistance, visibleContactDepthPx } = eclipseMetrics;
     const previousCoverage = lunarEclipseState.previousCoverage;
     const previousRawStageKey = lunarEclipseState.previousRawStageKey;
@@ -3259,59 +3291,28 @@ export function createEclipseController(deps) {
     // projected radius by asking "what if it was in front of us at that distance?"
     // and its NDC coordinates by seeing how far it overlaps the moon's position.
     
-    // 1. Calculate the apparent radius of the abstract dark sun
-    const distToMoon = Math.hypot(moonDisc.centerX - darkSunDisc.centerX, moonDisc.centerY - darkSunDisc.centerY);
-    let effectiveMaskRadius = darkSunDisc.radius;
-    let maskCenterNdcX = darkSunDisc.centerX;
-    let maskCenterNdcY = darkSunDisc.centerY;
-    
-    // If the darkSunDisc was culled by camera (radius = 0), force calculate it
-    if (darkSunDisc.radius <= 0.00001) {
-      const moonWorldPosition = new THREE.Vector3();
-      const darkSunWorldPosition = new THREE.Vector3();
-      const cameraPos = new THREE.Vector3();
-      
-      if (walkerState.enabled) {
-        observerMoonGroup.getWorldPosition(moonWorldPosition);
-        observerDarkSunGroup.getWorldPosition(darkSunWorldPosition);
-        camera.getWorldPosition(cameraPos);
-      } else {
-        orbitMoonGroup.getWorldPosition(moonWorldPosition);
-        orbitDarkSunGroup.getWorldPosition(darkSunWorldPosition);
-        cameraPos.set(0,0,0);
-      }
-      
-      const distToDarkSun = darkSunWorldPosition.distanceTo(cameraPos);
-      const darkSunBodyRadius = walkerState.enabled 
-        ? getWorldBodyRadius(observerDarkSunBody, ORBIT_DARK_SUN_SIZE)
-        : getWorldBodyRadius(orbitDarkSunBody, ORBIT_DARK_SUN_SIZE);
-        
-      // Approximate the NDC radius the dark sun would have if it were in front of us at that distance
-      // Using basic perspective projection relation: ndc_radius approx (world_radius / distance) * projection_matrix_scalar
-      const fovRad = camera.fov * Math.PI / 180;
-      effectiveMaskRadius = (darkSunBodyRadius / distToDarkSun) / Math.tan(fovRad / 2);
-      
-      // Calculate where the dark sun center is relative to the moon based on the eclipse metrics
-      // normalizedDistance is 0 at perfect overlap, 1 at contact edge.
-      // Direction vector is from moon to abstract dark sun.
-      // For simplicity in Lunar Eclipses, when they align, the dark sun shadow center is effectively
-      // at the moon center minus an offset.
-      
-      const coverageDeltaNdc = (triggerContactDistance * eclipseMetrics.normalizedDistance);
-      // Determine what direction the dark sun is moving.
-      // In the sky, the dark sun travels roughly westward relative to the moon during the simulation.
-      const directionSign = (direction === "ingress" || rawStageKey === "approach") ? 1 : -1;
-      
-      maskCenterNdcX = moonDisc.centerX + (directionSign * coverageDeltaNdc);
-      maskCenterNdcY = moonDisc.centerY; // Assume planar intersection for now until proven otherwise
-    }
+    // We already calculated the effective mask radius and position prior to evaluating collision metrics.
+    // Sync those final values to the snapshot from the resolved abstract disc.
     
     renderer.getDrawingBufferSize(tempDarkSunMaskViewport);
-    snapshot.lunarEclipseMaskCenterNdc = new THREE.Vector2(maskCenterNdcX, maskCenterNdcY);
-    snapshot.lunarEclipseMaskRadius = effectiveMaskRadius;
-    snapshot.lunarEclipseMaskSoftnessPx = Math.max(effectiveMaskRadius * Math.max(tempDarkSunMaskViewport.x, 1) * 0.15, 8);
+    snapshot.lunarEclipseMaskCenterNdc = new THREE.Vector2(darkSunDisc.centerX, darkSunDisc.centerY);
+    snapshot.lunarEclipseMaskRadius = darkSunDisc.radius;
+    snapshot.lunarEclipseMaskSoftnessPx = Math.max(darkSunDisc.radius * Math.max(tempDarkSunMaskViewport.x, 1) * 0.15, 8);
     snapshot.lunarEclipseMaskViewport = tempDarkSunMaskViewport.clone();
-    
+    // TEMPORARY LOGGING TO DEBUG MASK
+    if (active) {
+       window.DEBUG_LUNAR_MASK = {
+         distToMoon: Math.hypot(moonDisc.centerX - darkSunDisc.centerX, moonDisc.centerY - darkSunDisc.centerY),
+         radius: snapshot.lunarEclipseMaskRadius,
+         maskX: darkSunDisc.centerX,
+
+         maskY: darkSunDisc.centerY,
+         viewport: `${snapshot.lunarEclipseMaskViewport.x} x ${snapshot.lunarEclipseMaskViewport.y}`,
+         culled: !darkSunDisc.visible,
+         darkSunZ: walkerState.enabled ? observerDarkSun.position.z : orbitDarkSun.position.z
+       };
+    }
+
     return lunarEclipseState.currentTint;
   }
 
@@ -3376,12 +3377,18 @@ export function createEclipseController(deps) {
     
     const stagedSnapshot = getCurrentUiSnapshot();
     astronomyApi.updateAstronomyUi(stagedSnapshot);
+    evaluateLunarEclipse(stagedSnapshot);
     updateSunVisualEffects(stagedSnapshot);
   }
 
   const lunarEclipseApi = {
     evaluate: evaluateLunarEclipse,
-    stagePreEclipseScene: stagePreLunarEclipseScene
+    stagePreEclipseScene: stagePreLunarEclipseScene,
+    getToastStateLabelKey: getLunarEclipseToastStateLabelKey,
+    syncToastContent: syncLunarEclipseToastContent,
+    hideToast: hideLunarEclipseToast,
+    showToast: showLunarEclipseToast,
+    updateEventFeedback: updateLunarEclipseEventFeedback
   };
 
   const solarEclipseApi = {
@@ -3400,7 +3407,6 @@ export function createEclipseController(deps) {
     getVisualProfile: getSolarEclipseVisualProfile,
     getDirection: getSolarEclipseDirection,
     getEligibility: getSolarEclipseEligibility,
-    createTriggerSunDisc: createSolarEclipseTriggerSunDisc,
     getTriggerSunDisc: getSolarEclipseTriggerSunDisc,
     usesPresentationMask: usesSolarEclipsePresentationMask,
     updatePresentationMaskState: updateSolarEclipsePresentationMaskState,
@@ -3408,12 +3414,16 @@ export function createEclipseController(deps) {
     getPhaseKey: getSolarEclipsePhaseKey,
     getStageLabelKey: getSolarEclipseStageLabelKey,
     getStageProgress: getSolarEclipseStageProgress,
-    getProjectedMetrics: getProjectedSolarEclipseMetrics,
+    getProjectedMetrics: getProjectedEclipseMetrics,
     getLaneCount: getSolarEclipseLaneCount,
     getTierCap: getSolarEclipseTierCap,
     solveEventWindow: solveSolarEclipseEventWindow,
     getProjectedMetricsFromStates: getProjectedSolarEclipseMetricsFromStates
   };
+  
+  if (typeof window !== "undefined") {
+    window.__E2E_TRIGGER_LUNAR = stagePreLunarEclipseScene;
+  }
 
   return {
     lunarEclipseApi,
@@ -3432,14 +3442,19 @@ export function createEclipseController(deps) {
     updateDarkSunStageOrbit,
     getCurrentUiSnapshot,
     getSolarEclipseToastStateLabelKey,
+    getLunarEclipseToastStateLabelKey,
     syncSolarEclipseToastContent,
+    syncLunarEclipseToastContent,
     setSolarEclipseToastVisibility,
     hideSolarEclipseToast,
+    hideLunarEclipseToast,
     showSolarEclipseToast,
+    showLunarEclipseToast,
     predictUpcomingSolarEclipseWindowStartFrameCount,
     getSolarEclipseAnimationTargetFactor,
     updateSolarEclipseAnimationPacing,
     updateSolarEclipseEventFeedback,
+    updateLunarEclipseEventFeedback,
     syncFullTrailVisibility,
     createDarkSunOcclusionMotionState,
     resetDarkSunOcclusionMotion,
@@ -3488,6 +3503,7 @@ export function createEclipseController(deps) {
     stagePreLunarEclipseScene,
     solarEclipseWindowSolverState,
     solarEclipseEventState,
+    lunarEclipseEventState,
     solarEclipsePresentationMaskState,
     tempPreparationLookTarget,
     tempObserverNorthAxis,
