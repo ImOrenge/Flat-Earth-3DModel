@@ -599,7 +599,22 @@ export function createAstronomyController({
     return "auto";
   }
 
-    function inferRealitySunBandDirection(date) {
+  function getMirroredDarkSunDirection(sunDirection = simulationState.sunBandDirection ?? 1) {
+    return (sunDirection ?? 1) >= 0 ? -1 : 1;
+  }
+
+  function getMirroredDarkSunProgress(sunProgress = simulationState.sunBandProgress ?? 0.5) {
+    return THREE.MathUtils.clamp(1 - (sunProgress ?? 0.5), 0, 1);
+  }
+
+  function getMirroredDarkSunOrbitAngleRadians({
+    sunOrbitAngleRadians = simulationState.orbitSunAngle ?? 0,
+    phaseOffsetRadians = simulationState.darkSunOrbitPhaseOffsetRadians ?? DARK_SUN_START_ANGLE
+  } = {}) {
+    return phaseOffsetRadians - (sunOrbitAngleRadians * DARK_SUN_ORBIT_SPEED_FACTOR);
+  }
+
+  function inferRealitySunBandDirection(date) {
     const sampleWindowMs = 12 * 60 * 60 * 1000;
     const currentSun = getSunSubpoint(date);
     const sampleSun = getSunSubpoint(new Date(date.getTime() + sampleWindowMs));
@@ -621,23 +636,96 @@ export function createAstronomyController({
     return sampleProgress >= currentProgress ? 1 : -1;
   }
 
+  function getMirroredDarkSunState({
+    orbitMode = simulationState.orbitMode ?? "auto",
+    phaseOffsetRadians = simulationState.darkSunOrbitPhaseOffsetRadians ?? DARK_SUN_START_ANGLE,
+    sunDirection = simulationState.sunBandDirection ?? 1,
+    sunOrbitAngleRadians = simulationState.orbitSunAngle ?? 0,
+    sunProgress = simulationState.sunBandProgress ?? 0.5
+  } = {}) {
+    return {
+      direction: getMirroredDarkSunDirection(sunDirection),
+      orbitAngleRadians: getMirroredDarkSunOrbitAngleRadians({
+        phaseOffsetRadians,
+        sunOrbitAngleRadians
+      }),
+      orbitMode: getMirroredOrbitMode(orbitMode),
+      progress: getMirroredDarkSunProgress(sunProgress)
+    };
+  }
 
-  function getRealityDarkSunState(date) {
-    const referenceSun = getSunSubpoint(new Date(DARK_SUN_REFERENCE_TIME_MS));
-    const currentSun = getSunSubpoint(date);
-    const currentProjectedRadius = projectedRadiusFromLatitude(
-      currentSun.latitudeDegrees,
-      constants.DISC_RADIUS
+  function getBodyCoilRenderState({
+    body,
+    longitudeDegrees = 0,
+    orbitAngleRadians = 0,
+    projectedRadius = constants.EQUATOR_RADIUS,
+    progress = 0.5,
+    source = "reality",
+    orbitMode = source === "demo" ? simulationState.orbitMode : "auto"
+  }) {
+    const bandRange = getBodyBandRadiusRange(body, orbitMode);
+    const bodyProgress = source === "reality"
+      ? getBodyProgressFromProjectedRadius(body, projectedRadius)
+      : getBodyModeProgress(body, orbitMode, progress);
+    const config = getBodyCoilConfig(body);
+    const centerRadius = THREE.MathUtils.lerp(bandRange.min, bandRange.max, bodyProgress);
+    const corridorProgress = getBodyCorridorProgress(body, centerRadius);
+    const macroAngle = source === "demo"
+      ? orbitAngleRadians
+      : THREE.MathUtils.degToRad(longitudeDegrees);
+    const baseHeight = getBodyBaseHeight(body, centerRadius);
+
+    tempRadialAxis.set(-Math.cos(macroAngle), 0, Math.sin(macroAngle));
+    const planarX = tempRadialAxis.x * centerRadius;
+    const planarZ = tempRadialAxis.z * centerRadius;
+    const planarRadius = centerRadius;
+    const targetHeight = baseHeight + config.baseClearance;
+    const coilHeight = THREE.MathUtils.clamp(
+      targetHeight,
+      targetHeight,
+      Math.max(targetHeight, getDomeMaxHeight(planarRadius, config.domeClearance))
     );
-    const elapsedFrames = (date.getTime() - DARK_SUN_REFERENCE_TIME_MS) / (1000 / 60);
-    const sunProgress = getBodyProgressFromProjectedRadius("sun", currentProjectedRadius);
-    const sunDirection = inferRealitySunBandDirection(date);
 
     return {
-      direction: sunDirection >= 0 ? -1 : 1,
-      orbitAngleRadians: THREE.MathUtils.degToRad(referenceSun.longitudeDegrees + 180) - (elapsedFrames * constants.ORBIT_SUN_SPEED * DARK_SUN_ORBIT_SPEED_FACTOR),
-      orbitMode: getMirroredOrbitMode("auto"),
-      progress: THREE.MathUtils.clamp(1 - sunProgress, 0, 1)
+      baseHeight,
+      bandIndex: getBodyBandIndex(body, centerRadius),
+      centerRadius,
+      coilHeight,
+      corridorProgress,
+      laneCount: getBodyLaneCount(body),
+      laneIndex: getBodyLaneIndex(body, corridorProgress),
+      localCoilRadius: 0,
+      macroProgress: bodyProgress,
+      orbitAngleRadians: macroAngle,
+      orbitMode,
+      position: new THREE.Vector3(
+        planarX,
+        coilHeight,
+        planarZ
+      )
+    };
+  }
+
+  function getRealityDarkSunState(date) {
+    const elapsedFrames = (date.getTime() - DARK_SUN_REFERENCE_TIME_MS) / (1000 / 60);
+
+    // Independent retrograde orbit angle — advances opposite to the sun
+    const darkSunOrbitSpeed = constants.ORBIT_SUN_SPEED * DARK_SUN_ORBIT_SPEED_FACTOR;
+    const orbitAngleRadians = DARK_SUN_START_ANGLE - (elapsedFrames * darkSunOrbitSpeed);
+
+    // Independent band progress — analytical triangle wave (O(1), handles any elapsed time)
+    // DARK_SUN_START_DIRECTION = -1 so mirror: linearPos = 2 - startProgress
+    const bandStep = getBodyBandProgressStep("darkSun");
+    const totalDelta = bandStep * elapsedFrames;
+    const linearPos = (2 - DARK_SUN_START_PROGRESS + totalDelta) % 2;
+    const progress = linearPos <= 1 ? linearPos : 2 - linearPos;
+    const direction = linearPos <= 1 ? 1 : -1;
+
+    return {
+      direction,
+      orbitAngleRadians,
+      orbitMode: "auto",
+      progress
     };
   }
 
@@ -645,28 +733,40 @@ export function createAstronomyController({
     date = astronomyState.selectedDate,
     direction = simulationState.darkSunBandDirection ?? DARK_SUN_START_DIRECTION,
     orbitAngleRadians = simulationState.orbitDarkSunAngle ?? DARK_SUN_START_ANGLE,
+    phaseOffsetRadians = simulationState.darkSunOrbitPhaseOffsetRadians ?? DARK_SUN_START_ANGLE,
     progress = simulationState.darkSunBandProgress ?? DARK_SUN_START_PROGRESS,
     source = "reality",
+    sunDirection = simulationState.sunBandDirection ?? 1,
+    sunOrbitAngleRadians = simulationState.orbitSunAngle ?? 0,
+    sunProgress = simulationState.sunBandProgress ?? 0.5,
+    useExplicitOrbit = false,
     orbitMode = source === "demo" ? simulationState.orbitMode : "auto"
   } = {}) {
-    // Treat Dark Sun natively in its own orbit, similar to sun/moon
     const darkSunState = source === "demo"
-      ? {
-          direction,
-          orbitAngleRadians,
-          orbitMode,
-          progress
-        }
+      ? (
+        useExplicitOrbit
+          ? {
+            direction,
+            orbitAngleRadians,
+            orbitMode,
+            progress
+          }
+          : getMirroredDarkSunState({
+            orbitMode,
+            phaseOffsetRadians,
+            sunDirection,
+            sunOrbitAngleRadians,
+            sunProgress
+          })
+      )
       : getRealityDarkSunState(date);
-      
-    // The dark sun rides the identical physical sun band corridor.
-    const renderState = getSunRenderState({
+    const renderState = getBodyCoilRenderState({
+      body: "darkSun",
       orbitAngleRadians: darkSunState.orbitAngleRadians,
       orbitMode: darkSunState.orbitMode,
       progress: darkSunState.progress,
       source: "demo"
     });
-    
     return {
       ...renderState,
       direction: darkSunState.direction,
@@ -675,50 +775,44 @@ export function createAstronomyController({
     };
   }
 
-  
-
   function getSunRenderState({
-    date = astronomyState.selectedDate,
-    orbitAngleRadians = simulationState.orbitSunAngle,
-    orbitMode = simulationState.orbitMode,
+    longitudeDegrees = 0,
+    orbitAngleRadians = 0,
+    projectedRadius = constants.EQUATOR_RADIUS,
     progress = simulationState.sunBandProgress ?? 0.5,
-    source = "reality"
-  } = {}) {
-    const sun = source === "demo"
-      ? null
-      : getSunSubpoint(date);
-    const sunProjectedRadius = source === "demo"
-      ? null
-      : projectedRadiusFromLatitude(
-        sun.latitudeDegrees,
-        constants.DISC_RADIUS
-      );
-    const sunMode = source === "demo"
-      ? orbitMode
-      : "auto";
-    const sunBandProgress = source === "demo"
-      ? progress
-      : getBodyModeProgress("sun", "auto", getBodyProgressFromProjectedRadius("sun", sunProjectedRadius));
-    const renderModeProgress = getBodyModeProgress("sun", sunMode, sunBandProgress);
-
-    const orbitProfile = sampleCoilOrbitProfile("sun", renderModeProgress);
-    const renderPosition = new THREE.Vector3(
-      orbitProfile.radius * Math.cos(orbitAngleRadians),
-      orbitProfile.y,
-      -orbitProfile.radius * Math.sin(orbitAngleRadians)
-    );
-
-    return {
-      bandIndex: getBodyBandIndex("sun", orbitProfile.radius),
-      corridorProgress: getBodyCorridorProgress("sun", orbitProfile.radius),
-      laneIndex: getBodyLaneIndex("sun", getBodyCorridorProgress("sun", orbitProfile.radius)),
-      macroProgress: renderModeProgress,
+    source = "reality",
+    orbitMode = source === "demo" ? simulationState.orbitMode : "auto"
+  }) {
+    return getBodyCoilRenderState({
+      body: "sun",
+      longitudeDegrees,
       orbitAngleRadians,
-      orbitMode: sunMode,
-      position: renderPosition,
-      radiusRatio: orbitProfile.radiusRatio,
-      yRatio: orbitProfile.yRatio
-    };
+      orbitMode,
+      progress,
+      projectedRadius,
+      source
+    });
+  }
+
+  function getMoonRenderState({
+    longitudeDegrees = 0,
+    orbitAngleRadians = 0,
+    projectedRadius = constants.EQUATOR_RADIUS,
+    progress = simulationState.moonBandProgress ?? 0.5,
+    source = "reality",
+    orbitMode = source === "demo" ? simulationState.orbitMode : "auto"
+  }) {
+    // Use 'sun' corridor so the moon rides exactly the same orbital track as the sun.
+    // The angular offset (orbitMoonAngle vs orbitSunAngle) keeps them apart on the same ring.
+    return getBodyCoilRenderState({
+      body: "sun",
+      longitudeDegrees,
+      orbitAngleRadians,
+      orbitMode,
+      progress,
+      projectedRadius,
+      source
+    });
   }
 
   function getAstronomySnapshot(date) {
@@ -729,7 +823,7 @@ export function createAstronomyController({
       getDarkSunRenderState,
       getSunRenderState,
       getMoonBaseHeight,
-
+      getMoonRenderState
     });
     snapshot.sunDisplayHorizontal = getSunDisplayHorizontalFromPosition(
       snapshot.sunRenderPosition ?? snapshot.sunPosition
@@ -1301,7 +1395,12 @@ export function createAstronomyController({
 
     for (let index = 0; index < normalizedSampleCount; index += 1) {
       const renderState = body === "moon"
-        ? ({position: new THREE.Vector3()})
+        ? getMoonRenderState({
+          orbitAngleRadians: orbitAngle,
+          orbitMode,
+          progress,
+          source: "demo"
+        })
         : (body === "darkSun"
           ? getDarkSunRenderState({
             orbitAngleRadians: orbitAngle,
@@ -1685,10 +1784,11 @@ export function createAstronomyController({
     enableRealityMode,
 
     getAstronomySnapshot,
+    getBodyCoilRenderState,
     getCurrentOrbitRadius,
     getDarkSunRenderState,
     getMoonBaseHeight,
-    
+    getMoonRenderState,
     getSunDisplayHorizontalFromPosition,
     getSunRenderState,
     getSunOrbitHeight,
