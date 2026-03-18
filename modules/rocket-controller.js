@@ -41,6 +41,11 @@ export function createRocketController({
   const GRAVITY = constants.scaleDimension(4.5);
   // Horizontal thrust applied during SCRAPE to push rocket along heading
   const SCRAPE_THRUST = constants.scaleDimension(8.0);
+  // Quadratic air drag coefficient — F_drag = -AIR_DRAG * |v| * v
+  // Terminal velocity ≈ sqrt(GRAVITY / AIR_DRAG) when in freefall
+  const AIR_DRAG = 3.5;
+  // Fraction of ROCKET_SPEED lost to drag at dome altitude (LAUNCH attenuation)
+  const LAUNCH_DRAG_FACTOR = 0.15;
 
   // Shared geometries/materials
   const sharedWakeGeo = new THREE.IcosahedronGeometry(constants.scaleDimension(0.012), 0);
@@ -343,8 +348,11 @@ export function createRocketController({
     const body = r.rigidBody;
 
     if (r.state === "LAUNCH") {
-      // Drive velocity directly upward — Rapier handles dome collision response
-      body.setLinvel({ x: 0, y: ROCKET_SPEED, z: 0 }, true);
+      // Drive velocity upward — attenuate with altitude to simulate air drag on ascent
+      const domeTopY = domeYAt(r.position.x, r.position.z);
+      const altFrac = Math.min(1.0, Math.max(0, (r.position.y - r.startPos.y) / Math.max(0.001, domeTopY - r.startPos.y)));
+      const launchSpeed = ROCKET_SPEED * (1.0 - LAUNCH_DRAG_FACTOR * altFrac);
+      body.setLinvel({ x: 0, y: launchSpeed, z: 0 }, true);
 
       const pos = body.translation();
       r.position.set(pos.x, pos.y, pos.z);
@@ -380,6 +388,18 @@ export function createRocketController({
         y: 0,
         z: r.targetFlightDir.z * SCRAPE_THRUST * deltaSeconds
       }, true);
+
+      // Quadratic air drag opposing horizontal velocity during scrape
+      const velPre = body.linvel();
+      const hSpeed = Math.hypot(velPre.x, velPre.z);
+      if (hSpeed > 0.0001) {
+        const dragMag = AIR_DRAG * hSpeed * hSpeed * deltaSeconds;
+        body.applyImpulse({
+          x: -(velPre.x / hSpeed) * dragMag,
+          y: 0,
+          z: -(velPre.z / hSpeed) * dragMag
+        }, true);
+      }
 
       const pos = body.translation();
       r.position.set(pos.x, pos.y, pos.z);
@@ -424,11 +444,20 @@ export function createRocketController({
       }
 
     } else if (r.state === "FALL") {
-      // Pure Rapier gravity — no forces applied
+      // Rapier gravity + quadratic air drag → terminal velocity
+      const vel = body.linvel();
+      const speed = Math.hypot(vel.x, vel.y, vel.z);
+      if (speed > 0.0001) {
+        body.applyForce({
+          x: -(vel.x / speed) * AIR_DRAG * speed * speed,
+          y: -(vel.y / speed) * AIR_DRAG * speed * speed,
+          z: -(vel.z / speed) * AIR_DRAG * speed * speed
+        }, true);
+      }
+
       const pos = body.translation();
       r.position.set(pos.x, pos.y, pos.z);
 
-      const vel = body.linvel();
       r.velocity.set(vel.x, vel.y, vel.z);
 
       if (r.velocity.lengthSq() > 0.0001) {
@@ -463,7 +492,10 @@ export function createRocketController({
     const domeVertScale = constants.DOME_VERTICAL_SCALE;
 
     if (r.state === "LAUNCH") {
-      r.velocity.set(0, ROCKET_SPEED, 0);
+      const fbDomeH = domeBaseY + domeVertScale * Math.sqrt(Math.max(0, domeRadius * domeRadius - r.position.x * r.position.x - r.position.z * r.position.z));
+      const fbAltFrac = Math.min(1.0, Math.max(0, (r.position.y - r.startPos.y) / Math.max(0.001, fbDomeH - r.startPos.y)));
+      const fbLaunchSpeed = ROCKET_SPEED * (1.0 - LAUNCH_DRAG_FACTOR * fbAltFrac);
+      r.velocity.set(0, fbLaunchSpeed, 0);
       r.position.addScaledVector(r.velocity, deltaSeconds);
       r.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 1, 0));
 
@@ -537,7 +569,14 @@ export function createRocketController({
         r.velocity.copy(actualVelocity);
       }
     } else if (r.state === "FALL") {
-      r.velocity.y -= ROCKET_SPEED * 0.8 * deltaSeconds;
+      // Apply gravity
+      r.velocity.y -= GRAVITY * deltaSeconds;
+      // Apply quadratic air drag opposing velocity
+      const speed = r.velocity.length();
+      if (speed > 0.0001) {
+        const dragDecel = AIR_DRAG * speed * speed * deltaSeconds;
+        r.velocity.addScaledVector(r.velocity.clone().normalize(), -Math.min(dragDecel, speed));
+      }
       r.position.addScaledVector(r.velocity, deltaSeconds);
 
       if (r.velocity.lengthSq() > 0.0001) {
