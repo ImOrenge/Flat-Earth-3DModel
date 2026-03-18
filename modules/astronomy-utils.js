@@ -475,6 +475,7 @@ export function getAstronomySnapshot({
     ? getMoonRenderState({
       date,
       longitudeDegrees: moon.longitudeDegrees,
+      orbitAngleRadians: THREE.MathUtils.degToRad(moon.longitudeDegrees),
       projectedRadius: moonProjectedRadius,
       source: "reality"
     })

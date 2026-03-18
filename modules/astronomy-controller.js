@@ -794,8 +794,8 @@ export function createAstronomyController({
     source = "reality",
     orbitMode = source === "demo" ? simulationState.orbitMode : "auto"
   }) {
-    // Use 'sun' corridor so the moon rides exactly the same orbital track as the sun.
-    // The angular offset (orbitMoonAngle vs orbitSunAngle) keeps them apart on the same ring.
+    // Use 'sun' corridor so the moon traces the same spiral geometry as the sun.
+    // The angular offset (orbitMoonAngle vs orbitSunAngle) keeps them apart on the same track.
     return getBodyCoilRenderState({
       body: "sun",
       longitudeDegrees,
@@ -1684,7 +1684,12 @@ export function createAstronomyController({
     orbitMode = simulationState.orbitMode,
     progress = simulationState.moonBandProgress ?? 0.5
   } = {}) {
-    const moonRenderState = ({position: new THREE.Vector3()});
+    const moonRenderState = getMoonRenderState({
+      orbitAngleRadians: simulationState.orbitMoonAngle,
+      orbitMode,
+      progress,
+      source: "demo"
+    });
     orbitMoon.position.copy(moonRenderState.position);
     return moonRenderState;
   }

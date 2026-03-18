@@ -1845,13 +1845,12 @@ export function createEclipseController(deps) {
     renderer.getDrawingBufferSize(tempSolarEclipseViewport);
     const viewportWidth = Math.max(tempSolarEclipseViewport.x, 1);
     
-    // Ignore vertical separation (deltaY) when triggering eclipse states, as the Dark Sun 
-    // is manually animated to the primary celestial body's altitude during the transit phase anyway.
     const deltaX = primaryDisc.centerX - secondaryDisc.centerX;
-    const centerDistance = Math.abs(deltaX);
+    const deltaY = primaryDisc.centerY - secondaryDisc.centerY;
+    const centerDistance = Math.hypot(deltaX, deltaY);
     const triggerContactDistance = Math.max(triggerPrimaryDisc.radius + secondaryDisc.radius, 0.0001);
     const normalizedDistance = centerDistance / triggerContactDistance;
-    const centerDistancePx = Math.abs(deltaX * viewportWidth * 0.5);
+    const centerDistancePx = centerDistance * viewportWidth * 0.5;
     const primaryRadiusPx = primaryDisc.radius * viewportWidth * 0.5;
     const triggerPrimaryRadiusPx = triggerPrimaryDisc.radius * viewportWidth * 0.5;
     const secondaryRadiusPx = secondaryDisc.radius * viewportWidth * 0.5;
@@ -1904,9 +1903,17 @@ export function createEclipseController(deps) {
     const laneDelta = (sunLaneIndex === null || darkSunLaneIndex === null)
       ? Number.POSITIVE_INFINITY
       : Math.abs(sunLaneIndex - darkSunLaneIndex);
-    // Ignore band and lane differences because the shadow visually transits the sun
-    // via animation even if they start orbiting at different seasonal altitudes.
-    let eclipseTier = SOLAR_ECLIPSE_TIER_TOTAL;
+    // Require the dark sun and sun to be on the same orbital band (same latitude).
+    // Staged eclipse system keeps bandDelta = 0 by locking darkSunBandProgress = sunBandProgress.
+    // Natural orbits must actually align in latitude for an eclipse to occur.
+    let eclipseTier;
+    if (bandDelta === 0) {
+      eclipseTier = SOLAR_ECLIPSE_TIER_TOTAL;
+    } else if (bandDelta <= 1) {
+      eclipseTier = SOLAR_ECLIPSE_TIER_PARTIAL_2;
+    } else {
+      eclipseTier = SOLAR_ECLIPSE_TIER_NONE;
+    }
   
     return {
       bandIndex: darkSunBandIndex ?? sunBandIndex ?? 1,
@@ -3115,6 +3122,165 @@ export function createEclipseController(deps) {
     previousCoverage: 0
   };
 
+  // ─── Lunar Eclipse Staged Orbit System ───
+  // Mirrors the solar eclipse's 5-stage keyframe system but drives the dark sun
+  // relative to the moon's orbit angle instead of the sun's.
+  const LUNAR_STAGE_DURATION_SECONDS = DARK_SUN_STAGE_DURATION_SECONDS * 1.2;
+  const LUNAR_STAGE_APPROACH_SHARE = 0.20;
+  const LUNAR_STAGE_INGRESS_SHARE  = 0.18;
+  const LUNAR_STAGE_TOTALITY_SHARE = 0.24;
+  const LUNAR_STAGE_EGRESS_SHARE   = 0.18;
+  const LUNAR_STAGE_COMPLETE_SHARE = 0.20;
+
+  function getLunarStageContactOffsetRadians() {
+    const bodyRadiusSum = (
+      getWorldBodyRadius(orbitMoonBody ?? orbitMoon.children[0], ORBIT_MOON_SIZE) +
+      getWorldBodyRadius(orbitDarkSunBody, ORBIT_DARK_SUN_SIZE)
+    );
+    const moonBody = orbitMoonBody ?? orbitMoon.children[0];
+    moonBody.updateMatrixWorld(true);
+    const moonWorldPos = new THREE.Vector3();
+    moonBody.getWorldPosition(moonWorldPos);
+    const centerRadius = Math.max(
+      Math.hypot(moonWorldPos.x, moonWorldPos.z),
+      bodyRadiusSum * 0.5,
+      0.0001
+    );
+    const contactRatio = THREE.MathUtils.clamp(
+      bodyRadiusSum / Math.max(centerRadius * 2, 0.0001),
+      0,
+      0.9999
+    );
+    const naturalContactOffset = 2 * Math.asin(contactRatio);
+    return THREE.MathUtils.clamp(
+      naturalContactOffset + DARK_SUN_STAGE_CONTACT_MARGIN_RADIANS,
+      DARK_SUN_STAGE_CONTACT_MARGIN_RADIANS * 2,
+      DARK_SUN_STAGE_CONTACT_OFFSET_RADIANS
+    );
+  }
+
+  function getLunarStageOffsetRadians(transit = 0, contactOffset = 0.05) {
+    const t = THREE.MathUtils.clamp(transit, 0, 1);
+    const approachEnd = LUNAR_STAGE_APPROACH_SHARE;
+    const ingressEnd  = approachEnd + LUNAR_STAGE_INGRESS_SHARE;
+    const totalityEnd = ingressEnd  + LUNAR_STAGE_TOTALITY_SHARE;
+    const egressEnd   = totalityEnd + LUNAR_STAGE_EGRESS_SHARE;
+    const easeOutSine = (v) => Math.sin((THREE.MathUtils.clamp(v, 0, 1) * Math.PI) / 2);
+
+    if (t <= approachEnd) {
+      // Approach: from far away to first contact
+      return THREE.MathUtils.lerp(
+        Math.PI * 0.5,
+        contactOffset,
+        easeOutSine(t / Math.max(approachEnd, 0.0001))
+      );
+    }
+    if (t <= ingressEnd) {
+      // Ingress: first contact to full overlap
+      const p = (t - approachEnd) / Math.max(LUNAR_STAGE_INGRESS_SHARE, 0.0001);
+      return THREE.MathUtils.lerp(contactOffset, 0, p);
+    }
+    if (t <= totalityEnd) {
+      // Totality: fully overlapping
+      return 0;
+    }
+    if (t <= egressEnd) {
+      // Egress: separation
+      const p = (t - totalityEnd) / Math.max(LUNAR_STAGE_EGRESS_SHARE, 0.0001);
+      return THREE.MathUtils.lerp(0, -contactOffset, p);
+    }
+    // Complete: moving away
+    return THREE.MathUtils.lerp(
+      -contactOffset,
+      -Math.PI * 0.5,
+      easeOutSine((t - egressEnd) / Math.max(LUNAR_STAGE_COMPLETE_SHARE, 0.0001))
+    );
+  }
+
+  function getLunarStageTintFromTransit(transit = 0) {
+    const t = THREE.MathUtils.clamp(transit, 0, 1);
+    const approachEnd = LUNAR_STAGE_APPROACH_SHARE;
+    const ingressEnd  = approachEnd + LUNAR_STAGE_INGRESS_SHARE;
+    const totalityEnd = ingressEnd  + LUNAR_STAGE_TOTALITY_SHARE;
+    const egressEnd   = totalityEnd + LUNAR_STAGE_EGRESS_SHARE;
+
+    if (t <= approachEnd) {
+      // Slight warming tint in late approach
+      const p = t / Math.max(approachEnd, 0.0001);
+      return p > 0.7 ? THREE.MathUtils.lerp(0, 0.08, (p - 0.7) / 0.3) : 0;
+    }
+    if (t <= ingressEnd) {
+      // Ramp up tint during ingress
+      const p = (t - approachEnd) / Math.max(LUNAR_STAGE_INGRESS_SHARE, 0.0001);
+      return THREE.MathUtils.lerp(0.08, 1.0, p * p);
+    }
+    if (t <= totalityEnd) {
+      // Full blood moon during totality
+      return 1.0;
+    }
+    if (t <= egressEnd) {
+      // Ramp down during egress
+      const p = (t - totalityEnd) / Math.max(LUNAR_STAGE_EGRESS_SHARE, 0.0001);
+      return THREE.MathUtils.lerp(1.0, 0.08, p * p);
+    }
+    // Fade out during complete
+    const p = (t - egressEnd) / Math.max(LUNAR_STAGE_COMPLETE_SHARE, 0.0001);
+    return THREE.MathUtils.lerp(0.08, 0, p);
+  }
+
+  function resetLunarStageState() {
+    simulationState.darkSunLunarStageLock = false;
+    simulationState.darkSunLunarStageTransit = 0;
+  }
+
+  function updateDarkSunLunarStageOrbit(deltaSeconds = 0) {
+    if (!simulationState.darkSunLunarStageLock) {
+      return false;
+    }
+
+    simulationState.darkSunLunarStageTransit = THREE.MathUtils.clamp(
+      (simulationState.darkSunLunarStageTransit ?? 0) + (Math.max(deltaSeconds, 0) / LUNAR_STAGE_DURATION_SECONDS),
+      0,
+      1
+    );
+    const transit = simulationState.darkSunLunarStageTransit;
+    const contactOffset = getLunarStageContactOffsetRadians();
+    const offset = getLunarStageOffsetRadians(transit, contactOffset);
+
+    // Drive dark sun angle relative to moon angle
+    // Moon moves at +ORBIT_MOON_SPEED, dark sun at -ORBIT_DARK_SUN_SPEED
+    // In staged mode, we override the dark sun angle to be moonAngle + offset
+    simulationState.orbitDarkSunAngle = simulationState.orbitMoonAngle + offset;
+    // Match band progress so they're at the same altitude
+    simulationState.darkSunBandProgress = simulationState.moonBandProgress;
+
+    if (transit >= 1) {
+      resetLunarStageState();
+    }
+
+    // Return a speed factor to slow the overall simulation during lunar eclipse
+    const approachEnd = LUNAR_STAGE_APPROACH_SHARE;
+    const ingressEnd  = approachEnd + LUNAR_STAGE_INGRESS_SHARE;
+    const totalityEnd = ingressEnd  + LUNAR_STAGE_TOTALITY_SHARE;
+    const egressEnd   = totalityEnd + LUNAR_STAGE_EGRESS_SHARE;
+
+    if (transit <= approachEnd) {
+      return SOLAR_ECLIPSE_APPROACH_SLOW_FACTOR;
+    }
+    if (transit <= ingressEnd) {
+      const p = (transit - approachEnd) / LUNAR_STAGE_INGRESS_SHARE;
+      return THREE.MathUtils.lerp(SOLAR_ECLIPSE_APPROACH_SLOW_FACTOR, SOLAR_ECLIPSE_TOTALITY_SLOW_FACTOR, p);
+    }
+    if (transit <= totalityEnd) {
+      return SOLAR_ECLIPSE_TOTALITY_SLOW_FACTOR;
+    }
+    if (transit <= egressEnd) {
+      const p = (transit - totalityEnd) / LUNAR_STAGE_EGRESS_SHARE;
+      return THREE.MathUtils.lerp(SOLAR_ECLIPSE_TOTALITY_SLOW_FACTOR, SOLAR_ECLIPSE_COMPLETE_SLOW_FACTOR, p);
+    }
+    return SOLAR_ECLIPSE_COMPLETE_SLOW_FACTOR;
+  }
+
   function evaluateLunarEclipse(snapshot) {
     if (window.__E2E_DEBUG_LUNAR) console.log("LUNAR_EVAL_ENTERED", !!snapshot);
 
@@ -3129,23 +3295,108 @@ export function createEclipseController(deps) {
     const moonBody = orbitMoonBody ?? moonGroup.children[0];
     const darkSunBody = walkerState.enabled ? observerDarkSunBody : orbitDarkSunBody;
 
+    // ─── Full Moon Gate ───
+    // Lunar eclipse (blood moon) only occurs during a full moon.
+    // illuminationFraction peaks at 1.0 on a full moon (phaseProgress ~0.5).
+    // Allow a tolerance window of ±~2 days (illumination > 0.85).
+    const moonIllumination = snapshot.moonPhase?.illuminationFraction ?? 1;
+    const isNearFullMoon = moonIllumination >= 0.85;
+    if (!isNearFullMoon) {
+      lunarEclipseState.currentTint *= 0.92;
+      snapshot.lunarEclipseTint = lunarEclipseState.currentTint;
+      return lunarEclipseState.currentTint;
+    }
+
+    // ─── Staged Lunar Eclipse Path ───
+    // When the staged system is active, compute tint deterministically from stage transit
+    // instead of relying on unreliable 2D projection overlap detection.
+    if (simulationState.darkSunLunarStageLock) {
+      const transit = simulationState.darkSunLunarStageTransit ?? 0;
+      const stagedTint = getLunarStageTintFromTransit(transit);
+      lunarEclipseState.currentTint = stagedTint;
+      snapshot.lunarEclipseTint = stagedTint;
+
+      // Determine stage key for UI
+      const approachEnd = LUNAR_STAGE_APPROACH_SHARE;
+      const ingressEnd  = approachEnd + LUNAR_STAGE_INGRESS_SHARE;
+      const totalityEnd = ingressEnd  + LUNAR_STAGE_TOTALITY_SHARE;
+      const egressEnd   = totalityEnd + LUNAR_STAGE_EGRESS_SHARE;
+      let rawStageKey = "idle";
+      if (transit <= approachEnd) rawStageKey = "approach";
+      else if (transit <= ingressEnd) rawStageKey = "partialIngress";
+      else if (transit <= totalityEnd) rawStageKey = "totality";
+      else if (transit <= egressEnd) rawStageKey = "partialEgress";
+      else rawStageKey = "idle";
+
+      const isTotal = rawStageKey === "totality";
+      const isActive = rawStageKey === "partialIngress" || rawStageKey === "totality" || rawStageKey === "partialEgress";
+
+      snapshot.activeLunarEclipseData = {
+        active: isActive,
+        total: isTotal,
+        coverage: stagedTint,
+        direction: transit < 0.5 ? "ingress" : "egress",
+        hasContact: isActive,
+        hasVisibleOverlap: isActive,
+        rawStageKey,
+        stageKey: rawStageKey,
+        stageLabelKey: rawStageKey === "idle" ? "idle" : (isTotal ? "totalLunarEclipse" : "partialLunarEclipse"),
+        visibleInView: true
+      };
+
+      snapshot.lunarEclipseApproachFactor = isActive || rawStageKey === "approach" ? 1.0 : 0.0;
+
+      // Compute mask uniforms from actual world positions for the shader
+      moonBody.updateMatrixWorld(true);
+      darkSunBody.updateMatrixWorld(true);
+      moonBody.getWorldPosition(tempLunarEclipseMoonWorldPos);
+      darkSunBody.getWorldPosition(tempLunarEclipseDarkSunWorldPos);
+
+      const moonDisc = getProjectedDisc(
+        tempLunarEclipseMoonWorldPos,
+        getWorldBodyRadius(moonBody, ORBIT_MOON_SIZE)
+      );
+      const darkSunDisc = getProjectedDisc(
+        tempLunarEclipseDarkSunWorldPos,
+        getWorldBodyRadius(darkSunBody, ORBIT_DARK_SUN_SIZE)
+      );
+
+      renderer.getDrawingBufferSize(tempDarkSunMaskViewport);
+      snapshot.lunarEclipseMaskCenterNdc = new THREE.Vector2(darkSunDisc.centerX, darkSunDisc.centerY);
+      snapshot.lunarEclipseMaskRadius = darkSunDisc.radius;
+      snapshot.lunarEclipseMaskSoftnessPx = Math.max(darkSunDisc.radius * Math.max(tempDarkSunMaskViewport.x, 1) * 0.15, 8);
+      snapshot.lunarEclipseMaskViewport = tempDarkSunMaskViewport.clone();
+
+      window.DEBUG_LUNAR_MASK = {
+        staged: true,
+        transit,
+        stagedTint,
+        rawStageKey,
+        moonAngle: simulationState.orbitMoonAngle,
+        darkSunAngle: simulationState.orbitDarkSunAngle
+      };
+
+      return stagedTint;
+    }
+
     moonBody.updateMatrixWorld(true);
     darkSunBody.updateMatrixWorld(true);
     moonBody.getWorldPosition(tempLunarEclipseMoonWorldPos);
     darkSunBody.getWorldPosition(tempLunarEclipseDarkSunWorldPos);
 
     // Apply virtual projection trick:
-    // Move the dark sun's Y altitude and XZ orbital radius exactly to the moon's track
-    // so that when they cross azimuthally, they perfectly overlap in the 2D projection.
-    // This is required because the Dark Sun is physically behind Earth during a Lunar Eclipse, and would be culled by the camera otherwise.
+    // Virtual projection trick:
+    // Project the dark sun onto the moon's orbital track (same XZ radius AND same direction)
+    // using the orbitAngle difference so coverage peaks when the two angles align.
+    // World-space position formula: x = -cos(orbitAngle)*R, z = sin(orbitAngle)*R
+    // → worldAngle = atan2(z, x) = π - orbitAngle
+    // → ΔworldAngle = -ΔorbitAngle
     const moonRadiusXZ = Math.hypot(tempLunarEclipseMoonWorldPos.x, tempLunarEclipseMoonWorldPos.z);
-    const darkSunRadiusXZ = Math.hypot(tempLunarEclipseDarkSunWorldPos.x, tempLunarEclipseDarkSunWorldPos.z);
-    
-    if (darkSunRadiusXZ > 0.0001) {
-      const radiusRatio = moonRadiusXZ / darkSunRadiusXZ;
-      tempLunarEclipseDarkSunWorldPos.x *= radiusRatio;
-      tempLunarEclipseDarkSunWorldPos.z *= radiusRatio;
-    }
+    const moonWorldAngleXZ = Math.atan2(tempLunarEclipseMoonWorldPos.z, tempLunarEclipseMoonWorldPos.x);
+    const orbitAngleDiff = simulationState.orbitDarkSunAngle - simulationState.orbitMoonAngle;
+    const projectedAngle = moonWorldAngleXZ - orbitAngleDiff;
+    tempLunarEclipseDarkSunWorldPos.x = Math.cos(projectedAngle) * moonRadiusXZ;
+    tempLunarEclipseDarkSunWorldPos.z = Math.sin(projectedAngle) * moonRadiusXZ;
     tempLunarEclipseDarkSunWorldPos.y = tempLunarEclipseMoonWorldPos.y;
 
     const moonDisc = getProjectedDisc(
@@ -3279,7 +3530,7 @@ export function createEclipseController(deps) {
     }
     
     // Smooth the tint over frames mechanically
-    const blend = tintTarget > lunarEclipseState.currentTint ? 0.06 : 0.04;
+    const blend = tintTarget > lunarEclipseState.currentTint ? 0.28 : 0.08;
     lunarEclipseState.currentTint += (tintTarget - lunarEclipseState.currentTint) * blend;
     lunarEclipseState.currentTint = THREE.MathUtils.clamp(lunarEclipseState.currentTint, 0, 1);
     
@@ -3366,15 +3617,22 @@ export function createEclipseController(deps) {
       progress: simulationState.moonBandProgress
     });
 
-    // Manually align the newly decoupled Dark Sun right in front of the Moon's orbital path
-    // so they trigger a natural Lunar Eclipse collision.
-    simulationState.orbitDarkSunAngle = simulationState.orbitMoonAngle + 0.035;
+    // Activate the staged lunar eclipse system:
+    // Drive the dark sun through 5 keyframe stages relative to the moon's orbit.
+    resetLunarStageState();
+    simulationState.darkSunLunarStageLock = true;
+    simulationState.darkSunLunarStageTransit = 0;
+
+    // Position dark sun at the start of the approach stage (offset = PI*0.5 from moon)
+    const contactOffset = getLunarStageContactOffsetRadians();
+    const startOffset = getLunarStageOffsetRadians(0, contactOffset);
+    simulationState.orbitDarkSunAngle = simulationState.orbitMoonAngle + startOffset;
     simulationState.darkSunBandProgress = simulationState.moonBandProgress;
     simulationState.darkSunBandDirection = -1;
     astronomyApi.updateOrbitModeUi();
     astronomyApi.refreshTrailsForCurrentMode();
     celestialTrackingCameraApi.setTarget("moon");
-    
+
     const stagedSnapshot = getCurrentUiSnapshot();
     astronomyApi.updateAstronomyUi(stagedSnapshot);
     evaluateLunarEclipse(stagedSnapshot);
@@ -3440,6 +3698,8 @@ export function createEclipseController(deps) {
     getDarkSunStageTransitForOffsetRadians,
     getDarkSunStageRelativeOrbitOffsetRadians,
     updateDarkSunStageOrbit,
+    updateDarkSunLunarStageOrbit,
+    resetLunarStageState,
     getCurrentUiSnapshot,
     getSolarEclipseToastStateLabelKey,
     getLunarEclipseToastStateLabelKey,
