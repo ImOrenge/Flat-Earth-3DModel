@@ -614,7 +614,6 @@ export function createAstronomyController({
     return phaseOffsetRadians - (sunOrbitAngleRadians * DARK_SUN_ORBIT_SPEED_FACTOR);
   }
 
-
   function inferRealitySunBandDirection(date) {
     const sampleWindowMs = 12 * 60 * 60 * 1000;
     const currentSun = getSunSubpoint(date);
@@ -707,63 +706,27 @@ export function createAstronomyController({
     };
   }
 
-  function getSunRenderState({
-    longitudeDegrees = 0,
-    orbitAngleRadians = 0,
-    projectedRadius = constants.EQUATOR_RADIUS,
-    progress = simulationState.sunBandProgress ?? 0.5,
-    source = "reality",
-    orbitMode = source === "demo" ? simulationState.orbitMode : "auto"
-  }) {
-    return getBodyCoilRenderState({
-      body: "sun",
-      longitudeDegrees,
-      orbitAngleRadians,
-      orbitMode,
-      progress,
-      projectedRadius,
-      source
-    });
-  }
-
-  function getMoonRenderState({
-    longitudeDegrees = 0,
-    orbitAngleRadians = 0,
-    projectedRadius = constants.EQUATOR_RADIUS,
-    progress = simulationState.moonBandProgress ?? 0.5,
-    source = "reality",
-    orbitMode = source === "demo" ? simulationState.orbitMode : "auto"
-  }) {
-    // Use 'sun' corridor so the moon rides exactly the same orbital track as the sun.
-    // The angular offset (orbitMoonAngle vs orbitSunAngle) keeps them apart on the same ring.
-    return getBodyCoilRenderState({
-      body: "sun",
-      longitudeDegrees,
-      orbitAngleRadians,
-      orbitMode,
-      progress,
-      projectedRadius,
-      source
-    });
-  }
-
   function getRealityDarkSunState(date) {
-    const referenceSun = getSunSubpoint(new Date(DARK_SUN_REFERENCE_TIME_MS));
-    const currentSun = getSunSubpoint(date);
-    const currentProjectedRadius = projectedRadiusFromLatitude(
-      currentSun.latitudeDegrees,
-      constants.DISC_RADIUS
-    );
     const elapsedFrames = (date.getTime() - DARK_SUN_REFERENCE_TIME_MS) / (1000 / 60);
-    const sunProgress = getBodyProgressFromProjectedRadius("sun", currentProjectedRadius);
 
-    return getMirroredDarkSunState({
+    // Independent retrograde orbit angle — advances opposite to the sun
+    const darkSunOrbitSpeed = constants.ORBIT_SUN_SPEED * DARK_SUN_ORBIT_SPEED_FACTOR;
+    const orbitAngleRadians = DARK_SUN_START_ANGLE - (elapsedFrames * darkSunOrbitSpeed);
+
+    // Independent band progress — analytical triangle wave (O(1), handles any elapsed time)
+    // DARK_SUN_START_DIRECTION = -1 so mirror: linearPos = 2 - startProgress
+    const bandStep = getBodyBandProgressStep("darkSun");
+    const totalDelta = bandStep * elapsedFrames;
+    const linearPos = (2 - DARK_SUN_START_PROGRESS + totalDelta) % 2;
+    const progress = linearPos <= 1 ? linearPos : 2 - linearPos;
+    const direction = linearPos <= 1 ? 1 : -1;
+
+    return {
+      direction,
+      orbitAngleRadians,
       orbitMode: "auto",
-      phaseOffsetRadians: THREE.MathUtils.degToRad(referenceSun.longitudeDegrees + 180),
-      sunDirection: inferRealitySunBandDirection(date),
-      sunOrbitAngleRadians: elapsedFrames * constants.ORBIT_SUN_SPEED,
-      sunProgress
-    });
+      progress
+    };
   }
 
   function getDarkSunRenderState({
@@ -810,6 +773,46 @@ export function createAstronomyController({
       orbitAngleRadians: darkSunState.orbitAngleRadians,
       orbitMode: darkSunState.orbitMode
     };
+  }
+
+  function getSunRenderState({
+    longitudeDegrees = 0,
+    orbitAngleRadians = 0,
+    projectedRadius = constants.EQUATOR_RADIUS,
+    progress = simulationState.sunBandProgress ?? 0.5,
+    source = "reality",
+    orbitMode = source === "demo" ? simulationState.orbitMode : "auto"
+  }) {
+    return getBodyCoilRenderState({
+      body: "sun",
+      longitudeDegrees,
+      orbitAngleRadians,
+      orbitMode,
+      progress,
+      projectedRadius,
+      source
+    });
+  }
+
+  function getMoonRenderState({
+    longitudeDegrees = 0,
+    orbitAngleRadians = 0,
+    projectedRadius = constants.EQUATOR_RADIUS,
+    progress = simulationState.moonBandProgress ?? 0.5,
+    source = "reality",
+    orbitMode = source === "demo" ? simulationState.orbitMode : "auto"
+  }) {
+    // Use 'sun' corridor so the moon rides exactly the same orbital track as the sun.
+    // The angular offset (orbitMoonAngle vs orbitSunAngle) keeps them apart on the same ring.
+    return getBodyCoilRenderState({
+      body: "sun",
+      longitudeDegrees,
+      orbitAngleRadians,
+      orbitMode,
+      progress,
+      projectedRadius,
+      source
+    });
   }
 
   function getAstronomySnapshot(date) {
@@ -978,8 +981,8 @@ export function createAstronomyController({
       longitudeDelta: formatSignedDegrees(audit.motion.netLongitudeDeltaDegrees)
     });
     ui.seasonalMoonSummaryEl.textContent =
-      `${definition.label} 기준 ±12시간 달 궤적: 위도 ${formatLatitude(audit.motion.latitudeMinDegrees)}~` +
-      `${formatLatitude(audit.motion.latitudeMaxDegrees)}, 경도 누적 이동 ${audit.motion.longitudeSweepDegrees.toFixed(1)}deg.`;
+      `${definition.label} 기�? ±12?�간 ??궤적: ?�도 ${formatLatitude(audit.motion.latitudeMinDegrees)}~` +
+      `${formatLatitude(audit.motion.latitudeMaxDegrees)}, 경도 ?�적 ?�동 ${audit.motion.longitudeSweepDegrees.toFixed(1)}deg.`;
 
     ui.seasonalEventTimeEl.textContent = i18n.t("seasonalEventTime", {
       year: seasonalMoonState.selectedYear,
@@ -1689,12 +1692,7 @@ export function createAstronomyController({
     orbitMode = simulationState.orbitMode,
     progress = simulationState.moonBandProgress ?? 0.5
   } = {}) {
-    const moonRenderState = getMoonRenderState({
-      orbitAngleRadians: simulationState.orbitMoonAngle,
-      orbitMode,
-      progress,
-      source: "demo"
-    });
+    const moonRenderState = ({position: new THREE.Vector3()});
     orbitMoon.position.copy(moonRenderState.position);
     return moonRenderState;
   }
@@ -1784,8 +1782,9 @@ export function createAstronomyController({
     applyObservationTimeSelection,
     disableRealityMode,
     enableRealityMode,
-    getBodyCoilRenderState,
+
     getAstronomySnapshot,
+    getBodyCoilRenderState,
     getCurrentOrbitRadius,
     getDarkSunRenderState,
     getMoonBaseHeight,

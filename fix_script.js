@@ -1,46 +1,71 @@
 const fs = require('fs');
-let lines = fs.readFileSync('modules/input-handler.js', 'utf8').split(/\r?\n/);
-lines.splice(538, 6, 
-`  if (darkSunDebugEl) {
-    darkSunDebugEl.addEventListener("change", () => {
-      simulationState.darkSunDebugVisible = darkSunDebugEl.checked;
-      const snapshot = getCurrentUiSnapshot();
-      astronomyApi.updateAstronomyUi(snapshot);
-      syncDarkSunPresentation(snapshot.solarEclipse ?? createSolarEclipseState());
-    });
+
+let content = fs.readFileSync('modules/astronomy-controller.js', 'utf8');
+
+const startIdx = content.indexOf('  function getMirroredDarkSunState');
+const endIdx = content.indexOf('  function getAstronomySnapshot');
+
+if (startIdx !== -1 && endIdx !== -1) {
+  const newLogic = `
+  function getRealityDarkSunState(date) {
+    const referenceSun = getSunSubpoint(new Date(DARK_SUN_REFERENCE_TIME_MS));
+    const currentSun = getSunSubpoint(date);
+    const currentProjectedRadius = projectedRadiusFromLatitude(
+      currentSun.latitudeDegrees,
+      constants.DISC_RADIUS
+    );
+    const elapsedFrames = (date.getTime() - DARK_SUN_REFERENCE_TIME_MS) / (1000 / 60);
+    const sunProgress = getBodyProgressFromProjectedRadius("sun", currentProjectedRadius);
+    const sunDirection = inferRealitySunBandDirection(date);
+
+    return {
+      direction: sunDirection >= 0 ? -1 : 1,
+      orbitAngleRadians: THREE.MathUtils.degToRad(referenceSun.longitudeDegrees + 180) - (elapsedFrames * constants.ORBIT_SUN_SPEED * DARK_SUN_ORBIT_SPEED_FACTOR),
+      orbitMode: getMirroredOrbitMode("auto"),
+      progress: THREE.MathUtils.clamp(1 - sunProgress, 0, 1)
+    };
   }
 
-  if (stagePreEclipseButton) {
-    stagePreEclipseButton.addEventListener("click", () => {
-      stagePreEclipseScene();
+  function getDarkSunRenderState({
+    date = astronomyState.selectedDate,
+    direction = simulationState.darkSunBandDirection ?? DARK_SUN_START_DIRECTION,
+    orbitAngleRadians = simulationState.orbitDarkSunAngle ?? DARK_SUN_START_ANGLE,
+    progress = simulationState.darkSunBandProgress ?? DARK_SUN_START_PROGRESS,
+    source = "reality",
+    orbitMode = source === "demo" ? simulationState.orbitMode : "auto"
+  } = {}) {
+    // Treat Dark Sun natively in its own orbit, similar to sun/moon
+    const darkSunState = source === "demo"
+      ? {
+          direction,
+          orbitAngleRadians,
+          orbitMode,
+          progress
+        }
+      : getRealityDarkSunState(date);
+      
+    // The dark sun rides the identical physical sun band corridor.
+    const renderState = getBodyCoilRenderState({
+      body: "sun", // Important: physically uses the sun's corridor limits
+      orbitAngleRadians: darkSunState.orbitAngleRadians,
+      orbitMode: darkSunState.orbitMode,
+      progress: darkSunState.progress,
+      source: "demo"
     });
+    
+    return {
+      ...renderState,
+      direction: darkSunState.direction,
+      orbitAngleRadians: darkSunState.orbitAngleRadians,
+      orbitMode: darkSunState.orbitMode
+    };
   }
 
-  if (stagePreLunarEclipseButton) {
-    stagePreLunarEclipseButton.addEventListener("click", () => {
-      stagePreLunarEclipseScene();
-    });
-  }
+`;
+  content = content.substring(0, startIdx) + newLogic + content.substring(endIdx);
+  fs.writeFileSync('modules/astronomy-controller.js', content, 'utf8');
+  console.log("Successfully replaced getDarkSunRenderState logic.");
+} else {
+  console.log("Pattern not found");
+}
 
-  skyAnalemmaOverlayEl.addEventListener("change", () => {
-    skyAnalemmaState.enabled = skyAnalemmaOverlayEl.checked;
-    const projectionDate = astronomyState.live ? new Date() : astronomyState.selectedDate;
-    astronomyApi.syncSkyAnalemmaUi(projectionDate, true);
-  });
-
-  for (const button of orbitModeButtons) {
-    button.addEventListener("click", () => {
-      simulationState.orbitMode = button.dataset.orbitMode;
-      astronomyApi.updateOrbitModeUi();
-      astronomyApi.refreshTrailsForCurrentMode();
-    });
-  }
-
-  for (const button of cameraTrackButtons) {
-    button.addEventListener("click", () => {
-      celestialTrackingCameraApi.setTarget(button.dataset.cameraTrack);
-    });
-  }`
-);
-
-fs.writeFileSync('modules/input-handler.js', lines.join('\n'), 'utf8');
