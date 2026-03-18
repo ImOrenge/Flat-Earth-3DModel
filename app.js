@@ -941,6 +941,8 @@ const rocketApi = createRocketController({
     findMirroredDarkSunStageStartCandidate,
     getDarkSunStageRelativeOrbitOffsetRadians,
     updateDarkSunStageOrbit,
+    updateDarkSunLunarStageOrbit,
+    resetLunarStageState,
     getSolarEclipseToastStateLabelKey,
     syncSolarEclipseToastContent,
     setSolarEclipseToastVisibility,
@@ -1156,26 +1158,31 @@ function animate() {
     snapshot = astronomyApi.getAstronomySnapshot(observationDate);
     astronomyApi.applyAstronomySnapshot(snapshot);
   } else {
-    const isStagingActive = simulationState.darkSunStageAltitudeLock;
+    const isSolarStagingActive = simulationState.darkSunStageAltitudeLock;
+    const isLunarStagingActive = simulationState.darkSunLunarStageLock;
     let stageSpeedFactor = 1;
-    if (isStagingActive && !astronomyState.enabled) {
+    if (isSolarStagingActive && !astronomyState.enabled) {
       stageSpeedFactor = updateDarkSunStageOrbit(deltaSeconds);
+    } else if (isLunarStagingActive && !astronomyState.enabled) {
+      stageSpeedFactor = updateDarkSunLunarStageOrbit(deltaSeconds);
     }
     const eclipseStageActive = stageSpeedFactor !== false;
     let activeSpeedFactor = eclipseStageActive ? stageSpeedFactor : eclipseAnimationSpeedFactor;
 
     // Lunar eclipse natural slowdown effect
+    // Slow down heavily when moon and dark sun approach each other so the
+    // blood-moon tint has enough frames to visually register.
     if (!astronomyState.enabled && !eclipseStageActive) {
       const moonAngle = simulationState.orbitMoonAngle;
       const darkSunAngle = simulationState.orbitDarkSunAngle;
       if (Number.isFinite(moonAngle) && Number.isFinite(darkSunAngle)) {
         const offsetRadians = eclipseApi.getWrappedAngularDistance(darkSunAngle, moonAngle);
         const distance = Math.abs(offsetRadians);
-        if (distance < 0.25) {
+        if (distance < 0.35) {
           const lunarSlowdown = THREE.MathUtils.lerp(
-            constants.DARK_SUN_ECLIPSE_TRANSIT_SLOW_FACTOR * 1.5,
+            constants.DARK_SUN_ECLIPSE_TRANSIT_SLOW_FACTOR * 0.25,
             1.0,
-            THREE.MathUtils.clamp(distance / 0.25, 0, 1)
+            THREE.MathUtils.clamp(distance / 0.35, 0, 1)
           );
           activeSpeedFactor = Math.min(activeSpeedFactor, lunarSlowdown);
         }
@@ -1186,7 +1193,10 @@ function animate() {
     simulationState.orbitSunAngle += ORBIT_SUN_SPEED * speedMultiplier;
     simulationState.orbitMoonAngle += ORBIT_MOON_SPEED * speedMultiplier;
     // Decoupled dark sun: advances directly opposite the sun
-    simulationState.orbitDarkSunAngle -= ORBIT_DARK_SUN_SPEED * speedMultiplier;
+    // Skip natural angle update when lunar stage is driving the dark sun's position
+    if (!isLunarStagingActive) {
+      simulationState.orbitDarkSunAngle -= ORBIT_DARK_SUN_SPEED * speedMultiplier;
+    }
 
     if (simulationState.orbitMode === "auto") {
       advanceBandProgress("sunBandProgress", "sunBandDirection", getBodyBandProgressStep("sun") * speedMultiplier);
@@ -1286,8 +1296,8 @@ function animate() {
     } else {
       resetDarkSunOcclusionMotion(darkSunOcclusionState.orbit);
     }
-    updateObserverCelestialPerspective(snapshot);
     evaluateLunarEclipse(snapshot);
+    updateObserverCelestialPerspective(snapshot);
     
     // Global trap for playwright
     window.__E2E_SNAPSHOT = { 

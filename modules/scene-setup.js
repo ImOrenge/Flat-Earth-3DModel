@@ -673,8 +673,8 @@ export function setupScene({ canvas }) {
   outgoingLight += vec3(0.02, 0.03, 0.05) * earthshine;
   outgoingLight += vec3(0.28, 0.46, 0.88) * ((coolScatter * 0.24) + (terminatorBand * 0.12));
   // Lunar eclipse: tint the moon toward blood-red when dark sun overlaps
-  vec3 bloodMoonColor = vec3(0.55, 0.06, 0.03);
-  float eclipseSurface = max(phaseShade, 0.12);
+  vec3 bloodMoonColor = vec3(0.72, 0.04, 0.01);
+  float eclipseSurface = max(phaseShade, 0.18);
   
   float lunarEclipseMask = 0.0;
   if (moonLunarEclipseTint > 0.001) {
@@ -701,8 +701,8 @@ export function setupScene({ canvas }) {
   // The global moonLunarEclipseTint essentially dictates how 'intense' the blood red is overall,
   // but it is MULTIPLIED by the spatial coverage of the Earth's shadow (lunarEclipseMask).
   float finalEclipseTint = moonLunarEclipseTint * lunarEclipseMask;
-  outgoingLight = mix(outgoingLight, bloodMoonColor * eclipseSurface, finalEclipseTint * 0.78);
-  outgoingLight += vec3(0.18, 0.02, 0.01) * finalEclipseTint * (0.24 + terminatorBand * 0.18);
+  outgoingLight = mix(outgoingLight, bloodMoonColor * eclipseSurface, finalEclipseTint * 0.97);
+  outgoingLight += vec3(0.22, 0.015, 0.006) * finalEclipseTint * (0.24 + terminatorBand * 0.18);
   diffuseColor.a = mix(diffuseColor.a * shadowAlpha, max(diffuseColor.a * shadowAlpha, 0.88), finalEclipseTint);
   
   // Cutout logic: To make it look like the moon is "eroded" (but technically just extremely dark, as eclipses are),

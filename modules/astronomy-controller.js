@@ -739,26 +739,18 @@ export function createAstronomyController({
     sunDirection = simulationState.sunBandDirection ?? 1,
     sunOrbitAngleRadians = simulationState.orbitSunAngle ?? 0,
     sunProgress = simulationState.sunBandProgress ?? 0.5,
-    useExplicitOrbit = false,
+    useExplicitOrbit = true,
     orbitMode = source === "demo" ? simulationState.orbitMode : "auto"
   } = {}) {
+    // Dark sun always uses independent orbit (both reality and demo modes)
     const darkSunState = source === "demo"
-      ? (
-        useExplicitOrbit
-          ? {
-            direction,
-            orbitAngleRadians,
-            orbitMode,
-            progress
-          }
-          : getMirroredDarkSunState({
-            orbitMode,
-            phaseOffsetRadians,
-            sunDirection,
-            sunOrbitAngleRadians,
-            sunProgress
-          })
-      )
+      ? {
+        // Demo mode: use explicit state from simulationState (independent orbit)
+        direction,
+        orbitAngleRadians,
+        orbitMode,
+        progress
+      }
       : getRealityDarkSunState(date);
     const renderState = getBodyCoilRenderState({
       body: "darkSun",
@@ -802,8 +794,8 @@ export function createAstronomyController({
     source = "reality",
     orbitMode = source === "demo" ? simulationState.orbitMode : "auto"
   }) {
-    // Use 'sun' corridor so the moon rides exactly the same orbital track as the sun.
-    // The angular offset (orbitMoonAngle vs orbitSunAngle) keeps them apart on the same ring.
+    // Use 'sun' corridor so the moon traces the same spiral geometry as the sun.
+    // The angular offset (orbitMoonAngle vs orbitSunAngle) keeps them apart on the same track.
     return getBodyCoilRenderState({
       body: "sun",
       longitudeDegrees,
@@ -1692,7 +1684,12 @@ export function createAstronomyController({
     orbitMode = simulationState.orbitMode,
     progress = simulationState.moonBandProgress ?? 0.5
   } = {}) {
-    const moonRenderState = ({position: new THREE.Vector3()});
+    const moonRenderState = getMoonRenderState({
+      orbitAngleRadians: simulationState.orbitMoonAngle,
+      orbitMode,
+      progress,
+      source: "demo"
+    });
     orbitMoon.position.copy(moonRenderState.position);
     return moonRenderState;
   }
