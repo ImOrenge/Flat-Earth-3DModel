@@ -503,6 +503,44 @@ h1 {
   margin-top: 0;
 }
 
+.constellation-panel {
+  margin-top: 14px;
+  padding: 16px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(159, 208, 255, 0.1), rgba(126, 168, 255, 0.08));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.constellation-panel:first-child {
+  margin-top: 0;
+}
+
+.constellation-info-panel {
+  background: linear-gradient(180deg, rgba(255, 230, 174, 0.09), rgba(126, 208, 255, 0.08));
+}
+
+.constellation-map-wrap {
+  margin-top: 14px;
+  padding: 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(circle at 50% 24%, rgba(150, 208, 255, 0.12), transparent 52%),
+    rgba(5, 11, 24, 0.6);
+}
+
+.constellation-map {
+  width: 100%;
+  aspect-ratio: 1;
+  min-height: 220px;
+}
+
+.constellation-map svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
 .route-summary-panel {
   background: linear-gradient(180deg, rgba(255, 214, 145, 0.08), rgba(126, 208, 255, 0.08));
 }

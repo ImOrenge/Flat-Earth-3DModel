@@ -5379,9 +5379,9 @@
 <circle cx="301.04" cy="1179.80" r="3.15" fill="#ffffff" opacity="0.98" />
 <circle cx="324.75" cy="1221.45" r="3.15" fill="#ffffff" opacity="0.98" />
 <circle cx="299.93" cy="1200.89" r="3.15" fill="#ffffff" opacity="0.98" />
-<line x1="487.61" y1="302.90" x2="666.53" y2="201.62" stroke="#ffffff" stroke-width="2.15" stroke-linecap="round" stroke-linejoin="round" opacity="0.96" />
-<line x1="666.53" y1="201.62" x2="455.79" y2="1495.26" stroke="#ffffff" stroke-width="2.15" stroke-linecap="round" stroke-linejoin="round" opacity="0.96" />
-<line x1="455.79" y1="1495.26" x2="487.61" y2="302.90" stroke="#ffffff" stroke-width="2.15" stroke-linecap="round" stroke-linejoin="round" opacity="0.96" />
+<path d="M 487.61 302.90 L 517.43 286.02 L 547.25 269.14 L 577.07 252.26 L 606.89 235.38 L 636.71 218.50 L 666.53 201.62" stroke="#ffffff" stroke-width="2.15" stroke-linecap="round" stroke-linejoin="round" opacity="0.96" fill="none" />
+<path d="M 666.53 201.62 L 656.50 263.22 L 646.46 324.83 L 636.43 386.43 L 626.39 448.03 L 616.36 509.63 L 606.32 571.23 L 596.29 632.83 L 586.25 694.44 L 576.22 756.04 L 566.18 817.64 L 556.15 879.24 L 546.11 940.84 L 536.07 1002.44 L 526.04 1064.05 L 516.00 1125.65 L 505.97 1187.25 L 495.93 1248.85 L 485.90 1310.45 L 475.86 1372.05 L 465.83 1433.66 L 455.79 1495.26" stroke="#ffffff" stroke-width="2.15" stroke-linecap="round" stroke-linejoin="round" opacity="0.96" fill="none" />
+<path d="M 455.79 1495.26 L 457.47 1432.50 L 459.14 1369.75 L 460.81 1306.99 L 462.49 1244.23 L 464.16 1181.48 L 465.84 1118.72 L 467.51 1055.97 L 469.19 993.21 L 470.86 930.46 L 472.54 867.70 L 474.21 804.94 L 475.89 742.19 L 477.56 679.43 L 479.24 616.68 L 480.91 553.92 L 482.58 491.17 L 484.26 428.41 L 485.93 365.66 L 487.61 302.90" stroke="#ffffff" stroke-width="2.15" stroke-linecap="round" stroke-linejoin="round" opacity="0.96" fill="none" />
 <circle cx="487.61" cy="302.90" r="3.15" fill="#ffffff" opacity="0.98" />
 <circle cx="666.53" cy="201.62" r="3.15" fill="#ffffff" opacity="0.98" />
 <circle cx="666.53" cy="201.62" r="3.15" fill="#ffffff" opacity="0.98" />

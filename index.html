@@ -105,6 +105,7 @@
         <div class="panel-tabs" role="tablist" aria-label="Detail control sections" id="detail-tabs">
           <button class="panel-tab active" data-control-tab="astronomy" type="button" data-i18n="tabAstronomy">Astronomy</button>
           <button class="panel-tab" data-control-tab="routes" type="button" data-i18n="tabRoutes">Route Control</button>
+          <button class="panel-tab" data-control-tab="constellations" type="button" data-i18n="tabConstellations">Constellations</button>
           <button class="panel-tab" data-control-tab="rockets" type="button">Rockets</button>
         </div>
 
@@ -438,6 +439,48 @@
           </section>
         </div>
 
+        <div class="panel-tab-content" data-control-panel="constellations" hidden>
+          <section class="constellation-panel">
+            <p class="orbit-title" data-i18n="constellationMapTitle">Constellation Map</p>
+            <label class="field" for="constellation-select">
+              <span class="field-label" data-i18n="constellationSelectLabel">Constellation</span>
+              <select class="select-input" id="constellation-select"></select>
+            </label>
+            <div class="constellation-map-wrap">
+              <div class="constellation-map" id="constellation-map" role="img" aria-label="Constellation dome map"></div>
+            </div>
+          </section>
+          <section class="constellation-panel constellation-info-panel">
+            <p class="orbit-title" data-i18n="constellationInfoTitle">Constellation Info</p>
+            <div class="coord-grid">
+              <div class="coord-card">
+                <span class="coord-label" data-i18n="constellationDirectionLabel">Direction</span>
+                <strong class="coord-value" id="constellation-direction">-</strong>
+              </div>
+              <div class="coord-card">
+                <span class="coord-label" data-i18n="constellationRaLabel">Center RA</span>
+                <strong class="coord-value" id="constellation-ra">-</strong>
+              </div>
+              <div class="coord-card">
+                <span class="coord-label" data-i18n="constellationDecLabel">Center Dec</span>
+                <strong class="coord-value" id="constellation-dec">-</strong>
+              </div>
+              <div class="coord-card">
+                <span class="coord-label" data-i18n="constellationHemisphereLabel">Hemisphere</span>
+                <strong class="coord-value" id="constellation-hemisphere">-</strong>
+              </div>
+              <div class="coord-card">
+                <span class="coord-label" data-i18n="constellationSegmentsLabel">Segments</span>
+                <strong class="coord-value" id="constellation-segments">-</strong>
+              </div>
+              <div class="coord-card">
+                <span class="coord-label" data-i18n="constellationStarsLabel">Stars</span>
+                <strong class="coord-value" id="constellation-stars">-</strong>
+              </div>
+            </div>
+          </section>
+        </div>
+
         <div class="panel-tab-content" data-control-panel="rockets" hidden>
           <section class="route-panel">
             <p class="orbit-title">Rocket Simulation</p>
@@ -492,6 +535,6 @@
     </div>
   </div>
 
-  <script type="module" src="./app.js?v=20260319-flat-earth-dome7"></script>
+  <script type="module" src="./app.js?v=20260319-constellation-tab1"></script>
 </body>
 </html>

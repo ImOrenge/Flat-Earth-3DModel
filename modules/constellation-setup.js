@@ -12,11 +12,19 @@ const DOME_INSET = 0.985;
 const OUTER_EASING_START = 0.70;
 const OUTER_EASING_SPAN = 0.30;
 const OUTER_EASING_AMOUNT = 0.06;
+const SURFACE_PROJECTED_CONSTELLATIONS = new Set(["Octans"]);
+
+const STAR_BASE_OPACITY = 0.96;
+const LINE_BASE_OPACITY = 0.82;
+const STAR_DIM_OPACITY = 0.28;
+const LINE_DIM_OPACITY = 0.22;
+const STAR_HIGHLIGHT_OPACITY = 1.0;
+const LINE_HIGHLIGHT_OPACITY = 0.98;
 
 export const CONSTELLATION_STAR_SIZE = scaleDimension(0.16);
 export const CONSTELLATION_STAR_COLOR = 0xffffff;
 export const CONSTELLATION_LINE_COLOR = 0xffffff;
-export const CONSTELLATION_LINE_OPACITY = 0.82;
+export const CONSTELLATION_LINE_OPACITY = LINE_BASE_OPACITY;
 export const GRID_LINE_COLOR = 0x90a5c4;
 export const GRID_LINE_OPACITY = 0.14;
 
@@ -86,6 +94,33 @@ function pseudoRandom01(seed) {
   return raw - Math.floor(raw);
 }
 
+function liftFootprintSegmentToDome(startPoint, endPoint) {
+  const footprintLength = Math.hypot(endPoint.x - startPoint.x, endPoint.z - startPoint.z);
+  const sampleCount = Math.max(6, Math.ceil(footprintLength / Math.max(DOME_RADIUS * 0.08, 1e-6)));
+  const points = [];
+
+  for (let index = 0; index <= sampleCount; index += 1) {
+    if (index === 0) {
+      points.push(startPoint.clone());
+      continue;
+    }
+    if (index === sampleCount) {
+      points.push(endPoint.clone());
+      continue;
+    }
+
+    const t = index / sampleCount;
+    const x = THREE.MathUtils.lerp(startPoint.x, endPoint.x, t);
+    const z = THREE.MathUtils.lerp(startPoint.z, endPoint.z, t);
+    const planarRadius = Math.hypot(x, z);
+    const domeRise = Math.sqrt(Math.max(0, (DOME_RADIUS * DOME_RADIUS) - (planarRadius * planarRadius)));
+    const y = DOME_BASE_Y + (domeRise * DOME_INSET * DOME_VERTICAL_SCALE);
+    points.push(new THREE.Vector3(x, y, z));
+  }
+
+  return points;
+}
+
 function createGridGroup() {
   const gridGroup = new THREE.Group();
   const gridMaterial = new THREE.LineBasicMaterial({
@@ -127,59 +162,116 @@ function createGridGroup() {
   return gridGroup;
 }
 
-export function createConstellations() {
+function circularMeanHours(values) {
+  if (!values.length) {
+    return 0;
+  }
+  let sinSum = 0;
+  let cosSum = 0;
+  for (const value of values) {
+    const angle = (value / 24) * Math.PI * 2;
+    sinSum += Math.sin(angle);
+    cosSum += Math.cos(angle);
+  }
+  const angle = THREE.MathUtils.euclideanModulo(Math.atan2(sinSum, cosSum), Math.PI * 2);
+  return (angle / (Math.PI * 2)) * 24;
+}
+
+function toMapPoint(point) {
+  const mapScale = DOME_RADIUS * DOME_INSET;
+  return {
+    x: point.x / mapScale,
+    y: point.z / mapScale,
+  };
+}
+
+function createConstellationCatalogEntry(constellation, entryData) {
+  const centroidRAHours = circularMeanHours(entryData.raSamples);
+  const centroidDecDeg = entryData.decSamples.length > 0
+    ? (entryData.decSamples.reduce((sum, value) => sum + value, 0) / entryData.decSamples.length)
+    : 0;
+  const centroidPoint = projectToFlatEarthDome(centroidRAHours, centroidDecDeg);
+  const centroidMapPoint = toMapPoint(centroidPoint);
+
+  return {
+    name: constellation.name,
+    code: constellation.code,
+    segmentCount: constellation.segments.length,
+    uniqueStarCount: entryData.starCount,
+    centroidRAHours,
+    centroidDecDeg,
+    minDecDeg: entryData.minDecDeg,
+    maxDecDeg: entryData.maxDecDeg,
+    centroidMapPoint,
+    mapSegments: entryData.mapSegments,
+    mapStars: entryData.mapStars,
+  };
+}
+
+function createConstellationVisual({
+  constellation,
+  starTexture,
+  lineMaterialOptions,
+  starMaterialOptions,
+  globalStarKeys,
+}) {
   const group = new THREE.Group();
-  group.name = "flat-earth-dome-constellations";
-
-  const starGeometry = new THREE.BufferGeometry();
+  const lineMaterial = new THREE.LineBasicMaterial(lineMaterialOptions);
   const starMaterial = new THREE.PointsMaterial({
-    color: CONSTELLATION_STAR_COLOR,
-    size: CONSTELLATION_STAR_SIZE,
-    sizeAttenuation: true,
-    transparent: true,
-    opacity: 0.96,
-    map: createStarTexture(),
-    blending: THREE.AdditiveBlending,
-    vertexColors: true,
-    depthWrite: false,
-    depthTest: false,
+    ...starMaterialOptions,
+    map: starTexture,
   });
 
-  const lineMaterial = new THREE.LineBasicMaterial({
-    color: CONSTELLATION_LINE_COLOR,
-    transparent: true,
-    opacity: CONSTELLATION_LINE_OPACITY,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    depthTest: false,
-  });
-
+  const linePositions = [];
   const starPositions = [];
   const starColors = [];
-  const seenStars = new Set();
-  const linePositions = [];
+  const localStarKeys = new Set();
+  const mapSegments = [];
+  const mapStars = [];
+  const raSamples = [];
+  const decSamples = [];
+  let minDecDeg = Infinity;
+  let maxDecDeg = -Infinity;
 
-  for (const constellation of constellationData) {
-    for (const segment of constellation.segments) {
-      const [[raA, decA], [raB, decB]] = segment;
-      const start = projectToFlatEarthDome(raA, decA);
-      const end = projectToFlatEarthDome(raB, decB);
+  for (const segment of constellation.segments) {
+    const [[raA, decA], [raB, decB]] = segment;
+    const start = projectToFlatEarthDome(raA, decA);
+    const end = projectToFlatEarthDome(raB, decB);
+
+    if (SURFACE_PROJECTED_CONSTELLATIONS.has(constellation.name)) {
+      const sampledPoints = liftFootprintSegmentToDome(start, end);
+      const lineGeometry = new THREE.BufferGeometry().setFromPoints(sampledPoints);
+      const line = new THREE.Line(lineGeometry, lineMaterial);
+      line.renderOrder = 22;
+      group.add(line);
+      mapSegments.push(sampledPoints.map(toMapPoint));
+    } else {
       linePositions.push(start.x, start.y, start.z);
       linePositions.push(end.x, end.y, end.z);
+      mapSegments.push([toMapPoint(start), toMapPoint(end)]);
+    }
 
-      for (const [raHours, decDeg, point] of [
-        [raA, decA, start],
-        [raB, decB, end],
-      ]) {
-        const key = starKey(raHours, decDeg);
-        if (seenStars.has(key)) {
-          continue;
-        }
-        seenStars.add(key);
-        starPositions.push(point.x, point.y, point.z);
-        const brightness = 0.62 + (pseudoRandom01((raHours * 17.3) + (decDeg * 0.37)) * 0.34);
-        starColors.push(brightness, brightness * 0.985, brightness * 0.96);
+    for (const [raHours, decDeg, point] of [
+      [raA, decA, start],
+      [raB, decB, end],
+    ]) {
+      const key = starKey(raHours, decDeg);
+      globalStarKeys.add(key);
+      if (localStarKeys.has(key)) {
+        continue;
       }
+      localStarKeys.add(key);
+      minDecDeg = Math.min(minDecDeg, decDeg);
+      maxDecDeg = Math.max(maxDecDeg, decDeg);
+      raSamples.push(raHours);
+      decSamples.push(decDeg);
+      starPositions.push(point.x, point.y, point.z);
+      const brightness = 0.62 + (pseudoRandom01((raHours * 17.3) + (decDeg * 0.37)) * 0.34);
+      starColors.push(brightness, brightness * 0.985, brightness * 0.96);
+      mapStars.push({
+        ...toMapPoint(point),
+        brightness,
+      });
     }
   }
 
@@ -192,6 +284,7 @@ export function createConstellations() {
   }
 
   if (starPositions.length > 0) {
+    const starGeometry = new THREE.BufferGeometry();
     starGeometry.setAttribute("position", new THREE.Float32BufferAttribute(starPositions, 3));
     starGeometry.setAttribute("color", new THREE.Float32BufferAttribute(starColors, 3));
     const stars = new THREE.Points(starGeometry, starMaterial);
@@ -199,7 +292,112 @@ export function createConstellations() {
     group.add(stars);
   }
 
+  return {
+    name: constellation.name,
+    code: constellation.code,
+    group,
+    lineMaterial,
+    starMaterial,
+    catalogEntry: createConstellationCatalogEntry(constellation, {
+      decSamples,
+      mapSegments,
+      mapStars,
+      maxDecDeg: Number.isFinite(maxDecDeg) ? maxDecDeg : 0,
+      minDecDeg: Number.isFinite(minDecDeg) ? minDecDeg : 0,
+      raSamples,
+      starCount: localStarKeys.size,
+    }),
+  };
+}
+
+export function createConstellations() {
+  const group = new THREE.Group();
+  group.name = "flat-earth-dome-constellations";
+
+  const starTexture = createStarTexture();
+  const baseLineMaterialOptions = {
+    color: CONSTELLATION_LINE_COLOR,
+    transparent: true,
+    opacity: LINE_BASE_OPACITY,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    depthTest: false,
+  };
+  const baseStarMaterialOptions = {
+    color: CONSTELLATION_STAR_COLOR,
+    size: CONSTELLATION_STAR_SIZE,
+    sizeAttenuation: true,
+    transparent: true,
+    opacity: STAR_BASE_OPACITY,
+    blending: THREE.AdditiveBlending,
+    vertexColors: true,
+    depthWrite: false,
+    depthTest: false,
+  };
+
+  const globalStarKeys = new Set();
+  const constellationVisuals = [];
+  const catalog = [];
+  for (const constellation of constellationData) {
+    const visual = createConstellationVisual({
+      constellation,
+      globalStarKeys,
+      lineMaterialOptions: baseLineMaterialOptions,
+      starMaterialOptions: baseStarMaterialOptions,
+      starTexture,
+    });
+    visual.group.renderOrder = 22;
+    constellationVisuals.push(visual);
+    catalog.push(visual.catalogEntry);
+    group.add(visual.group);
+  }
+
   group.add(createGridGroup());
-  console.log(`Flat-earth dome constellations: ${constellationData.length} constellations, ${starPositions.length / 3} stars.`);
-  return group;
+
+  let highlightedConstellation = null;
+
+  function applyHighlightState() {
+    const hasSelection = typeof highlightedConstellation === "string" && highlightedConstellation.length > 0;
+    for (const visual of constellationVisuals) {
+      const isSelected = hasSelection && visual.name === highlightedConstellation;
+
+      if (!hasSelection) {
+        visual.lineMaterial.opacity = LINE_BASE_OPACITY;
+        visual.starMaterial.opacity = STAR_BASE_OPACITY;
+        continue;
+      }
+
+      visual.lineMaterial.opacity = isSelected ? LINE_HIGHLIGHT_OPACITY : LINE_DIM_OPACITY;
+      visual.starMaterial.opacity = isSelected ? STAR_HIGHLIGHT_OPACITY : STAR_DIM_OPACITY;
+    }
+  }
+
+  function setHighlightedConstellation(nameOrNull) {
+    const nextName = typeof nameOrNull === "string" && nameOrNull.length > 0
+      ? nameOrNull
+      : null;
+    highlightedConstellation = nextName;
+    applyHighlightState();
+  }
+
+  function getConstellationCatalog() {
+    return catalog.map((entry) => ({
+      ...entry,
+      centroidMapPoint: { ...entry.centroidMapPoint },
+      mapSegments: entry.mapSegments.map((segment) => segment.map((point) => ({ ...point }))),
+      mapStars: entry.mapStars.map((point) => ({ ...point })),
+    }));
+  }
+
+  applyHighlightState();
+
+  console.log(
+    `Flat-earth dome constellations: ${constellationData.length} constellations, ${globalStarKeys.size} stars.`
+  );
+
+  return {
+    group,
+    setHighlightedConstellation,
+    getConstellationCatalog,
+  };
 }

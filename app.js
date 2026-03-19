@@ -12,7 +12,7 @@ import { createAstronomyController } from "./modules/astronomy-controller.js?v=2
 import { createCameraController } from "./modules/camera-controller.js?v=20260313-tracking-angle1";
 import { createCelestialTrackingCameraController } from "./modules/celestial-tracking-camera-controller.js?v=20260313-tracking-angle1";
 import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js?v=20260312-darksun-eclipse1";
-import { createI18n } from "./modules/i18n.js?v=20260314-magnetic-pinecone3";
+import { createI18n } from "./modules/i18n.js?v=20260319-constellation-tab1";
 import { createMagneticFieldController } from "./modules/magnetic-field-controller.js?v=20260314-magnetic-pinecone3";
 import { createRouteSimulationController } from "./modules/route-simulation-controller.js";
 import { createTextureManager } from "./modules/texture-manager.js?v=20260311-gpu-daynight";
@@ -21,6 +21,7 @@ import { createWalkerController } from "./modules/walker-controller.js?v=2026031
 import * as constants from "./modules/constants.js";
 import { createEclipseController } from "./modules/eclipse-controller.js?v=20260314-natural-eclipse2";
 import { createCelestialVisualsController } from "./modules/celestial-visuals-controller.js";
+import { createConstellationTabController } from "./modules/constellation-tab-controller.js?v=20260319-constellation-tab1";
 import { setupInputHandlers } from "./modules/input-handler.js";
 import { createRocketController, SPACEPORTS } from "./modules/rocket-controller.js?v=20260319-parabola";
 const {
@@ -359,6 +360,14 @@ const routeCountriesEl = document.getElementById("route-countries");
 const routeDurationEl = document.getElementById("route-duration");
 const routeProgressEl = document.getElementById("route-progress");
 const routeGeoSummaryEl = document.getElementById("route-geo-summary");
+const constellationSelectEl = document.getElementById("constellation-select");
+const constellationMapEl = document.getElementById("constellation-map");
+const constellationDirectionEl = document.getElementById("constellation-direction");
+const constellationRaEl = document.getElementById("constellation-ra");
+const constellationDecEl = document.getElementById("constellation-dec");
+const constellationHemisphereEl = document.getElementById("constellation-hemisphere");
+const constellationSegmentsEl = document.getElementById("constellation-segments");
+const constellationStarsEl = document.getElementById("constellation-stars");
 const i18n = createI18n();
 
 function applyStaticTranslations() {
@@ -438,7 +447,7 @@ function setControlTab(tabKey) {
 }
 
 import { setupScene } from "./modules/scene-setup.js";
-import { createConstellations } from "./modules/constellation-setup.js?v=20260319-flat-earth-dome7";
+import { createConstellations } from "./modules/constellation-setup.js?v=20260319-constellation-tab1";
 const {
   renderer,
   scene,
@@ -590,7 +599,8 @@ const {
 } = setupScene({ canvas });
 
 // Add constellations
-scalableStage.add(createConstellations());
+const constellationApi = createConstellations();
+scalableStage.add(constellationApi.group);
 
 const simulationState = {
   darkSunBandDirection: -1,
@@ -905,6 +915,27 @@ const routeSimulationApi = createRouteSimulationController({
     routeSummaryEl
   }
 });
+
+const constellationTabApi = createConstellationTabController({
+  i18n,
+  constellationApi,
+  ui: {
+    constellationSelectEl,
+    constellationMapEl,
+    constellationDirectionEl,
+    constellationRaEl,
+    constellationDecEl,
+    constellationHemisphereEl,
+    constellationSegmentsEl,
+    constellationStarsEl,
+  },
+});
+
+i18n.subscribe(() => {
+  constellationTabApi.refreshLocalizedUi();
+});
+
+constellationTabApi.initialize();
 
 const celestialTrackingCameraApi = createCelestialTrackingCameraController({
   buttons: cameraTrackButtons,

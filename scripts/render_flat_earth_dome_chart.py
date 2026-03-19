@@ -40,6 +40,7 @@ POLARIS_MATCH_TOLERANCE = 0.02
 OUTER_EASING_START = 0.70
 OUTER_EASING_SPAN = 0.30
 OUTER_EASING_AMOUNT = 0.06
+SURFACE_PROJECTED_CONSTELLATIONS = {"Octans"}
 
 BG_COLOR = "#07111f"
 GRID_COLOR = "#90a5c4"
@@ -155,6 +156,29 @@ def project(ra_hours: float, dec_deg: float) -> DomePoint:
     x = CENTER + OUTER_RADIUS * radius_norm * math.sin(theta)
     y = CENTER - OUTER_RADIUS * radius_norm * math.cos(theta)
     return DomePoint(x=x, y=y, radius_norm=radius_norm, theta_rad=theta)
+
+
+def sample_projected_footprint(
+    start_point: DomePoint,
+    end_point: DomePoint,
+) -> list[tuple[float, float]]:
+    footprint_length = math.hypot(end_point.x - start_point.x, end_point.y - start_point.y)
+    sample_count = max(6, math.ceil(footprint_length / max(OUTER_RADIUS * 0.08, 1e-6)))
+    points: list[tuple[float, float]] = []
+
+    for index in range(sample_count + 1):
+        if index == 0:
+            points.append((start_point.x, start_point.y))
+            continue
+        if index == sample_count:
+            points.append((end_point.x, end_point.y))
+            continue
+        t = index / sample_count
+        x = start_point.x + ((end_point.x - start_point.x) * t)
+        y = start_point.y + ((end_point.y - start_point.y) * t)
+        points.append((x, y))
+
+    return points
 
 
 def star_radius(mag: float) -> float:
@@ -412,13 +436,26 @@ def build_svg(
         ras = row["ra"]
         decs = row["dec"]
         for idx in range(0, len(ras), 2):
-            a = project(ras[idx], decs[idx])
-            b = project(ras[idx + 1], decs[idx + 1])
-            parts.append(
-                f'<line x1="{a.x:.2f}" y1="{a.y:.2f}" x2="{b.x:.2f}" y2="{b.y:.2f}" '
-                f'stroke="{LINE_COLOR}" stroke-width="2.15" stroke-linecap="round" '
-                f'stroke-linejoin="round" opacity="0.96" />'
-            )
+            if str(row["name"]) in SURFACE_PROJECTED_CONSTELLATIONS:
+                start_point = project(ras[idx], decs[idx])
+                end_point = project(ras[idx + 1], decs[idx + 1])
+                sampled_points = sample_projected_footprint(start_point, end_point)
+                path_data = " ".join(
+                    f"{'M' if point_index == 0 else 'L'} {point[0]:.2f} {point[1]:.2f}"
+                    for point_index, point in enumerate(sampled_points)
+                )
+                parts.append(
+                    f'<path d="{path_data}" stroke="{LINE_COLOR}" stroke-width="2.15" '
+                    f'stroke-linecap="round" stroke-linejoin="round" opacity="0.96" fill="none" />'
+                )
+            else:
+                a = project(ras[idx], decs[idx])
+                b = project(ras[idx + 1], decs[idx + 1])
+                parts.append(
+                    f'<line x1="{a.x:.2f}" y1="{a.y:.2f}" x2="{b.x:.2f}" y2="{b.y:.2f}" '
+                    f'stroke="{LINE_COLOR}" stroke-width="2.15" stroke-linecap="round" '
+                    f'stroke-linejoin="round" opacity="0.96" />'
+                )
 
         for ra, dec in zip(ras, decs):
             point = project(ra, dec)
@@ -509,18 +546,33 @@ def write_png(
         ras = row["ra"]
         decs = row["dec"]
         for idx in range(0, len(ras), 2):
-            a = project(ras[idx], decs[idx])
-            b = project(ras[idx + 1], decs[idx + 1])
-            (line,) = ax.plot(
-                [a.x, b.x],
-                [a.y, b.y],
-                color=LINE_COLOR,
-                lw=1.35,
-                alpha=0.96,
-                solid_capstyle="round",
-                solid_joinstyle="round",
-                zorder=4,
-            )
+            if str(row["name"]) in SURFACE_PROJECTED_CONSTELLATIONS:
+                start_point = project(ras[idx], decs[idx])
+                end_point = project(ras[idx + 1], decs[idx + 1])
+                sampled_points = sample_projected_footprint(start_point, end_point)
+                (line,) = ax.plot(
+                    [point[0] for point in sampled_points],
+                    [point[1] for point in sampled_points],
+                    color=LINE_COLOR,
+                    lw=1.35,
+                    alpha=0.96,
+                    solid_capstyle="round",
+                    solid_joinstyle="round",
+                    zorder=4,
+                )
+            else:
+                a = project(ras[idx], decs[idx])
+                b = project(ras[idx + 1], decs[idx + 1])
+                (line,) = ax.plot(
+                    [a.x, b.x],
+                    [a.y, b.y],
+                    color=LINE_COLOR,
+                    lw=1.35,
+                    alpha=0.96,
+                    solid_capstyle="round",
+                    solid_joinstyle="round",
+                    zorder=4,
+                )
             line.set_clip_path(dome_clip)
 
         vertices = [project(ra, dec) for ra, dec in zip(ras, decs)]
@@ -621,7 +673,7 @@ def main() -> None:
         "  dec < 0   : r = 0.62 + 0.38 * (abs(dec) / 90) ^ 0.9\n"
         "  if r > 0.70: t = (r - 0.70) / 0.30, s = t^2 * (3 - 2t), r = r - 0.06 * s\n"
         "Polaris is pinned to the exact chart center.\n"
-        "Constellation connectivity follows the original asterism source data.\n"
+        "Octans edges are dome-surface lifted while preserving their existing projected footprint.\n"
         "This output is a conceptual flat-earth dome interpretation, not a standard astronomical projection.\n"
     )
     (OUT_DIR / "render_notes.txt").write_text(notes, encoding="utf-8")
