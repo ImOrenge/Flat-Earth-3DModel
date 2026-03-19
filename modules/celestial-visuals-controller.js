@@ -145,6 +145,7 @@ export function createCelestialVisualsController(deps) {
     ORBIT_DARK_SUN_RIM_OPACITY,
     FIRST_PERSON_SUN_RAY_ALIGNMENT_START,
     FIRST_PERSON_SUN_RAY_ALIGNMENT_END,
+    MOON_TEXTURE_FLIP_LATITUDE_RANGE,
     scaleDimension
   } = constants;
 
@@ -456,8 +457,6 @@ export function createCelestialVisualsController(deps) {
     const nightGlow = snapshot
       ? THREE.MathUtils.clamp((-moonSolarFactor + 0.04) / 0.3, 0, 1)
       : 1;
-    const nightWarmthBase = THREE.MathUtils.clamp((nightGlow - 0.56) / 0.34, 0, 1);
-    const nightWarmth = nightWarmthBase * nightWarmthBase * (3 - (2 * nightWarmthBase));
     const phaseGlow = Math.pow(illuminationFraction, 0.72);
     const shadowCoverage = Math.pow(1 - illuminationFraction, 0.78);
     const terminatorPresence = Math.pow(Math.max(0, 1 - Math.abs((illuminationFraction * 2) - 1)), 0.58);
@@ -466,10 +465,20 @@ export function createCelestialVisualsController(deps) {
     const pulse = 0.5 + (Math.sin(pulseTime * ORBIT_MOON_PULSE_SPEED) * 0.5);
     const auraStrength = nightGlow * THREE.MathUtils.lerp(0.24, 1, phaseGlow);
     const lunarEclipseTint = THREE.MathUtils.clamp(snapshot?.lunarEclipseTint ?? 0, 0, 1);
+    const lunarEclipseShadowStrength = THREE.MathUtils.clamp(snapshot?.lunarEclipseShadowStrength ?? 0, 0, 1);
+    const eclipseWarmth = THREE.MathUtils.clamp(
+      Math.max(lunarEclipseTint, lunarEclipseShadowStrength * 0.45),
+      0,
+      1
+    );
     const lunarEclipseMaskCenterNdc = snapshot?.lunarEclipseMaskCenterNdc ?? null;
     const lunarEclipseMaskRadius = snapshot?.lunarEclipseMaskRadius ?? 0;
     const lunarEclipseMaskSoftnessPx = snapshot?.lunarEclipseMaskSoftnessPx ?? 32;
     const lunarEclipseMaskViewport = snapshot?.lunarEclipseMaskViewport ?? null;
+    const moonLatitudeDegrees = snapshot?.moon?.latitudeDegrees ?? 0;
+    const flipLatitudeRange = Math.max(MOON_TEXTURE_FLIP_LATITUDE_RANGE, 0.0001);
+    const southBandThreshold = -(flipLatitudeRange / 3);
+    const surfaceTextureRotationRadians = moonLatitudeDegrees <= southBandThreshold ? Math.PI : 0;
   
     return {
       aureoleOpacity: (
@@ -494,16 +503,18 @@ export function createCelestialVisualsController(deps) {
       illuminationFraction,
       lightIntensity: ORBIT_MOON_LIGHT_INTENSITY * nightGlow * THREE.MathUtils.lerp(0.14, 1, phaseGlow),
       lunarEclipseTint,
+      lunarEclipseShadowStrength,
       lunarEclipseMaskCenterNdc,
       lunarEclipseMaskRadius,
       lunarEclipseMaskSoftnessPx,
       lunarEclipseMaskViewport,
-      nightWarmth,
+      eclipseWarmth,
+      surfaceTextureRotationRadians,
       shadowAlpha: THREE.MathUtils.lerp(0.12, 0.012, Math.max(shadowCoverage, terminatorPresence)),
       warmFringeOpacity: (
         ORBIT_MOON_WARM_FRINGE_OPACITY *
         auraStrength *
-        THREE.MathUtils.lerp(0.1, 1, nightWarmth) *
+        eclipseWarmth *
         THREE.MathUtils.lerp(0.88, 1.18, 1 - pulse)
       ),
       warmFringeRotation: (Math.PI / 3) - (pulseTime * 0.00012),
@@ -517,13 +528,15 @@ export function createCelestialVisualsController(deps) {
       coolGlowStrength: moonRenderState.coolGlowStrength,
       illuminationFraction: moonRenderState.illuminationFraction,
       lunarEclipseTint: moonRenderState.lunarEclipseTint ?? 0,
+      lunarEclipseShadowStrength: moonRenderState.lunarEclipseShadowStrength ?? 0,
       shadowAlpha: moonRenderState.shadowAlpha,
       waxing: moonRenderState.waxing,
       glowStrength: moonRenderState.glowStrength,
       eclipseMaskCenterNdc: moonRenderState.lunarEclipseMaskCenterNdc,
       eclipseMaskRadius: moonRenderState.lunarEclipseMaskRadius,
       eclipseMaskSoftnessPx: moonRenderState.lunarEclipseMaskSoftnessPx,
-      eclipseMaskViewport: moonRenderState.lunarEclipseMaskViewport
+      eclipseMaskViewport: moonRenderState.lunarEclipseMaskViewport,
+      surfaceTextureRotationRadians: moonRenderState.surfaceTextureRotationRadians
     });
   }
   
@@ -540,24 +553,25 @@ export function createCelestialVisualsController(deps) {
     const coronaMaterial = coronaSprite.material;
     const aureoleMaterial = aureoleSprite.material;
     const warmFringeMaterial = warmFringeSprite.material;
+    const eclipseWarmth = THREE.MathUtils.clamp(moonRenderState.eclipseWarmth ?? 0, 0, 1);
   
     bodyMaterial.emissive.copy(ORBIT_MOON_EMISSIVE_COLOR_DAY).lerp(
       ORBIT_MOON_EMISSIVE_COLOR_NIGHT,
-      moonRenderState.nightWarmth
+      eclipseWarmth
     );
     haloMaterial.color.copy(ORBIT_MOON_HALO_COLOR_DAY).lerp(
       ORBIT_MOON_HALO_COLOR_NIGHT,
-      moonRenderState.nightWarmth
+      eclipseWarmth
     );
     pointLight.color.copy(ORBIT_MOON_LIGHT_COLOR_DAY).lerp(
       ORBIT_MOON_LIGHT_COLOR_NIGHT,
-      moonRenderState.nightWarmth
+      eclipseWarmth
     );
     coolGlowMaterial.color.copy(ORBIT_MOON_COOL_GLOW_COLOR);
     coolGlowMaterial.opacity = moonRenderState.coolGlowOpacity;
     coronaMaterial.color.copy(ORBIT_MOON_LIGHT_COLOR_DAY).lerp(
       ORBIT_MOON_LIGHT_COLOR_NIGHT,
-      moonRenderState.nightWarmth * 0.42
+      eclipseWarmth * 0.42
     );
     coronaMaterial.opacity = moonRenderState.coronaOpacity;
     coronaMaterial.rotation = moonRenderState.coronaRotation;
@@ -568,7 +582,7 @@ export function createCelestialVisualsController(deps) {
     aureoleSprite.scale.setScalar(moonRenderState.aureoleScale);
     warmFringeMaterial.color.copy(ORBIT_MOON_LIGHT_COLOR_DAY).lerp(
       ORBIT_MOON_HALO_COLOR_NIGHT,
-      moonRenderState.nightWarmth
+      eclipseWarmth
     );
     warmFringeMaterial.opacity = moonRenderState.warmFringeOpacity;
     warmFringeMaterial.rotation = moonRenderState.warmFringeRotation;

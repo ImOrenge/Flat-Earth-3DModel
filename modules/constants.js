@@ -3,6 +3,8 @@ import { projectedRadiusFromLatitude } from "./geo-utils.js";
 
 export const DEFAULT_MAP_PATH = "./assets/flat-earth-map-square.svg";
 export const DEFAULT_MAP_LABEL = "assets/flat-earth-map-square.svg";
+export const DEFAULT_MOON_TEXTURE_PATH = "./output/imagegen/moon-full-source.png";
+export const DEFAULT_MOON_TEXTURE_FALLBACK_PATH = "./assets/moon-phases-360-ko.png";
 export const MODEL_SCALE = 2;
 export const scaleDimension = (value) => value * MODEL_SCALE;
 export const CELESTIAL_SIZE_SCALE = 0.6;
@@ -34,6 +36,7 @@ export const POLARIS_CORE_OPACITY = 1;
 export const POLARIS_GLOW_OPACITY = 1;
 export const POLARIS_HALO_OPACITY = 0.48;
 export const TROPIC_LATITUDE = 23.44;
+export const MOON_TEXTURE_FLIP_LATITUDE_RANGE = TROPIC_LATITUDE;
 export const SUN_ORBIT_ALTITUDE_CONTRAST = 2.35;
 export const MOON_ORBIT_ALTITUDE_CONTRAST = 1.85;
 export const spreadOrbitHeight = (baseHeight, offset) =>

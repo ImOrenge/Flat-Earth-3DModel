@@ -3118,6 +3118,7 @@ export function createEclipseController(deps) {
   const tempLunarEclipseDarkSunWorldPos = new THREE.Vector3();
   const lunarEclipseState = {
     currentTint: 0,
+    currentShadowStrength: 0,
     previousRawStageKey: "idle",
     previousCoverage: 0
   };
@@ -3205,27 +3206,71 @@ export function createEclipseController(deps) {
     const egressEnd   = totalityEnd + LUNAR_STAGE_EGRESS_SHARE;
 
     if (t <= approachEnd) {
-      // Slight warming tint in late approach
-      const p = t / Math.max(approachEnd, 0.0001);
-      return p > 0.7 ? THREE.MathUtils.lerp(0, 0.08, (p - 0.7) / 0.3) : 0;
+      return 0;
     }
     if (t <= ingressEnd) {
-      // Ramp up tint during ingress
       const p = (t - approachEnd) / Math.max(LUNAR_STAGE_INGRESS_SHARE, 0.0001);
-      return THREE.MathUtils.lerp(0.08, 1.0, p * p);
+      const delayedP = THREE.MathUtils.clamp((p - 0.45) / 0.55, 0, 1);
+      return delayedP * delayedP;
     }
     if (t <= totalityEnd) {
-      // Full blood moon during totality
       return 1.0;
     }
     if (t <= egressEnd) {
-      // Ramp down during egress
       const p = (t - totalityEnd) / Math.max(LUNAR_STAGE_EGRESS_SHARE, 0.0001);
-      return THREE.MathUtils.lerp(1.0, 0.08, p * p);
+      const fadeP = THREE.MathUtils.clamp((p - 0.2) / 0.8, 0, 1);
+      return 1.0 - (fadeP * fadeP);
     }
-    // Fade out during complete
-    const p = (t - egressEnd) / Math.max(LUNAR_STAGE_COMPLETE_SHARE, 0.0001);
-    return THREE.MathUtils.lerp(0.08, 0, p);
+    return 0;
+  }
+
+  function getLunarStageShadowFromTransit(transit = 0) {
+    const t = THREE.MathUtils.clamp(transit, 0, 1);
+    const approachEnd = LUNAR_STAGE_APPROACH_SHARE;
+    const ingressEnd  = approachEnd + LUNAR_STAGE_INGRESS_SHARE;
+    const totalityEnd = ingressEnd  + LUNAR_STAGE_TOTALITY_SHARE;
+    const egressEnd   = totalityEnd + LUNAR_STAGE_EGRESS_SHARE;
+
+    if (t <= approachEnd) {
+      return 0;
+    }
+    if (t <= ingressEnd) {
+      const p = (t - approachEnd) / Math.max(LUNAR_STAGE_INGRESS_SHARE, 0.0001);
+      return smoothstepCoverage(THREE.MathUtils.clamp(p * 1.12, 0, 1));
+    }
+    if (t <= totalityEnd) {
+      return 1.0;
+    }
+    if (t <= egressEnd) {
+      const p = (t - totalityEnd) / Math.max(LUNAR_STAGE_EGRESS_SHARE, 0.0001);
+      return 1.0 - smoothstepCoverage(p);
+    }
+    return 0;
+  }
+
+  function clearLunarEclipseMaskSnapshot(snapshot) {
+    if (!snapshot) {
+      return;
+    }
+    renderer.getDrawingBufferSize(tempDarkSunMaskViewport);
+    snapshot.lunarEclipseMaskCenterNdc = new THREE.Vector2(0, 0);
+    snapshot.lunarEclipseMaskRadius = 0;
+    snapshot.lunarEclipseMaskSoftnessPx = 0;
+    snapshot.lunarEclipseMaskViewport = tempDarkSunMaskViewport.clone();
+    snapshot.lunarEclipseApproachFactor = 0;
+  }
+
+  function decayLunarEclipseVisuals(snapshot = null, decay = 0.92) {
+    lunarEclipseState.currentTint *= decay;
+    lunarEclipseState.currentShadowStrength *= decay;
+    lunarEclipseState.currentTint = THREE.MathUtils.clamp(lunarEclipseState.currentTint, 0, 1);
+    lunarEclipseState.currentShadowStrength = THREE.MathUtils.clamp(lunarEclipseState.currentShadowStrength, 0, 1);
+    if (snapshot) {
+      snapshot.lunarEclipseTint = lunarEclipseState.currentTint;
+      snapshot.lunarEclipseShadowStrength = lunarEclipseState.currentShadowStrength;
+      clearLunarEclipseMaskSnapshot(snapshot);
+    }
+    return lunarEclipseState.currentTint;
   }
 
   function resetLunarStageState() {
@@ -3285,8 +3330,7 @@ export function createEclipseController(deps) {
     if (window.__E2E_DEBUG_LUNAR) console.log("LUNAR_EVAL_ENTERED", !!snapshot);
 
     if (!snapshot) {
-      lunarEclipseState.currentTint *= 0.92;
-      return 0;
+      return decayLunarEclipseVisuals(null);
     }
 
     // Use the correct moon/dark-sun group depending on walker mode.
@@ -3302,9 +3346,7 @@ export function createEclipseController(deps) {
     const moonIllumination = snapshot.moonPhase?.illuminationFraction ?? 1;
     const isNearFullMoon = moonIllumination >= 0.85;
     if (!isNearFullMoon) {
-      lunarEclipseState.currentTint *= 0.92;
-      snapshot.lunarEclipseTint = lunarEclipseState.currentTint;
-      return lunarEclipseState.currentTint;
+      return decayLunarEclipseVisuals(snapshot);
     }
 
     // ─── Staged Lunar Eclipse Path ───
@@ -3312,8 +3354,11 @@ export function createEclipseController(deps) {
     // instead of relying on unreliable 2D projection overlap detection.
     if (simulationState.darkSunLunarStageLock) {
       const transit = simulationState.darkSunLunarStageTransit ?? 0;
+      const stagedShadow = getLunarStageShadowFromTransit(transit);
       const stagedTint = getLunarStageTintFromTransit(transit);
+      lunarEclipseState.currentShadowStrength = stagedShadow;
       lunarEclipseState.currentTint = stagedTint;
+      snapshot.lunarEclipseShadowStrength = stagedShadow;
       snapshot.lunarEclipseTint = stagedTint;
 
       // Determine stage key for UI
@@ -3334,7 +3379,7 @@ export function createEclipseController(deps) {
       snapshot.activeLunarEclipseData = {
         active: isActive,
         total: isTotal,
-        coverage: stagedTint,
+        coverage: Math.max(stagedShadow, stagedTint),
         direction: transit < 0.5 ? "ingress" : "egress",
         hasContact: isActive,
         hasVisibleOverlap: isActive,
@@ -3361,15 +3406,22 @@ export function createEclipseController(deps) {
         getWorldBodyRadius(darkSunBody, ORBIT_DARK_SUN_SIZE)
       );
 
-      renderer.getDrawingBufferSize(tempDarkSunMaskViewport);
-      snapshot.lunarEclipseMaskCenterNdc = new THREE.Vector2(darkSunDisc.centerX, darkSunDisc.centerY);
-      snapshot.lunarEclipseMaskRadius = darkSunDisc.radius;
-      snapshot.lunarEclipseMaskSoftnessPx = Math.max(darkSunDisc.radius * Math.max(tempDarkSunMaskViewport.x, 1) * 0.15, 8);
-      snapshot.lunarEclipseMaskViewport = tempDarkSunMaskViewport.clone();
+      const stagedMaskActive = stagedShadow > 0.001 || stagedTint > 0.001;
+      if (stagedMaskActive) {
+        renderer.getDrawingBufferSize(tempDarkSunMaskViewport);
+        snapshot.lunarEclipseMaskCenterNdc = new THREE.Vector2(darkSunDisc.centerX, darkSunDisc.centerY);
+        snapshot.lunarEclipseMaskRadius = darkSunDisc.radius;
+        snapshot.lunarEclipseMaskSoftnessPx = Math.max(darkSunDisc.radius * Math.max(tempDarkSunMaskViewport.x, 1) * 0.15, 8);
+        snapshot.lunarEclipseMaskViewport = tempDarkSunMaskViewport.clone();
+      } else {
+        clearLunarEclipseMaskSnapshot(snapshot);
+        snapshot.lunarEclipseApproachFactor = rawStageKey === "approach" ? 1.0 : 0.0;
+      }
 
       window.DEBUG_LUNAR_MASK = {
         staged: true,
         transit,
+        stagedShadow,
         stagedTint,
         rawStageKey,
         moonAngle: simulationState.orbitMoonAngle,
@@ -3422,10 +3474,7 @@ export function createEclipseController(deps) {
     };
 
     if (!visibleInView) {
-      // Smoothly fade out
-      lunarEclipseState.currentTint *= 0.92;
-      snapshot.lunarEclipseTint = lunarEclipseState.currentTint;
-      return lunarEclipseState.currentTint;
+      return decayLunarEclipseVisuals(snapshot);
     }
 
     const eclipseMetrics = getProjectedEclipseMetrics({
@@ -3457,9 +3506,13 @@ export function createEclipseController(deps) {
     const previousRawStageKey = lunarEclipseState.previousRawStageKey;
     const coverageDelta = effectiveCoverage - previousCoverage;
     const direction = getSolarEclipseDirection(previousRawStageKey, coverageDelta);
-    
-    const hasContact = contactDepthPx >= SOLAR_ECLIPSE_CONTACT_START_PX;
-    const hasVisibleOverlap = visibleContactDepthPx >= SOLAR_ECLIPSE_VISIBLE_CONTACT_PX && effectiveCoverage >= SOLAR_ECLIPSE_MIN_COVERAGE;
+    const darkSunDiscAvailable = darkSunDisc.visible && darkSunDisc.radius > 0.00001;
+    const hasContact = darkSunDiscAvailable && contactDepthPx >= SOLAR_ECLIPSE_CONTACT_START_PX;
+    const hasVisibleOverlap = (
+      darkSunDiscAvailable &&
+      visibleContactDepthPx >= SOLAR_ECLIPSE_VISIBLE_CONTACT_PX &&
+      effectiveCoverage >= SOLAR_ECLIPSE_MIN_COVERAGE
+    );
     const active = hasVisibleOverlap;
     const total = (
       active &&
@@ -3477,6 +3530,7 @@ export function createEclipseController(deps) {
       rawStageKey = direction === "egress" ? "partialEgress" : "partialIngress";
     } else if (
       approachAligned &&
+      darkSunDiscAvailable &&
       !hasVisibleOverlap &&
       normalizedDistance <= SOLAR_ECLIPSE_APPROACH_DISTANCE_FACTOR
     ) {
@@ -3503,39 +3557,44 @@ export function createEclipseController(deps) {
     };
 
     // Calculate precise mask tint strength depending on the active stage.
+    let shadowTarget = 0;
     let tintTarget = 0;
+    const partialCoverageStrength = THREE.MathUtils.clamp(
+      effectiveCoverage / Math.max(SOLAR_ECLIPSE_TOTAL_COVERAGE, 0.0001),
+      0,
+      1
+    );
     
-    if (active) {
-      if (rawStageKey === "totality") {
-        tintTarget = 1.0;
-      } else if (rawStageKey === "partialIngress" || rawStageKey === "partialEgress") {
-        // Linearly interpolate the red mask strength based on the partial coverage relative to totality
-        const partialStrength = THREE.MathUtils.clamp(
-          effectiveCoverage / Math.max(SOLAR_ECLIPSE_TOTAL_COVERAGE, 0.0001),
-          0,
-          1
-        );
-        // Exaggerate visually slightly for partial phases: 
-        tintTarget = THREE.MathUtils.clamp(partialStrength * 1.25, 0, 1);
-      }
-    } else if (rawStageKey === "approach" || rawStageKey === "idle") {
-      // Smooth onset approach: start tinting vaguely when dark sun disc edge is very close.
-      const centerDist = Math.hypot(moonDisc.centerX - darkSunDisc.centerX, moonDisc.centerY - darkSunDisc.centerY);
-      const approachFactor = THREE.MathUtils.clamp(
-        1 - ((centerDist - (moonDisc.radius + darkSunDisc.radius)) / Math.max(moonDisc.radius * 1.4, 0.0001)),
-        0, 1
+    if (rawStageKey === "totality") {
+      shadowTarget = 1.0;
+      tintTarget = 1.0;
+    } else if (hasContact) {
+      const shadowProgress = smoothstepCoverage(THREE.MathUtils.clamp(partialCoverageStrength * 1.18, 0, 1));
+      shadowTarget = THREE.MathUtils.clamp(
+        Math.max(shadowProgress, hasVisibleOverlap ? 0.18 : 0.08),
+        0,
+        1
       );
-      tintTarget = Math.max(getCircleOverlapCoverage(moonDisc.radius, darkSunDisc.radius, centerDist), approachFactor * 0.04);
-      tintTarget = smoothstepCoverage(tintTarget);
+      if (active) {
+        const tintProgress = THREE.MathUtils.clamp((partialCoverageStrength - 0.56) / 0.44, 0, 1);
+        tintTarget = tintProgress * tintProgress;
+      }
+    }
+
+    if (!hasContact) {
+      lunarEclipseState.currentTint = 0;
     }
     
-    // Smooth the tint over frames mechanically
-    const blend = tintTarget > lunarEclipseState.currentTint ? 0.28 : 0.08;
-    lunarEclipseState.currentTint += (tintTarget - lunarEclipseState.currentTint) * blend;
+    const shadowBlend = shadowTarget > lunarEclipseState.currentShadowStrength ? 0.26 : 0.2;
+    lunarEclipseState.currentShadowStrength += (shadowTarget - lunarEclipseState.currentShadowStrength) * shadowBlend;
+    lunarEclipseState.currentShadowStrength = THREE.MathUtils.clamp(lunarEclipseState.currentShadowStrength, 0, 1);
+    const tintBlend = tintTarget > lunarEclipseState.currentTint ? 0.18 : 0.24;
+    lunarEclipseState.currentTint += (tintTarget - lunarEclipseState.currentTint) * tintBlend;
     lunarEclipseState.currentTint = THREE.MathUtils.clamp(lunarEclipseState.currentTint, 0, 1);
     
+    snapshot.lunarEclipseShadowStrength = lunarEclipseState.currentShadowStrength;
     snapshot.lunarEclipseTint = lunarEclipseState.currentTint;
-    snapshot.lunarEclipseApproachFactor = (rawStageKey === "approach" || active) ? 1.0 : 0.0;
+    snapshot.lunarEclipseApproachFactor = rawStageKey === "approach" || hasContact ? 1.0 : 0.0;
     
     // For Lunar Eclipse Masking, the dark sun is technically behind the Earth
     // so standard getProjectedDisc fails or culls it out. We must calculate its
@@ -3545,22 +3604,34 @@ export function createEclipseController(deps) {
     // We already calculated the effective mask radius and position prior to evaluating collision metrics.
     // Sync those final values to the snapshot from the resolved abstract disc.
     
-    renderer.getDrawingBufferSize(tempDarkSunMaskViewport);
-    snapshot.lunarEclipseMaskCenterNdc = new THREE.Vector2(darkSunDisc.centerX, darkSunDisc.centerY);
-    snapshot.lunarEclipseMaskRadius = darkSunDisc.radius;
-    snapshot.lunarEclipseMaskSoftnessPx = Math.max(darkSunDisc.radius * Math.max(tempDarkSunMaskViewport.x, 1) * 0.15, 8);
-    snapshot.lunarEclipseMaskViewport = tempDarkSunMaskViewport.clone();
+    const maskActive = hasContact && (
+      lunarEclipseState.currentShadowStrength > 0.001 ||
+      lunarEclipseState.currentTint > 0.001
+    );
+    if (maskActive) {
+      renderer.getDrawingBufferSize(tempDarkSunMaskViewport);
+      snapshot.lunarEclipseMaskCenterNdc = new THREE.Vector2(darkSunDisc.centerX, darkSunDisc.centerY);
+      snapshot.lunarEclipseMaskRadius = darkSunDisc.radius;
+      snapshot.lunarEclipseMaskSoftnessPx = Math.max(darkSunDisc.radius * Math.max(tempDarkSunMaskViewport.x, 1) * 0.15, 8);
+      snapshot.lunarEclipseMaskViewport = tempDarkSunMaskViewport.clone();
+    } else {
+      clearLunarEclipseMaskSnapshot(snapshot);
+      snapshot.lunarEclipseApproachFactor = rawStageKey === "approach" ? 1.0 : 0.0;
+    }
     // TEMPORARY LOGGING TO DEBUG MASK
-    if (active) {
+    if (maskActive) {
        window.DEBUG_LUNAR_MASK = {
          distToMoon: Math.hypot(moonDisc.centerX - darkSunDisc.centerX, moonDisc.centerY - darkSunDisc.centerY),
          radius: snapshot.lunarEclipseMaskRadius,
          maskX: darkSunDisc.centerX,
-
          maskY: darkSunDisc.centerY,
          viewport: `${snapshot.lunarEclipseMaskViewport.x} x ${snapshot.lunarEclipseMaskViewport.y}`,
          culled: !darkSunDisc.visible,
-         darkSunZ: walkerState.enabled ? observerDarkSun.position.z : orbitDarkSun.position.z
+         darkSunZ: walkerState.enabled ? observerDarkSun.position.z : orbitDarkSun.position.z,
+         shadowTarget,
+         currentShadowStrength: lunarEclipseState.currentShadowStrength,
+         tintTarget,
+         currentTint: lunarEclipseState.currentTint
        };
     }
 

@@ -4,6 +4,8 @@ import * as constants from "./constants.js";
 const {
   DEFAULT_MAP_PATH,
   DEFAULT_MAP_LABEL,
+  DEFAULT_MOON_TEXTURE_PATH,
+  DEFAULT_MOON_TEXTURE_FALLBACK_PATH,
   MODEL_SCALE,
   scaleDimension,
   CELESTIAL_SIZE_SCALE,
@@ -593,17 +595,22 @@ export function setupScene({ canvas }) {
   }
   
   function enhanceMoonMaterialWithPhase(material) {
+    const existingPhaseState = material.userData.moonPhaseState ?? {};
     material.userData.moonPhaseState = {
       coolGlowStrength: 0,
       glowStrength: 1,
       illuminationFraction: 1,
       lunarEclipseTint: 0,
+      lunarEclipseShadowStrength: 0,
       shadowAlpha: 0.08,
       waxing: 1,
       eclipseMaskCenterNdc: new THREE.Vector2(),
       eclipseMaskRadius: 0,
       eclipseMaskSoftnessPx: 32,
-      eclipseMaskViewport: new THREE.Vector2(1, 1)
+      eclipseMaskViewport: new THREE.Vector2(1, 1),
+      surfaceTexture: existingPhaseState.surfaceTexture ?? null,
+      surfaceTextureEnabled: existingPhaseState.surfaceTexture ? 1 : 0,
+      surfaceTextureRotationRadians: existingPhaseState.surfaceTextureRotationRadians ?? 0
     };
   
     material.onBeforeCompile = (shader) => {
@@ -612,12 +619,16 @@ export function setupScene({ canvas }) {
       shader.uniforms.moonGlowStrength = { value: moonPhaseState.glowStrength };
       shader.uniforms.moonIlluminationFraction = { value: moonPhaseState.illuminationFraction };
       shader.uniforms.moonLunarEclipseTint = { value: moonPhaseState.lunarEclipseTint };
+      shader.uniforms.moonLunarEclipseShadowStrength = { value: moonPhaseState.lunarEclipseShadowStrength };
       shader.uniforms.moonShadowAlpha = { value: moonPhaseState.shadowAlpha };
       shader.uniforms.moonWaxing = { value: moonPhaseState.waxing };
       shader.uniforms.moonEclipseMaskCenterNdc = { value: moonPhaseState.eclipseMaskCenterNdc };
       shader.uniforms.moonEclipseMaskRadius = { value: moonPhaseState.eclipseMaskRadius };
       shader.uniforms.moonEclipseMaskSoftnessPx = { value: moonPhaseState.eclipseMaskSoftnessPx };
       shader.uniforms.moonEclipseMaskViewport = { value: moonPhaseState.eclipseMaskViewport };
+      shader.uniforms.moonSurfaceMap = { value: moonPhaseState.surfaceTexture };
+      shader.uniforms.moonSurfaceMapEnabled = { value: moonPhaseState.surfaceTextureEnabled };
+      shader.uniforms.moonSurfaceTextureRotationRadians = { value: moonPhaseState.surfaceTextureRotationRadians };
       material.userData.phaseShader = shader;
   
       shader.vertexShader = shader.vertexShader
@@ -641,16 +652,38 @@ export function setupScene({ canvas }) {
   uniform float moonGlowStrength;
   uniform float moonIlluminationFraction;
   uniform float moonLunarEclipseTint;
+  uniform float moonLunarEclipseShadowStrength;
   uniform float moonShadowAlpha;
   uniform float moonWaxing;
   uniform vec2 moonEclipseMaskCenterNdc;
   uniform float moonEclipseMaskRadius;
   uniform float moonEclipseMaskSoftnessPx;
-  uniform vec2 moonEclipseMaskViewport;`
+  uniform vec2 moonEclipseMaskViewport;
+  uniform sampler2D moonSurfaceMap;
+  uniform float moonSurfaceMapEnabled;
+  uniform float moonSurfaceTextureRotationRadians;
+
+  vec2 rotateMoonDiscPoint(vec2 point, float angle) {
+    float s = sin(angle);
+    float c = cos(angle);
+    return vec2(
+      (point.x * c) - (point.y * s),
+      (point.x * s) + (point.y * c)
+    );
+  }`
         )
         .replace(
           "#include <opaque_fragment>",
           `vec3 moonViewNormal = normalize(vMoonViewNormal);
+  if (moonSurfaceMapEnabled > 0.5 && moonViewNormal.z > 0.0) {
+    vec2 moonDiscPoint = rotateMoonDiscPoint(moonViewNormal.xy, moonSurfaceTextureRotationRadians);
+    vec2 moonSurfaceUv = vec2(
+      (moonDiscPoint.x * 0.5) + 0.5,
+      (moonDiscPoint.y * 0.5) + 0.5
+    );
+    vec4 moonSurfaceTexel = texture2D(moonSurfaceMap, moonSurfaceUv);
+    diffuseColor.rgb = moonSurfaceTexel.rgb;
+  }
   float phaseCos = clamp((moonIlluminationFraction * 2.0) - 1.0, -1.0, 1.0);
   float phaseSin = sqrt(max(0.0, 1.0 - (phaseCos * phaseCos)));
   float phaseDirection = mix(-1.0, 1.0, moonWaxing);
@@ -658,26 +691,35 @@ export function setupScene({ canvas }) {
   float phaseDot = dot(moonViewNormal, phaseLightDirection);
   float phaseMask = smoothstep(-0.004, 0.02, phaseDot);
   phaseMask = mix(phaseMask, 1.0, max(phaseCos, 0.0));
-  float shadowShade = mix(0.0, 0.05, moonGlowStrength);
+  vec3 moonSurfaceColor = diffuseColor.rgb;
+  float moonSurfaceLuma = dot(moonSurfaceColor, vec3(0.2126, 0.7152, 0.0722));
+  moonSurfaceColor = clamp(
+    ((moonSurfaceColor - vec3(moonSurfaceLuma)) * 1.18) + vec3((moonSurfaceLuma * 1.06) + 0.015),
+    0.0,
+    1.0
+  );
+  float shadowShade = mix(0.12, 0.24, moonGlowStrength);
   float litShade = mix(1.04, 1.22, pow(max(moonViewNormal.z, 0.0), 0.35));
   float phaseShade = mix(shadowShade, litShade, phaseMask);
   float phaseShadow = pow(max(1.0 - phaseMask, 0.0), 1.05);
   float shadowAlpha = mix(1.0, moonShadowAlpha, phaseShadow);
   float terminatorBand = (1.0 - smoothstep(0.0, 0.42, abs(phaseDot))) * moonCoolGlowStrength;
   float coolScatter = pow(max(1.0 - phaseMask, 0.0), 1.35) * pow(max(moonViewNormal.z, 0.0), 0.8) * moonCoolGlowStrength;
-  float earthshine = pow(max(1.0 - phaseMask, 0.0), 1.2) * (0.02 + (moonCoolGlowStrength * 0.05));
-  float selfGlow = mix(0.14, 0.42, moonGlowStrength);
-  vec3 moonSurfaceLight = diffuseColor.rgb * phaseShade;
-  vec3 moonSelfGlow = totalEmissiveRadiance * selfGlow;
+  float earthshine = pow(max(1.0 - phaseMask, 0.0), 1.08) * (0.08 + (moonCoolGlowStrength * 0.1));
+  float selfGlow = mix(0.05, 0.16, moonGlowStrength);
+  vec3 moonSurfaceLight = moonSurfaceColor * phaseShade;
+  vec3 moonSelfGlow = totalEmissiveRadiance * selfGlow * mix(vec3(1.0), moonSurfaceColor, 0.72);
   outgoingLight = moonSurfaceLight + moonSelfGlow;
-  outgoingLight += vec3(0.02, 0.03, 0.05) * earthshine;
+  outgoingLight += moonSurfaceColor * earthshine * 0.42;
+  outgoingLight += vec3(0.02, 0.03, 0.05) * earthshine * 0.45;
   outgoingLight += vec3(0.28, 0.46, 0.88) * ((coolScatter * 0.24) + (terminatorBand * 0.12));
   // Lunar eclipse: tint the moon toward blood-red when dark sun overlaps
   vec3 bloodMoonColor = vec3(0.72, 0.04, 0.01);
   float eclipseSurface = max(phaseShade, 0.18);
   
   float lunarEclipseMask = 0.0;
-  if (moonLunarEclipseTint > 0.001) {
+  float lunarEclipseInfluence = max(moonLunarEclipseShadowStrength, moonLunarEclipseTint);
+  if (lunarEclipseInfluence > 0.001) {
     vec2 moonEclipseFragNdc = vec2(
       ((gl_FragCoord.x / max(moonEclipseMaskViewport.x, 1.0)) * 2.0) - 1.0,
       ((gl_FragCoord.y / max(moonEclipseMaskViewport.y, 1.0)) * 2.0) - 1.0
@@ -698,48 +740,61 @@ export function setupScene({ canvas }) {
     );
   }
   
-  // The global moonLunarEclipseTint essentially dictates how 'intense' the blood red is overall,
-  // but it is MULTIPLIED by the spatial coverage of the Earth's shadow (lunarEclipseMask).
+  float finalEclipseShadow = moonLunarEclipseShadowStrength * lunarEclipseMask;
+  outgoingLight *= mix(1.0, 0.08, finalEclipseShadow);
+
   float finalEclipseTint = moonLunarEclipseTint * lunarEclipseMask;
-  outgoingLight = mix(outgoingLight, bloodMoonColor * eclipseSurface, finalEclipseTint * 0.97);
-  outgoingLight += vec3(0.22, 0.015, 0.006) * finalEclipseTint * (0.24 + terminatorBand * 0.18);
-  diffuseColor.a = mix(diffuseColor.a * shadowAlpha, max(diffuseColor.a * shadowAlpha, 0.88), finalEclipseTint);
-  
-  // Cutout logic: To make it look like the moon is "eroded" (but technically just extremely dark, as eclipses are),
-  // we can also significantly kill outgoing light in the core of the shadow, before the blood red takes over.
-  float coreShadow = lunarEclipseMask * (1.0 - (moonLunarEclipseTint * 0.85)); // Deeply dim before full red
-  outgoingLight *= max(0.0, 1.0 - (coreShadow * 0.85)); // Dim the base moon light in the shadow area
+  float eclipseDetailStrength = smoothstep(0.32, 1.0, finalEclipseTint);
+  vec3 bloodMoonSurfaceColor = mix(
+    bloodMoonColor * eclipseSurface,
+    moonSurfaceColor * vec3(0.78, 0.14, 0.09) * mix(0.42, 0.9, moonSurfaceLuma),
+    0.16 + (eclipseDetailStrength * 0.24)
+  );
+  outgoingLight = mix(outgoingLight, bloodMoonSurfaceColor, finalEclipseTint * 0.92);
+  outgoingLight += vec3(0.2, 0.018, 0.008) * finalEclipseTint * (0.16 + terminatorBand * 0.18);
+  outgoingLight += moonSurfaceColor * vec3(0.055, 0.01, 0.008) * eclipseDetailStrength * finalEclipseTint;
+  diffuseColor.a = mix(
+    diffuseColor.a * shadowAlpha,
+    max(diffuseColor.a * shadowAlpha, 0.88),
+    max(finalEclipseShadow * 0.35, finalEclipseTint)
+  );
   
   #include <opaque_fragment>`
         );
     };
   
-    material.customProgramCacheKey = () => "moon-phase-v4";
+    material.customProgramCacheKey = () => "moon-phase-v7";
   }
   
   function setMoonMaterialPhase(material, {
     coolGlowStrength = 0,
     illuminationFraction = 1,
     lunarEclipseTint = 0,
+    lunarEclipseShadowStrength = 0,
     shadowAlpha = 0.08,
     waxing = true,
     glowStrength = 1,
     eclipseMaskCenterNdc = null,
     eclipseMaskRadius = 0,
     eclipseMaskSoftnessPx = 32,
-    eclipseMaskViewport = null
+    eclipseMaskViewport = null,
+    surfaceTextureRotationRadians = null
   }) {
     const phaseState = material.userData.moonPhaseState ?? {
       coolGlowStrength: 0,
       glowStrength: 1,
       illuminationFraction: 1,
       lunarEclipseTint: 0,
+      lunarEclipseShadowStrength: 0,
       shadowAlpha: 0.08,
       waxing: 1,
       eclipseMaskCenterNdc: new THREE.Vector2(),
       eclipseMaskRadius: 0,
       eclipseMaskSoftnessPx: 32,
-      eclipseMaskViewport: new THREE.Vector2(1, 1)
+      eclipseMaskViewport: new THREE.Vector2(1, 1),
+      surfaceTexture: null,
+      surfaceTextureEnabled: 0,
+      surfaceTextureRotationRadians: 0
     };
     
     if (eclipseMaskCenterNdc) phaseState.eclipseMaskCenterNdc.copy(eclipseMaskCenterNdc);
@@ -751,8 +806,12 @@ export function setupScene({ canvas }) {
     phaseState.glowStrength = THREE.MathUtils.clamp(glowStrength, 0, 1);
     phaseState.illuminationFraction = THREE.MathUtils.clamp(illuminationFraction, 0, 1);
     phaseState.lunarEclipseTint = THREE.MathUtils.clamp(lunarEclipseTint, 0, 1);
+    phaseState.lunarEclipseShadowStrength = THREE.MathUtils.clamp(lunarEclipseShadowStrength, 0, 1);
     phaseState.shadowAlpha = THREE.MathUtils.clamp(shadowAlpha, 0.01, 1);
     phaseState.waxing = waxing ? 1 : 0;
+    if (Number.isFinite(surfaceTextureRotationRadians)) {
+      phaseState.surfaceTextureRotationRadians = THREE.MathUtils.clamp(surfaceTextureRotationRadians, 0, Math.PI);
+    }
     material.userData.moonPhaseState = phaseState;
   
     if (material.userData.phaseShader) {
@@ -760,12 +819,16 @@ export function setupScene({ canvas }) {
       material.userData.phaseShader.uniforms.moonGlowStrength.value = phaseState.glowStrength;
       material.userData.phaseShader.uniforms.moonIlluminationFraction.value = phaseState.illuminationFraction;
       material.userData.phaseShader.uniforms.moonLunarEclipseTint.value = phaseState.lunarEclipseTint;
+      material.userData.phaseShader.uniforms.moonLunarEclipseShadowStrength.value = phaseState.lunarEclipseShadowStrength;
       material.userData.phaseShader.uniforms.moonShadowAlpha.value = phaseState.shadowAlpha;
       material.userData.phaseShader.uniforms.moonWaxing.value = phaseState.waxing;
       material.userData.phaseShader.uniforms.moonEclipseMaskCenterNdc.value.copy(phaseState.eclipseMaskCenterNdc);
       material.userData.phaseShader.uniforms.moonEclipseMaskRadius.value = phaseState.eclipseMaskRadius;
       material.userData.phaseShader.uniforms.moonEclipseMaskSoftnessPx.value = phaseState.eclipseMaskSoftnessPx;
       material.userData.phaseShader.uniforms.moonEclipseMaskViewport.value.copy(phaseState.eclipseMaskViewport);
+      material.userData.phaseShader.uniforms.moonSurfaceMap.value = phaseState.surfaceTexture;
+      material.userData.phaseShader.uniforms.moonSurfaceMapEnabled.value = phaseState.surfaceTextureEnabled;
+      material.userData.phaseShader.uniforms.moonSurfaceTextureRotationRadians.value = phaseState.surfaceTextureRotationRadians;
     }
   }
   
@@ -1438,6 +1501,68 @@ export function setupScene({ canvas }) {
   observerMoonAureole.visible = false;
   const observerMoonWarmFringe = observerMoon.children[6];
   observerMoonWarmFringe.material = observerMoonWarmFringe.material.clone();
+
+  function configureMoonSurfaceTexture(texture) {
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+    texture.needsUpdate = true;
+  }
+
+  function applyMoonSurfaceTextureToMaterial(material, texture) {
+    const phaseState = material.userData.moonPhaseState ?? {
+      coolGlowStrength: 0,
+      glowStrength: 1,
+      illuminationFraction: 1,
+      lunarEclipseTint: 0,
+      lunarEclipseShadowStrength: 0,
+      shadowAlpha: 0.08,
+      waxing: 1,
+      eclipseMaskCenterNdc: new THREE.Vector2(),
+      eclipseMaskRadius: 0,
+      eclipseMaskSoftnessPx: 32,
+      eclipseMaskViewport: new THREE.Vector2(1, 1),
+      surfaceTexture: null,
+      surfaceTextureEnabled: 0,
+      surfaceTextureRotationRadians: 0
+    };
+    phaseState.surfaceTexture = texture;
+    phaseState.surfaceTextureEnabled = texture ? 1 : 0;
+    material.userData.moonPhaseState = phaseState;
+    material.map = null;
+
+    if (material.userData.phaseShader) {
+      material.userData.phaseShader.uniforms.moonSurfaceMap.value = texture;
+      material.userData.phaseShader.uniforms.moonSurfaceMapEnabled.value = phaseState.surfaceTextureEnabled;
+    }
+
+    material.needsUpdate = true;
+  }
+
+  function applyMoonSurfaceTexture(texture) {
+    configureMoonSurfaceTexture(texture);
+    applyMoonSurfaceTextureToMaterial(orbitMoonBody.material, texture);
+    applyMoonSurfaceTextureToMaterial(observerMoonBody.material, texture);
+  }
+
+  const moonTextureLoader = new THREE.TextureLoader();
+  moonTextureLoader.load(
+    DEFAULT_MOON_TEXTURE_PATH,
+    (texture) => {
+      applyMoonSurfaceTexture(texture);
+    },
+    undefined,
+    () => {
+      moonTextureLoader.load(
+        DEFAULT_MOON_TEXTURE_FALLBACK_PATH,
+        (fallbackTexture) => {
+          applyMoonSurfaceTexture(fallbackTexture);
+        }
+      );
+    }
+  );
+
   enhanceMoonMaterialWithPhase(orbitMoonBody.material);
   enhanceMoonMaterialWithPhase(observerMoonBody.material);
   observerMoon.visible = false;
