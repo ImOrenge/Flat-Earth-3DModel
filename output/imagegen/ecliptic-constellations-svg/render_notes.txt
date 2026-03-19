@@ -1,0 +1,4 @@
+Deterministic astronomy chart generated from Stellarium western asterisms + HYG star positions.
+Start longitude cut: 31.0 deg
+Ecliptic latitude extent: +/-36.0 deg
+Included constellations: Aries, Taurus, Gemini, Cancer, Leo, Virgo, Libra, Scorpius, Ophiuchus, Sagittarius, Capricornus, Aquarius, Pisces

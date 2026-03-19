@@ -1,0 +1,5 @@
+North-sky dome chart centered on Polaris.
+Projection: azimuthal equidistant
+Hemisphere radius: 90 degrees from Polaris
+Polaris center: RA 2.52975 h, Dec 89.264109 deg
+Labeled reference constellations: Andromeda, Aries, Auriga, Bootes, Camelopardalis, Cassiopeia, Cepheus, Corona Borealis, Cygnus, Draco, Gemini, Hercules, Lacerta, Lyra, Pegasus, Perseus, Taurus, Ursa Major, Ursa Minor

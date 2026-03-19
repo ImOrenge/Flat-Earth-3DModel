@@ -1,0 +1,11 @@
+Flat-earth illustrative dome constellation chart.
+Source data: Stellarium western asterisms + HYG visible stars.
+Projection is intentionally non-standard.
+Angular position is derived from right ascension only.
+Radial warp:
+  dec >= 0  : r = 0.62 * ((90 - dec) / 90) ^ 0.75
+  dec < 0   : r = 0.62 + 0.38 * (abs(dec) / 90) ^ 0.9
+  if r > 0.70: t = (r - 0.70) / 0.30, s = t^2 * (3 - 2t), r = r - 0.06 * s
+Polaris is pinned to the exact chart center.
+Constellation connectivity follows the original asterism source data.
+This output is a conceptual flat-earth dome interpretation, not a standard astronomical projection.

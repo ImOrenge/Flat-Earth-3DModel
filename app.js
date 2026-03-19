@@ -438,7 +438,7 @@ function setControlTab(tabKey) {
 }
 
 import { setupScene } from "./modules/scene-setup.js";
-import { createConstellations } from "./modules/constellation-setup.js";
+import { createConstellations } from "./modules/constellation-setup.js?v=20260319-flat-earth-dome7";
 const {
   renderer,
   scene,
