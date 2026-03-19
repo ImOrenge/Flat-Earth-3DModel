@@ -446,8 +446,45 @@
               <span class="field-label">Launchpad</span>
               <select class="select-input" id="rocket-spaceport-select"></select>
             </label>
+            <label class="field" for="rocket-type-select">
+              <span class="field-label">Rocket Type</span>
+              <select class="select-input" id="rocket-type-select">
+                <option value="two-stage" selected>2-Stage (Maneuvering)</option>
+                <option value="single">Single Stage</option>
+              </select>
+            </label>
             <div class="button-row compact" style="margin-top: 16px;">
               <button class="button primary compact-button" id="rocket-launch-btn" type="button">Launch Rocket</button>
+            </div>
+          </section>
+
+          <section class="route-panel route-summary-panel" id="rocket-telemetry-panel" style="display:none;">
+            <p class="orbit-title">항법 데이터</p>
+            <div class="coord-grid">
+              <div class="coord-card">
+                <span class="coord-label">상태</span>
+                <strong class="coord-value" id="tel-state">—</strong>
+              </div>
+              <div class="coord-card">
+                <span class="coord-label">고도</span>
+                <strong class="coord-value" id="tel-alt">—</strong>
+              </div>
+              <div class="coord-card">
+                <span class="coord-label">속도</span>
+                <strong class="coord-value" id="tel-speed">—</strong>
+              </div>
+              <div class="coord-card">
+                <span class="coord-label">단계 경과</span>
+                <strong class="coord-value" id="tel-stage-t">—</strong>
+              </div>
+              <div class="coord-card">
+                <span class="coord-label">궁창 접촉</span>
+                <strong class="coord-value" id="tel-scrape-t">—</strong>
+              </div>
+              <div class="coord-card">
+                <span class="coord-label">잔해</span>
+                <strong class="coord-value" id="tel-debris">—</strong>
+              </div>
             </div>
           </section>
         </div>
@@ -455,6 +492,6 @@
     </div>
   </div>
 
-<script type="module" src="./app.js?v=20260314-magnetic-pinecone3"></script>
+<script type="module" src="./app.js?v=20260318-twostage4"></script>
 </body>
 </html>

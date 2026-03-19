@@ -43,7 +43,7 @@ export function setupInputHandlers(deps) {
     seasonalEventButtons, setDemoMoonOrbitOffsetFromPhase
   } = deps;
 
-  const { rocketSpaceportSelect, rocketLaunchBtn } = ui;
+  const { rocketSpaceportSelect, rocketTypeSelect, rocketLaunchBtn } = ui;
 
   const {
     WALKER_PITCH_MIN,
@@ -710,9 +710,10 @@ export function setupInputHandlers(deps) {
 
   if (rocketLaunchBtn && rocketSpaceportSelect) {
     rocketLaunchBtn.addEventListener("click", () => {
-      const index = parseInt(rocketSpaceportSelect.value, 10);
+      const index     = parseInt(rocketSpaceportSelect.value, 10);
+      const rocketType = rocketTypeSelect ? rocketTypeSelect.value : "two-stage";
       if (!isNaN(index)) {
-        rocketApi.launchRocket(index);
+        rocketApi.launchRocket(index, rocketType);
       }
     });
   }
