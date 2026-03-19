@@ -1129,10 +1129,23 @@ function setDemoMoonOrbitOffsetFromPhase(dateMs = simulationState.demoPhaseDateM
 }
 
 function syncDemoMoonOrbitToSun() {
-  simulationState.moonBandProgress = simulationState.sunBandProgress;
-  simulationState.moonBandDirection = simulationState.sunBandDirection;
   simulationState.orbitMoonAngle =
     simulationState.orbitSunAngle + (simulationState.moonSunOrbitOffsetRadians ?? 0);
+
+  // Derive the 4-season altitude (band progress) from its own angle
+  // so the moon mathematically rides its own unique 12-turn coil!
+  const moonTurns = Math.max(magneticFieldApi.getCoilOrbitProfile("moon").turns ?? 12, 1);
+  const totalCoilRadians = moonTurns * 2 * Math.PI;
+  const absoluteAngle = Math.abs(simulationState.orbitMoonAngle);
+  const phaseInCycle = absoluteAngle % (2 * totalCoilRadians);
+  
+  if (phaseInCycle <= totalCoilRadians) {
+    simulationState.moonBandProgress = phaseInCycle / totalCoilRadians;
+    simulationState.moonBandDirection = simulationState.orbitMoonAngle >= 0 ? 1 : -1;
+  } else {
+    simulationState.moonBandProgress = 2.0 - (phaseInCycle / totalCoilRadians);
+    simulationState.moonBandDirection = simulationState.orbitMoonAngle >= 0 ? -1 : 1;
+  }
 }
 
 function animate() {
@@ -1200,10 +1213,10 @@ function animate() {
 
     if (simulationState.orbitMode === "auto") {
       advanceBandProgress("sunBandProgress", "sunBandDirection", getBodyBandProgressStep("sun") * speedMultiplier);
-      // Advance moon band progress using the sun's base step, scaled strictly by the moon's angular speed ratio.
-      // This guarantees the moon traces the exact same geometric spiral as the sun, just slower.
+      // Advance moon band progress using its own coil geometry, scaled strictly by the moon's angular speed ratio.
+      // This guarantees the moon perfectly traces its own 12-turn coil spiral.
       const moonRatio = ORBIT_MOON_SPEED / ORBIT_SUN_SPEED;
-      advanceBandProgress("moonBandProgress", "moonBandDirection", getBodyBandProgressStep("sun") * moonRatio * speedMultiplier);
+      advanceBandProgress("moonBandProgress", "moonBandDirection", getBodyBandProgressStep("moon") * moonRatio * speedMultiplier);
       
       // Update dark sun band progress symmetrically to sun
       const darkSunRatio = ORBIT_DARK_SUN_SPEED / ORBIT_SUN_SPEED;
@@ -1352,9 +1365,49 @@ function animate() {
     updateLunarEclipseEventFeedback(null);
     firstPersonWorldApi.update(snapshot);
   }
+
+  if (snapshot) {
+    const sunRadius = Math.hypot(orbitSun.position.x, orbitSun.position.z);
+    const sunRadiusRatio = THREE.MathUtils.clamp(
+      (sunRadius - constants.TROPIC_CANCER_RADIUS) / 
+      (constants.TROPIC_CAPRICORN_RADIUS - constants.TROPIC_CANCER_RADIUS),
+      0, 1
+    );
+    const sunScale = THREE.MathUtils.lerp(constants.CELESTIAL_PERSPECTIVE_SCALE_MIN, constants.CELESTIAL_PERSPECTIVE_SCALE_MAX, sunRadiusRatio);
+    orbitSun.scale.setScalar(sunScale);
+
+    const darkSunRadius = Math.hypot(orbitDarkSun.position.x, orbitDarkSun.position.z);
+    const darkSunRadiusRatio = THREE.MathUtils.clamp(
+      (darkSunRadius - constants.TROPIC_CANCER_RADIUS) / 
+      (constants.TROPIC_CAPRICORN_RADIUS - constants.TROPIC_CANCER_RADIUS),
+      0, 1
+    );
+    const darkSunScale = THREE.MathUtils.lerp(constants.CELESTIAL_PERSPECTIVE_SCALE_MIN, constants.CELESTIAL_PERSPECTIVE_SCALE_MAX, darkSunRadiusRatio);
+    orbitDarkSun.scale.setScalar(darkSunScale);
+
+    const moonRadius = Math.hypot(orbitMoon.position.x, orbitMoon.position.z);
+    const moonRadiusRatio = THREE.MathUtils.clamp(
+      (moonRadius - constants.TROPIC_CANCER_RADIUS) / 
+      (constants.TROPIC_CAPRICORN_RADIUS - constants.TROPIC_CANCER_RADIUS),
+      0, 1
+    );
+    const moonScale = THREE.MathUtils.lerp(constants.CELESTIAL_PERSPECTIVE_SCALE_MIN, constants.CELESTIAL_PERSPECTIVE_SCALE_MAX, moonRadiusRatio);
+    orbitMoon.scale.setScalar(moonScale);
+  }
+
   updateSunVisualEffects(snapshot);
   magneticFieldApi.update(performance.now());
-  renderer.render(walkerState.enabled ? firstPersonScene : scene, camera);
+  
+  if (walkerState.enabled) {
+    renderer.autoClear = false;
+    renderer.clear();
+    renderer.render(scene, camera);
+    renderer.clearDepth();
+    renderer.render(firstPersonScene, camera);
+  } else {
+    renderer.autoClear = true;
+    renderer.render(scene, camera);
+  }
 }
 
 cameraApi.resize();

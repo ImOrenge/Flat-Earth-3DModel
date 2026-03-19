@@ -13,8 +13,8 @@ const MAGNETIC_FIELD_SPIRAL_SECONDARY_WAVE_FREQUENCY = 3;
 const MAGNETIC_FIELD_SPIRAL_SECONDARY_WAVE_AMPLITUDE = 0.08;
 const MAGNETIC_FIELD_SEGMENTS = 96;
 const MAGNETIC_FIELD_CYCLE_SECONDS = 2.4;
-const MAGNETIC_SECONDARY_COIL_TURNS = 32;
-const MOON_SECONDARY_COIL_TURNS = 24;
+const MAGNETIC_SECONDARY_COIL_TURNS = 16;
+const MOON_SECONDARY_COIL_TURNS = 12;
 const ARCTIC_CIRCLE_LATITUDE = 66.56;
 
 export function createMagneticFieldController({
@@ -37,7 +37,7 @@ export function createMagneticFieldController({
   const torusOuterRadius = constants.DISC_RADIUS * 1.12;
   const torusCenterRadius = (torusHoleRadius + torusOuterRadius) * 0.5;
   const torusMinorRadius = (torusOuterRadius - torusHoleRadius) * 0.53;
-  const torusVerticalRadius = torusMinorRadius * 1.3;
+  const torusVerticalRadius = torusMinorRadius * 1.618033988749895; // 황금비 토러스 단면
   const torusCenterY = scaleDimension(0.38);
   const secondaryCoilBottomRadius = scaleDimension(0.08);
   const secondaryCoilTopRadius = scaleDimension(0.34);
@@ -47,7 +47,7 @@ export function createMagneticFieldController({
   const coilOrbitProfiles = {
     sun: {
       turns: MAGNETIC_SECONDARY_COIL_TURNS,
-      radiusCurveExponent: 1.65,
+      radiusCurveExponent: 1.618033988749895, // 황금비 나선 곡률
       radiusStart: secondaryCoilBottomRadius,
       radiusEnd: secondaryCoilTopRadius,
       yStart: coilStartY,

@@ -357,7 +357,7 @@ export function createCelestialVisualsController(deps) {
     firstPersonScene.fog.near += (renderState.targetFogNear - firstPersonScene.fog.near) * 0.08;
     firstPersonScene.fog.far += (renderState.targetFogFar - firstPersonScene.fog.far) * 0.08;
     stage.scale.setScalar(renderState.stageScale);
-    scalableStage.scale.set(renderState.visualScale, 1, renderState.visualScale);
+    scalableStage.scale.setScalar(renderState.visualScale);
   }
   
   function getObserverSkyAxes(observerPosition, observerLongitudeDegrees) {
@@ -719,13 +719,13 @@ export function createCelestialVisualsController(deps) {
       moonRenderState
     );
   
-    orbitSun.visible = false;
-    sunFullTrail.visible = false;
-    sunFullTrailPointsCloud.visible = false;
-    sunTrail.visible = false;
-    sunTrailPointsCloud.visible = false;
+    orbitSun.visible = true;
+    sunFullTrail.visible = celestialControlState.showFullTrail;
+    sunFullTrailPointsCloud.visible = celestialControlState.showFullTrail;
+    sunTrail.visible = true;
+    sunTrailPointsCloud.visible = true;
     observerSun.renderOrder = 24;
-    observerSun.visible = sunOcclusionVisibility > 0.01;
+    observerSun.visible = false;
     observerSunBody.material.depthTest = false;
     observerSunBody.material.depthWrite = false;
     observerSunBody.material.opacity += (sunOcclusionVisibility - observerSunBody.material.opacity) * 0.18;
@@ -786,13 +786,13 @@ export function createCelestialVisualsController(deps) {
     }
   
     orbitMoon.renderOrder = 23;
-    orbitMoon.visible = false;
-    moonFullTrail.visible = false;
-    moonFullTrailPointsCloud.visible = false;
-    moonTrail.visible = false;
-    moonTrailPointsCloud.visible = false;
+    orbitMoon.visible = true;
+    moonFullTrail.visible = celestialControlState.showFullTrail;
+    moonFullTrailPointsCloud.visible = celestialControlState.showFullTrail;
+    moonTrail.visible = true;
+    moonTrailPointsCloud.visible = true;
     observerMoon.renderOrder = 23;
-    observerMoon.visible = moonOcclusionVisibility > 0.01;
+    observerMoon.visible = false;
     observerMoonBody.material.depthTest = false;
     observerMoonBody.material.depthWrite = false;
     observerMoonBody.material.opacity += (moonOcclusionVisibility - observerMoonBody.material.opacity) * 0.18;

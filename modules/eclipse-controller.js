@@ -969,7 +969,7 @@ export function createEclipseController(deps) {
       ? nextSolarEclipse.normalizedDistance
       : Number.POSITIVE_INFINITY;
     const shouldShowEarlyToast = (
-      nextSolarEclipse.eclipseTier !== SOLAR_ECLIPSE_TIER_NONE &&
+      nextSolarEclipse.eclipseTier === SOLAR_ECLIPSE_TIER_TOTAL &&
       nextSolarEclipse.visibleInView &&
       !nextSolarEclipse.eventWindowActive &&
       toastDistance <= SOLAR_ECLIPSE_TOAST_DISTANCE_FACTOR
@@ -979,6 +979,7 @@ export function createEclipseController(deps) {
   
     if (
       activeEclipseState &&
+      activeEclipseState.eclipseTier === SOLAR_ECLIPSE_TIER_TOTAL &&
       !solarEclipseEventState.toastShownForCurrentEvent
     ) {
       showSolarEclipseToast(activeEclipseState);
@@ -987,7 +988,7 @@ export function createEclipseController(deps) {
     if (
       !activeEclipseState ||
       nextSolarEclipse.eventWindowJustClosed ||
-      nextSolarEclipse.eclipseTier === SOLAR_ECLIPSE_TIER_NONE ||
+      nextSolarEclipse.eclipseTier !== SOLAR_ECLIPSE_TIER_TOTAL ||
       !nextSolarEclipse.visibleInView ||
       (
         !nextSolarEclipse.eventWindowActive &&
@@ -2504,8 +2505,7 @@ export function createEclipseController(deps) {
       0.0005,
       triggerSunDisc.radius * DARK_SUN_ALTITUDE_ALIGNMENT_TOLERANCE_FACTOR
     );
-    // Ignore vertical altitude differences to allow eclipses between bodies at different seasonal heights.
-    const altitudeAligned = visibleInView;
+    const altitudeAligned = visibleInView && altitudeDelta <= altitudeTolerance;
     const eligibility = getSolarEclipseEligibility(sunRenderState, darkSunRenderState);
     const metrics = getProjectedEclipseMetrics({
       altitudeAligned,

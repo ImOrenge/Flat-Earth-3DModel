@@ -400,6 +400,7 @@ export function createFirstPersonWorldController({
     })
   );
   skyDome.position.y = constants.SURFACE_Y + scaleDimension(1.2);
+  skyDome.visible = false;
   root.add(skyDome);
 
   const glowTexture = createGlowTexture();
