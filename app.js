@@ -10,7 +10,7 @@ import {
 } from "./modules/astronomy-utils.js?v=20260314-natural-eclipse2";
 import { createAstronomyController } from "./modules/astronomy-controller.js?v=20260314-natural-eclipse4";
 import { createCameraController } from "./modules/camera-controller.js?v=20260313-tracking-angle1";
-import { createCelestialTrackingCameraController } from "./modules/celestial-tracking-camera-controller.js?v=20260313-tracking-angle1";
+import { createCelestialTrackingCameraController } from "./modules/celestial-tracking-camera-controller.js?v=20260319-tracking-angle2";
 import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js?v=20260312-darksun-eclipse1";
 import { createI18n } from "./modules/i18n.js?v=20260319-constellation-tab1";
 import { createMagneticFieldController } from "./modules/magnetic-field-controller.js?v=20260314-magnetic-pinecone3";
@@ -21,7 +21,7 @@ import { createWalkerController } from "./modules/walker-controller.js?v=2026031
 import * as constants from "./modules/constants.js";
 import { createEclipseController } from "./modules/eclipse-controller.js?v=20260314-natural-eclipse2";
 import { createCelestialVisualsController } from "./modules/celestial-visuals-controller.js";
-import { createConstellationTabController } from "./modules/constellation-tab-controller.js?v=20260319-constellation-tab1";
+import { createConstellationTabController } from "./modules/constellation-tab-controller.js?v=20260319-constellation-tab2";
 import { setupInputHandlers } from "./modules/input-handler.js";
 import { createRocketController, SPACEPORTS } from "./modules/rocket-controller.js?v=20260319-parabola";
 const {
@@ -916,9 +916,52 @@ const routeSimulationApi = createRouteSimulationController({
   }
 });
 
+let celestialTrackingCameraApi;
+
+function focusCameraOnConstellation(entry) {
+  if (walkerState.enabled) {
+    return;
+  }
+
+  if (!entry) {
+    celestialTrackingCameraApi?.clearTracking();
+    cameraState.targetLookTarget.set(0, constants.SURFACE_Y * (5 / 6), 0);
+    cameraState.targetTheta = -0.55;
+    cameraState.theta = cameraState.targetTheta;
+    cameraState.targetPhi = 1.12;
+    cameraState.phi = cameraState.targetPhi;
+    cameraState.targetRadius = constants.CAMERA_TOPDOWN_DEFAULT_RADIUS;
+    cameraState.radius = cameraState.targetRadius;
+    cameraApi.clampCamera();
+    return;
+  }
+
+  const focus = entry.centroidWorldPoint ?? { x: 0, y: constants.SURFACE_Y * (5 / 6), z: 0 };
+  const polarisAngle = THREE.MathUtils.euclideanModulo(Math.atan2(focus.x, -focus.z), Math.PI * 2);
+  const frontTheta = Math.PI - polarisAngle;
+
+  if (celestialTrackingCameraApi?.setCustomLookTarget) {
+    celestialTrackingCameraApi.setCustomLookTarget(focus, { immediate: true });
+  } else {
+    cameraState.targetLookTarget.set(focus.x, focus.y, focus.z);
+  }
+
+  cameraState.targetTheta = frontTheta;
+  cameraState.theta = cameraState.targetTheta;
+  cameraState.targetPhi = 1.02;
+  cameraState.phi = cameraState.targetPhi;
+  cameraState.targetRadius = Math.min(
+    constants.CAMERA_TOPDOWN_DEFAULT_RADIUS * 0.74,
+    constants.CAMERA_TOPDOWN_MAX_RADIUS
+  );
+  cameraState.radius = cameraState.targetRadius;
+  cameraApi.clampCamera();
+}
+
 const constellationTabApi = createConstellationTabController({
   i18n,
   constellationApi,
+  onSelectionChange: focusCameraOnConstellation,
   ui: {
     constellationSelectEl,
     constellationMapEl,
@@ -937,7 +980,7 @@ i18n.subscribe(() => {
 
 constellationTabApi.initialize();
 
-const celestialTrackingCameraApi = createCelestialTrackingCameraController({
+celestialTrackingCameraApi = createCelestialTrackingCameraController({
   buttons: cameraTrackButtons,
   cameraState,
   constants,

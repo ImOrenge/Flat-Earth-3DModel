@@ -25,7 +25,8 @@ export function createCelestialTrackingCameraController({
   };
   const state = {
     mode: "free",
-    targetKey: "off"
+    targetKey: "off",
+    customLookTarget: null
   };
 
   cameraState.mode = cameraState.mode ?? "free";
@@ -46,7 +47,11 @@ export function createCelestialTrackingCameraController({
     const hasTrackableTarget = state.targetKey !== "off" && Boolean(config?.object);
 
     if (!hasTrackableTarget) {
-      tempWorldPosition.copy(defaultLookTarget);
+      if (state.customLookTarget) {
+        tempWorldPosition.copy(state.customLookTarget);
+      } else {
+        tempWorldPosition.copy(defaultLookTarget);
+      }
     } else {
       config.object.getWorldPosition(tempWorldPosition);
     }
@@ -71,12 +76,32 @@ export function createCelestialTrackingCameraController({
 
   function setTarget(nextTargetKey, options = {}) {
     state.targetKey = resolveTargetKey(nextTargetKey);
+    if (state.targetKey !== "off") {
+      state.customLookTarget = null;
+    }
     updateLookTarget(options);
     syncUi();
   }
 
   function clearTracking(options = {}) {
+    state.customLookTarget = null;
     setTarget("off", options);
+  }
+
+  function setCustomLookTarget(nextTarget, options = {}) {
+    if (!nextTarget) {
+      clearTracking(options);
+      return;
+    }
+
+    if (!state.customLookTarget) {
+      state.customLookTarget = new THREE.Vector3();
+    }
+
+    state.customLookTarget.set(nextTarget.x ?? 0, nextTarget.y ?? 0, nextTarget.z ?? 0);
+    state.targetKey = "off";
+    updateLookTarget(options);
+    syncUi();
   }
 
   function refreshLocalizedUi() {
@@ -102,6 +127,7 @@ export function createCelestialTrackingCameraController({
       return state.mode === "tracking";
     },
     refreshLocalizedUi,
+    setCustomLookTarget,
     setTarget,
     update
   };

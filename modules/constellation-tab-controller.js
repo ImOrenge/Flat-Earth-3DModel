@@ -1,3 +1,5 @@
+import { getLocalizedConstellationName } from "./constellation-name-locales.js";
+
 const DIRECTION_KEYS_16 = [
   "constellationDirectionN",
   "constellationDirectionNNE",
@@ -98,7 +100,7 @@ function buildGridSvg() {
   `;
 }
 
-export function createConstellationTabController({ i18n, ui, constellationApi }) {
+export function createConstellationTabController({ i18n, ui, constellationApi, onSelectionChange }) {
   const catalog = constellationApi
     .getConstellationCatalog()
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -107,6 +109,11 @@ export function createConstellationTabController({ i18n, ui, constellationApi })
   const state = {
     selectedName: null,
   };
+
+  function getConstellationOptionLabel(entry) {
+    const localizedName = getLocalizedConstellationName(entry.name, i18n.getLanguage());
+    return `${localizedName} (${entry.code})`;
+  }
 
   function syncInfoCard() {
     const entry = state.selectedName ? catalogByName.get(state.selectedName) : null;
@@ -192,6 +199,7 @@ export function createConstellationTabController({ i18n, ui, constellationApi })
     if (!name) {
       state.selectedName = null;
       constellationApi.setHighlightedConstellation(null);
+      onSelectionChange?.(null);
       syncInfoCard();
       renderMap();
       return;
@@ -202,6 +210,7 @@ export function createConstellationTabController({ i18n, ui, constellationApi })
     }
     state.selectedName = name;
     constellationApi.setHighlightedConstellation(name);
+    onSelectionChange?.(catalogByName.get(name));
     syncInfoCard();
     renderMap();
   }
@@ -216,16 +225,15 @@ export function createConstellationTabController({ i18n, ui, constellationApi })
     for (const entry of catalog) {
       const option = document.createElement("option");
       option.value = entry.name;
-      option.textContent = `${entry.name} (${entry.code})`;
+      option.textContent = getConstellationOptionLabel(entry);
       ui.constellationSelectEl.appendChild(option);
     }
   }
 
   function refreshLocalizedUi() {
-    const allOption = ui.constellationSelectEl.querySelector('option[value=""]');
-    if (allOption) {
-      allOption.textContent = i18n.t("constellationSelectAll");
-    }
+    const selectedValue = state.selectedName ?? "";
+    populateSelect();
+    ui.constellationSelectEl.value = selectedValue;
     ui.constellationMapEl.setAttribute("aria-label", i18n.t("constellationMapAria"));
     syncInfoCard();
     renderMap();

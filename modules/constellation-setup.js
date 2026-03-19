@@ -202,6 +202,11 @@ function createConstellationCatalogEntry(constellation, entryData) {
     centroidDecDeg,
     minDecDeg: entryData.minDecDeg,
     maxDecDeg: entryData.maxDecDeg,
+    centroidWorldPoint: {
+      x: centroidPoint.x,
+      y: centroidPoint.y,
+      z: centroidPoint.z,
+    },
     centroidMapPoint,
     mapSegments: entryData.mapSegments,
     mapStars: entryData.mapStars,
@@ -383,6 +388,7 @@ export function createConstellations() {
   function getConstellationCatalog() {
     return catalog.map((entry) => ({
       ...entry,
+      centroidWorldPoint: { ...entry.centroidWorldPoint },
       centroidMapPoint: { ...entry.centroidMapPoint },
       mapSegments: entry.mapSegments.map((segment) => segment.map((point) => ({ ...point }))),
       mapStars: entry.mapStars.map((point) => ({ ...point })),
