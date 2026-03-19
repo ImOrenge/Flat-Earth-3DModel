@@ -22,7 +22,7 @@ import * as constants from "./modules/constants.js";
 import { createEclipseController } from "./modules/eclipse-controller.js?v=20260314-natural-eclipse2";
 import { createCelestialVisualsController } from "./modules/celestial-visuals-controller.js";
 import { setupInputHandlers } from "./modules/input-handler.js";
-import { createRocketController, SPACEPORTS } from "./modules/rocket-controller.js?v=20260318-rapier1";
+import { createRocketController, SPACEPORTS } from "./modules/rocket-controller.js?v=20260319-parabola";
 const {
   DEFAULT_MAP_PATH,
   DEFAULT_MAP_LABEL,
@@ -281,7 +281,8 @@ const uploadInput = document.getElementById("map-upload");
 const resetButton = document.getElementById("reset-camera");
 const detailTabsEl = document.getElementById("detail-tabs");
 const rocketSpaceportSelect = document.getElementById("rocket-spaceport-select");
-const rocketLaunchBtn = document.getElementById("rocket-launch-btn");
+const rocketTypeSelect      = document.getElementById("rocket-type-select");
+const rocketLaunchBtn       = document.getElementById("rocket-launch-btn");
 const controlTabButtons = [...document.querySelectorAll("[data-control-tab]")];
 const controlTabPanels = [...document.querySelectorAll("[data-control-panel]")];
 const translatableTextEls = [...document.querySelectorAll("[data-i18n]")];
@@ -763,6 +764,7 @@ const ui = {
   walkerModeEl,
   walkerSummaryEl,
   rocketSpaceportSelect,
+  rocketTypeSelect,
   rocketLaunchBtn
 };
 
@@ -1281,6 +1283,24 @@ function animate() {
   walkerApi.updateFirstPersonOverlay();
   routeSimulationApi.update(deltaSeconds);
   rocketApi.update(deltaSeconds);
+  // ── 로켓 텔레메트리 UI 업데이트 ──
+  (function updateRocketTelemetry() {
+    const panel = document.getElementById('rocket-telemetry-panel');
+    if (!panel) return;
+    const tel = rocketApi.getTelemetry();
+    if (!tel) { panel.style.display = 'none'; return; }
+    panel.style.display = '';
+    const STATE_KO = {
+      STAGE1: '1단 연소', PITCHOVER: '자세 제어', SEPARATION: '단 분리',
+      STAGE2: '2단 점화', SCRAPE: '궁창 접촉', FALL: '낙하', LAUNCH: '발사'
+    };
+    document.getElementById('tel-state').textContent    = STATE_KO[tel.state] ?? tel.state;
+    document.getElementById('tel-alt').textContent      = tel.altitude + '%';
+    document.getElementById('tel-speed').textContent    = tel.speed + ' u/s';
+    document.getElementById('tel-stage-t').textContent  = tel.stageTimer + 's';
+    document.getElementById('tel-scrape-t').textContent = tel.state === 'SCRAPE' ? tel.scrapeTimer + 's' : '—';
+    document.getElementById('tel-debris').textContent   = tel.debrisCount + '개';
+  })();
   astronomyApi.syncSeasonalSunUi();
   if (snapshot) {
     walkerApi.updateWalkerUi(snapshot);
