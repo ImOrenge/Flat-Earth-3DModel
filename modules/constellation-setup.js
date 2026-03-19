@@ -360,6 +360,7 @@ export function createConstellations() {
   group.add(createGridGroup());
 
   let highlightedConstellation = null;
+  let areConstellationsVisible = true;
 
   function applyHighlightState() {
     const hasSelection = typeof highlightedConstellation === "string" && highlightedConstellation.length > 0;
@@ -385,6 +386,11 @@ export function createConstellations() {
     applyHighlightState();
   }
 
+  function setConstellationsVisible(visible) {
+    areConstellationsVisible = Boolean(visible);
+    group.visible = areConstellationsVisible;
+  }
+
   function getConstellationCatalog() {
     return catalog.map((entry) => ({
       ...entry,
@@ -396,6 +402,7 @@ export function createConstellations() {
   }
 
   applyHighlightState();
+  setConstellationsVisible(true);
 
   console.log(
     `Flat-earth dome constellations: ${constellationData.length} constellations, ${globalStarKeys.size} stars.`
@@ -403,6 +410,7 @@ export function createConstellations() {
 
   return {
     group,
+    setConstellationsVisible,
     setHighlightedConstellation,
     getConstellationCatalog,
   };

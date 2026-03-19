@@ -107,12 +107,29 @@ export function createConstellationTabController({ i18n, ui, constellationApi, o
   const catalogByName = new Map(catalog.map((entry) => [entry.name, entry]));
 
   const state = {
+    isVisible: true,
     selectedName: null,
   };
 
   function getConstellationOptionLabel(entry) {
     const localizedName = getLocalizedConstellationName(entry.name, i18n.getLanguage());
     return `${localizedName} (${entry.code})`;
+  }
+
+  function getVisibilityLabel() {
+    return state.isVisible
+      ? i18n.t("constellationVisibilityOn")
+      : i18n.t("constellationVisibilityOff");
+  }
+
+  function syncVisibilityUi() {
+    if (ui.constellationVisibilityToggleEl) {
+      ui.constellationVisibilityToggleEl.checked = state.isVisible;
+    }
+    if (ui.constellationVisibilityTextEl) {
+      ui.constellationVisibilityTextEl.textContent = getVisibilityLabel();
+    }
+    ui.constellationSelectEl.disabled = !state.isVisible;
   }
 
   function syncInfoCard() {
@@ -151,32 +168,34 @@ export function createConstellationTabController({ i18n, ui, constellationApi, o
     parts.push(buildGridSvg());
     parts.push(`<g clip-path="url(#constellation-map-clip)">`);
 
-    for (const entry of catalog) {
-      const isSelected = hasSelection && entry.name === selectedName;
-      const segmentOpacity = hasSelection ? (isSelected ? 0.96 : 0.18) : 0.72;
-      const segmentWidth = hasSelection ? (isSelected ? 0.70 : 0.30) : 0.44;
-      const starOpacity = hasSelection ? (isSelected ? 0.94 : 0.22) : 0.56;
-      const starRadius = hasSelection ? (isSelected ? 0.34 : 0.22) : 0.26;
+    if (state.isVisible) {
+      for (const entry of catalog) {
+        const isSelected = hasSelection && entry.name === selectedName;
+        const segmentOpacity = hasSelection ? (isSelected ? 0.96 : 0.18) : 0.72;
+        const segmentWidth = hasSelection ? (isSelected ? 0.70 : 0.30) : 0.44;
+        const starOpacity = hasSelection ? (isSelected ? 0.94 : 0.22) : 0.56;
+        const starRadius = hasSelection ? (isSelected ? 0.34 : 0.22) : 0.26;
 
-      parts.push(
-        `<g stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="${segmentOpacity.toFixed(3)}" stroke-width="${segmentWidth.toFixed(2)}">`
-      );
-      for (const segment of entry.mapSegments) {
-        parts.push(buildSegmentSvg(segment));
-      }
-      parts.push("</g>");
-
-      parts.push(
-        `<g fill="#f7fbff" opacity="${starOpacity.toFixed(3)}">`
-      );
-      for (const point of entry.mapStars) {
-        const svgPoint = toSvgPoint(point);
-        const adjustedRadius = starRadius + (point.brightness * 0.05);
         parts.push(
-          `<circle cx="${svgPoint.x.toFixed(2)}" cy="${svgPoint.y.toFixed(2)}" r="${clamp(adjustedRadius, 0.16, 0.45).toFixed(2)}" />`
+          `<g stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="${segmentOpacity.toFixed(3)}" stroke-width="${segmentWidth.toFixed(2)}">`
         );
+        for (const segment of entry.mapSegments) {
+          parts.push(buildSegmentSvg(segment));
+        }
+        parts.push("</g>");
+
+        parts.push(
+          `<g fill="#f7fbff" opacity="${starOpacity.toFixed(3)}">`
+        );
+        for (const point of entry.mapStars) {
+          const svgPoint = toSvgPoint(point);
+          const adjustedRadius = starRadius + (point.brightness * 0.05);
+          parts.push(
+            `<circle cx="${svgPoint.x.toFixed(2)}" cy="${svgPoint.y.toFixed(2)}" r="${clamp(adjustedRadius, 0.16, 0.45).toFixed(2)}" />`
+          );
+        }
+        parts.push("</g>");
       }
-      parts.push("</g>");
     }
 
     parts.push(
@@ -215,6 +234,13 @@ export function createConstellationTabController({ i18n, ui, constellationApi, o
     renderMap();
   }
 
+  function setConstellationsVisible(visible) {
+    state.isVisible = Boolean(visible);
+    constellationApi.setConstellationsVisible(state.isVisible);
+    syncVisibilityUi();
+    renderMap();
+  }
+
   function populateSelect() {
     ui.constellationSelectEl.replaceChildren();
     const allOption = document.createElement("option");
@@ -234,6 +260,7 @@ export function createConstellationTabController({ i18n, ui, constellationApi, o
     const selectedValue = state.selectedName ?? "";
     populateSelect();
     ui.constellationSelectEl.value = selectedValue;
+    syncVisibilityUi();
     ui.constellationMapEl.setAttribute("aria-label", i18n.t("constellationMapAria"));
     syncInfoCard();
     renderMap();
@@ -245,13 +272,18 @@ export function createConstellationTabController({ i18n, ui, constellationApi, o
     ui.constellationSelectEl.addEventListener("change", () => {
       setSelectedConstellation(ui.constellationSelectEl.value || null);
     });
+    ui.constellationVisibilityToggleEl?.addEventListener("change", () => {
+      setConstellationsVisible(ui.constellationVisibilityToggleEl.checked);
+    });
     setSelectedConstellation(state.selectedName);
+    setConstellationsVisible(state.isVisible);
     refreshLocalizedUi();
   }
 
   return {
     initialize,
     refreshLocalizedUi,
+    setConstellationsVisible,
     setSelectedConstellation,
   };
 }
