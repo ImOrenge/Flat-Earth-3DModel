@@ -1,3 +1,4 @@
+import { inject } from "@vercel/analytics";
 import * as THREE from "./vendor/three.module.js";
 import {
   getGeoFromProjectedPosition,
@@ -26,6 +27,10 @@ import { createCelestialVisualsController } from "./modules/celestial-visuals-co
 import { createConstellationTabController } from "./modules/constellation-tab-controller.js?v=20260320-constellation-precession1";
 import { setupInputHandlers } from "./modules/input-handler.js?v=20260320-constellation-precession1";
 import { createRocketController, SPACEPORTS } from "./modules/rocket-controller.js?v=20260319-parabola";
+
+// Initialize Vercel Analytics
+inject();
+
 const {
   DEFAULT_MAP_PATH,
   DEFAULT_MAP_LABEL,
