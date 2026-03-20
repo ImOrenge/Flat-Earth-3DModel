@@ -633,6 +633,35 @@ export function createEclipseController(deps) {
       1
     );
     const stageTransit = simulationState.darkSunStageTransit ?? 0;
+    const approachEnd = DARK_SUN_STAGE_APPROACH_SHARE;
+
+    // Smooth sun position transition during the approach phase
+    let sunTransitionActive = false;
+    if (simulationState._sunStageFromAngle !== undefined) {
+      sunTransitionActive = true;
+      const transitionProgress = Math.min(1, stageTransit / Math.max(approachEnd, 0.001));
+      const ease = 1 - Math.pow(1 - transitionProgress, 2); // ease-out quad
+      simulationState.orbitSunAngle = THREE.MathUtils.lerp(
+        simulationState._sunStageFromAngle,
+        simulationState._sunStageToAngle,
+        ease
+      );
+      simulationState.sunBandProgress = THREE.MathUtils.lerp(
+        simulationState._sunStageFromProgress,
+        simulationState._sunStageToProgress,
+        ease
+      );
+      if (stageTransit >= approachEnd) {
+        simulationState.orbitSunAngle = simulationState._sunStageToAngle;
+        simulationState.sunBandProgress = simulationState._sunStageToProgress;
+        delete simulationState._sunStageFromAngle;
+        delete simulationState._sunStageToAngle;
+        delete simulationState._sunStageFromProgress;
+        delete simulationState._sunStageToProgress;
+        sunTransitionActive = false;
+      }
+    }
+
     const currentSunRenderState = astronomyApi?.getSunRenderState({
       orbitAngleRadians: simulationState.orbitSunAngle,
       orbitMode: simulationState.orbitMode,
@@ -647,8 +676,7 @@ export function createEclipseController(deps) {
     if (stageTransit >= 1) {
       resetDarkSunStageState();
     }
-  
-    const approachEnd = DARK_SUN_STAGE_APPROACH_SHARE;
+
     const ingressEnd = approachEnd + DARK_SUN_STAGE_INGRESS_SHARE;
     const totalityEnd = ingressEnd + DARK_SUN_STAGE_TOTALITY_SHARE;
     const egressEnd = totalityEnd + DARK_SUN_STAGE_EGRESS_SHARE;
@@ -675,9 +703,11 @@ export function createEclipseController(deps) {
     } else {
       stageSpeedFactor = SOLAR_ECLIPSE_COMPLETE_SLOW_FACTOR;
     }
-    return stageSpeedFactor;
+    // During sun transition: return 0 so the animation loop doesn't
+    // advance orbitSunAngle independently (transit still advances via raw deltaSeconds)
+    return sunTransitionActive ? 0 : stageSpeedFactor;
   }
-  
+
   function getCurrentUiSnapshot() {
     if (astronomyState.enabled) {
       const observationDate = astronomyState.live ? new Date() : astronomyState.selectedDate;
@@ -2961,6 +2991,10 @@ export function createEclipseController(deps) {
   function resetDarkSunStageState() {
     simulationState.darkSunStageAltitudeLock = false;
     simulationState.darkSunStageHasEclipsed = false;
+    delete simulationState._sunStageFromAngle;
+    delete simulationState._sunStageToAngle;
+    delete simulationState._sunStageFromProgress;
+    delete simulationState._sunStageToProgress;
     simulationState.darkSunStageOffsetRadians = 0;
     simulationState.darkSunStageTotalityHoldMs = 0;
     simulationState.darkSunStageTransit = 0;
@@ -3065,16 +3099,28 @@ export function createEclipseController(deps) {
       ? targetDarkSunRenderState.orbitAngleRadians
       : (targetSunAngleRadians + constants.DARK_SUN_STAGE_START_OFFSET_RADIANS);
   
+    const fromSunAngle = simulationState.orbitSunAngle;
+    const fromSunProgress = simulationState.sunBandProgress;
+
     simulationState.demoPhaseDateMs = sourceDate.getTime();
     simulationState.orbitMode = "auto";
     resetDarkSunStageState();
     simulationState.darkSunStageAltitudeLock = true;
     simulationState.darkSunStageHasEclipsed = false;
     setDemoMoonOrbitOffsetFromPhase(simulationState.demoPhaseDateMs);
+    // Temporarily set target angle so syncDemoMoonOrbitToSun positions the moon correctly,
+    // then restore and set up a smooth transition for the sun.
     simulationState.orbitSunAngle = targetSunAngleRadians;
     simulationState.sunBandProgress = targetSunProgress;
     simulationState.sunBandDirection = targetSunDirection;
     syncDemoMoonOrbitToSun();
+    // Set up smooth sun approach transition (restored to current position for lerp)
+    simulationState._sunStageFromAngle = fromSunAngle;
+    simulationState._sunStageToAngle = targetSunAngleRadians;
+    simulationState._sunStageFromProgress = fromSunProgress;
+    simulationState._sunStageToProgress = targetSunProgress;
+    simulationState.orbitSunAngle = fromSunAngle;
+    simulationState.sunBandProgress = fromSunProgress;
     // Dark sun angle set to pre-contact position
     simulationState.orbitDarkSunAngle = preContactDarkSunAngle;
     simulationState.darkSunBandProgress = targetSunProgress;
@@ -3096,7 +3142,8 @@ export function createEclipseController(deps) {
     astronomyApi.updateOrbitModeUi();
     astronomyApi.refreshTrailsForCurrentMode();
     celestialTrackingCameraApi.setTarget("sun");
-    orbitSun.position.copy(alignedSunRenderState.position);
+    // Sun position is NOT snapped here — it will smoothly lerp to the target
+    // during the approach phase via updateDarkSunStageOrbit.
     orbitDarkSun.position.copy(preContactDarkSunRenderState.position);
     scene.updateMatrixWorld(true);
     celestialTrackingCameraApi.update();
