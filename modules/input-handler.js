@@ -40,7 +40,7 @@ export function setupInputHandlers(deps) {
     stagePreEclipseButton, stagePreEclipseScene,
     stagePreLunarEclipseButton, stagePreLunarEclipseScene,
     skyAnalemmaOverlayEl, skyAnalemmaState, orbitModeButtons, cameraTrackButtons, seasonalYearEl,
-    seasonalEventButtons, setDemoMoonOrbitOffsetFromPhase
+    seasonalEventButtons, setDemoMoonOrbitOffsetFromPhase, setDemoSeasonPhaseFromDate
   } = deps;
 
   const { rocketSpaceportSelect, rocketTypeSelect, rocketLaunchBtn } = ui;
@@ -398,6 +398,7 @@ export function setupInputHandlers(deps) {
     simulationState.demoPhaseDateMs = astronomyState.selectedDate.getTime();
   
     setDemoMoonOrbitOffsetFromPhase(simulationState.demoPhaseDateMs);
+    setDemoSeasonPhaseFromDate(simulationState.demoPhaseDateMs);
   
 
   

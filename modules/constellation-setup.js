@@ -185,6 +185,36 @@ function toMapPoint(point) {
   };
 }
 
+function rotateWorldPoint(point, cosAngle, sinAngle) {
+  return {
+    x: (point.x * cosAngle) + (point.z * sinAngle),
+    y: point.y,
+    z: (point.z * cosAngle) - (point.x * sinAngle),
+  };
+}
+
+function rotateMapPoint(point, cosAngle, sinAngle) {
+  return {
+    x: (point.x * cosAngle) + (point.y * sinAngle),
+    y: (point.y * cosAngle) - (point.x * sinAngle),
+  };
+}
+
+function cloneConstellationEntry(entry, cosAngle = 1, sinAngle = 0) {
+  return {
+    ...entry,
+    centroidWorldPoint: rotateWorldPoint(entry.centroidWorldPoint, cosAngle, sinAngle),
+    centroidMapPoint: rotateMapPoint(entry.centroidMapPoint, cosAngle, sinAngle),
+    mapSegments: entry.mapSegments.map((segment) => (
+      segment.map((point) => rotateMapPoint(point, cosAngle, sinAngle))
+    )),
+    mapStars: entry.mapStars.map((point) => ({
+      ...rotateMapPoint(point, cosAngle, sinAngle),
+      brightness: point.brightness,
+    })),
+  };
+}
+
 function createConstellationCatalogEntry(constellation, entryData) {
   const centroidRAHours = circularMeanHours(entryData.raSamples);
   const centroidDecDeg = entryData.decSamples.length > 0
@@ -342,7 +372,7 @@ export function createConstellations() {
 
   const globalStarKeys = new Set();
   const constellationVisuals = [];
-  const catalog = [];
+  const baseCatalog = [];
   for (const constellation of constellationData) {
     const visual = createConstellationVisual({
       constellation,
@@ -353,7 +383,7 @@ export function createConstellations() {
     });
     visual.group.renderOrder = 22;
     constellationVisuals.push(visual);
-    catalog.push(visual.catalogEntry);
+    baseCatalog.push(visual.catalogEntry);
     group.add(visual.group);
   }
 
@@ -361,6 +391,10 @@ export function createConstellations() {
 
   let highlightedConstellation = null;
   let areConstellationsVisible = true;
+  let seasonalPrecessionAngle = 0;
+  let cosPrecessionAngle = 1;
+  let sinPrecessionAngle = 0;
+  const baseCatalogByName = new Map(baseCatalog.map((entry) => [entry.name, entry]));
 
   function applyHighlightState() {
     const hasSelection = typeof highlightedConstellation === "string" && highlightedConstellation.length > 0;
@@ -391,18 +425,41 @@ export function createConstellations() {
     group.visible = areConstellationsVisible;
   }
 
+  function setSeasonalPrecessionAngle(angleRadians = 0) {
+    if (!Number.isFinite(angleRadians)) {
+      return;
+    }
+
+    seasonalPrecessionAngle = angleRadians;
+    cosPrecessionAngle = Math.cos(seasonalPrecessionAngle);
+    sinPrecessionAngle = Math.sin(seasonalPrecessionAngle);
+    group.rotation.y = seasonalPrecessionAngle;
+  }
+
+  function getSeasonalPrecessionAngle() {
+    return seasonalPrecessionAngle;
+  }
+
+  function getConstellationState(name) {
+    if (!name) {
+      return null;
+    }
+
+    const entry = baseCatalogByName.get(name);
+    if (!entry) {
+      return null;
+    }
+
+    return cloneConstellationEntry(entry, cosPrecessionAngle, sinPrecessionAngle);
+  }
+
   function getConstellationCatalog() {
-    return catalog.map((entry) => ({
-      ...entry,
-      centroidWorldPoint: { ...entry.centroidWorldPoint },
-      centroidMapPoint: { ...entry.centroidMapPoint },
-      mapSegments: entry.mapSegments.map((segment) => segment.map((point) => ({ ...point }))),
-      mapStars: entry.mapStars.map((point) => ({ ...point })),
-    }));
+    return baseCatalog.map((entry) => cloneConstellationEntry(entry, cosPrecessionAngle, sinPrecessionAngle));
   }
 
   applyHighlightState();
   setConstellationsVisible(true);
+  setSeasonalPrecessionAngle(0);
 
   console.log(
     `Flat-earth dome constellations: ${constellationData.length} constellations, ${globalStarKeys.size} stars.`
@@ -410,8 +467,11 @@ export function createConstellations() {
 
   return {
     group,
+    getConstellationState,
     setConstellationsVisible,
+    setSeasonalPrecessionAngle,
     setHighlightedConstellation,
     getConstellationCatalog,
+    getSeasonalPrecessionAngle,
   };
 }

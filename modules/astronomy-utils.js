@@ -16,6 +16,13 @@ const REFERENCE_NEW_MOON_JULIAN_DATE = 2451550.1;
 const MOON_PHASE_STEP_COUNT = 16;
 const MOON_PHASE_STEP_DEGREES = FULL_CIRCLE_DEGREES / MOON_PHASE_STEP_COUNT;
 export const LOCAL_LIGHT_HORIZON_OFFSET_DEGREES = 22;
+const SEASONAL_PRECESSION_PHASE_BY_KEY = {
+  springEquinox: 0,
+  summerSolstice: 0.25,
+  autumnEquinox: 0.5,
+  winterSolstice: 0.75,
+};
+const seasonalEventMomentsCache = new Map();
 const MOON_PHASE_LABEL_KEYS = [
   "moonPhaseNew",
   "moonPhaseEarlyWaxingCrescent",
@@ -61,6 +68,15 @@ export const SEASONAL_EVENT_DEFINITIONS = [
     fallbackDay: 21
   }
 ];
+
+function cloneSeasonalEventMoments(seasonalEvents) {
+  return {
+    springEquinox: new Date(seasonalEvents.springEquinox.getTime()),
+    summerSolstice: new Date(seasonalEvents.summerSolstice.getTime()),
+    autumnEquinox: new Date(seasonalEvents.autumnEquinox.getTime()),
+    winterSolstice: new Date(seasonalEvents.winterSolstice.getTime()),
+  };
+}
 
 function getJulianDate(date) {
   return (date.getTime() / DAY_MS) + 2440587.5;
@@ -268,7 +284,7 @@ function findDeclinationExtremum(startDate, endDate, type) {
   return new Date((left + right) / 2);
 }
 
-export function getSeasonalEventMoments(year) {
+function computeSeasonalEventMoments(year) {
   return {
     springEquinox: findZeroCrossing(
       new Date(year, 2, 18, 0, 0, 0, 0),
@@ -289,6 +305,60 @@ export function getSeasonalEventMoments(year) {
       "min"
     )
   };
+}
+
+function getCachedSeasonalEventMoments(year) {
+  if (!seasonalEventMomentsCache.has(year)) {
+    seasonalEventMomentsCache.set(year, computeSeasonalEventMoments(year));
+  }
+  return seasonalEventMomentsCache.get(year);
+}
+
+export function getSeasonalEventMoments(year) {
+  return cloneSeasonalEventMoments(getCachedSeasonalEventMoments(year));
+}
+
+export function getSeasonalPrecessionPhase(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return 0;
+  }
+
+  const points = [];
+  const baseYear = date.getFullYear();
+  for (let yearOffset = -1; yearOffset <= 1; yearOffset += 1) {
+    const year = baseYear + yearOffset;
+    const seasonalEvents = getCachedSeasonalEventMoments(year);
+    for (const definition of SEASONAL_EVENT_DEFINITIONS) {
+      points.push({
+        dateMs: seasonalEvents[definition.key].getTime(),
+        phase: yearOffset + SEASONAL_PRECESSION_PHASE_BY_KEY[definition.key],
+      });
+    }
+  }
+
+  points.sort((left, right) => left.dateMs - right.dateMs);
+
+  const targetDateMs = date.getTime();
+  let leftPoint = points[0];
+  let rightPoint = points[points.length - 1];
+  for (let index = 0; index < (points.length - 1); index += 1) {
+    const current = points[index];
+    const next = points[index + 1];
+    if (targetDateMs >= current.dateMs && targetDateMs < next.dateMs) {
+      leftPoint = current;
+      rightPoint = next;
+      break;
+    }
+  }
+
+  const spanMs = Math.max(rightPoint.dateMs - leftPoint.dateMs, 1);
+  const progress = THREE.MathUtils.clamp((targetDateMs - leftPoint.dateMs) / spanMs, 0, 1);
+  const phase = THREE.MathUtils.lerp(leftPoint.phase, rightPoint.phase, progress);
+  return THREE.MathUtils.euclideanModulo(phase, 1);
+}
+
+export function getSeasonalPrecessionAngle(date) {
+  return -getSeasonalPrecessionPhase(date) * FULL_CIRCLE_RADIANS;
 }
 
 function getMoonMotionWindow(date) {

@@ -62,6 +62,7 @@ export function createEclipseController(deps) {
     realitySyncEl,
     realityLiveEl,
     setDemoMoonOrbitOffsetFromPhase,
+    setDemoSeasonPhaseFromDate,
     syncDemoMoonOrbitToSun,
     updateSunVisualEffects
   } = deps;
@@ -3071,6 +3072,7 @@ export function createEclipseController(deps) {
     simulationState.darkSunStageAltitudeLock = true;
     simulationState.darkSunStageHasEclipsed = false;
     setDemoMoonOrbitOffsetFromPhase(simulationState.demoPhaseDateMs);
+    setDemoSeasonPhaseFromDate(simulationState.demoPhaseDateMs);
     simulationState.orbitSunAngle = targetSunAngleRadians;
     simulationState.sunBandProgress = targetSunProgress;
     simulationState.sunBandDirection = targetSunDirection;
@@ -3681,6 +3683,7 @@ export function createEclipseController(deps) {
     
     simulationState.demoPhaseDateMs = targetDateMs;
     setDemoMoonOrbitOffsetFromPhase(targetDateMs);
+    setDemoSeasonPhaseFromDate(targetDateMs);
     syncDemoMoonOrbitToSun();
     
     astronomyApi.updateMoonOrbit({

@@ -22,6 +22,7 @@ const DIRECTION_KEYS_16 = [
 const MAP_SIZE = 100;
 const MAP_CENTER = MAP_SIZE / 2;
 const MAP_RADIUS = 46;
+const PRECESSION_RENDER_THRESHOLD_RAD = Math.PI / 360;
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
@@ -101,15 +102,36 @@ function buildGridSvg() {
 }
 
 export function createConstellationTabController({ i18n, ui, constellationApi, onSelectionChange }) {
-  const catalog = constellationApi
+  const initialCatalog = constellationApi
     .getConstellationCatalog()
     .sort((a, b) => a.name.localeCompare(b.name));
-  const catalogByName = new Map(catalog.map((entry) => [entry.name, entry]));
+  const staticCatalogByName = new Map(initialCatalog.map((entry) => [entry.name, entry]));
+  const sortedNames = initialCatalog.map((entry) => entry.name);
 
   const state = {
     isVisible: true,
+    isPanelActive: false,
+    lastRenderedAngle: null,
     selectedName: null,
   };
+
+  function getCurrentCatalogMap() {
+    return new Map(constellationApi.getConstellationCatalog().map((entry) => [entry.name, entry]));
+  }
+
+  function getCurrentCatalog() {
+    const catalogByName = getCurrentCatalogMap();
+    return sortedNames
+      .map((name) => catalogByName.get(name))
+      .filter(Boolean);
+  }
+
+  function getSelectedEntry() {
+    if (!state.selectedName) {
+      return null;
+    }
+    return constellationApi.getConstellationState(state.selectedName);
+  }
 
   function getConstellationOptionLabel(entry) {
     const localizedName = getLocalizedConstellationName(entry.name, i18n.getLanguage());
@@ -133,7 +155,7 @@ export function createConstellationTabController({ i18n, ui, constellationApi, o
   }
 
   function syncInfoCard() {
-    const entry = state.selectedName ? catalogByName.get(state.selectedName) : null;
+    const entry = getSelectedEntry();
     if (!entry) {
       ui.constellationDirectionEl.textContent = "-";
       ui.constellationRaEl.textContent = "-";
@@ -154,6 +176,7 @@ export function createConstellationTabController({ i18n, ui, constellationApi, o
   }
 
   function renderMap() {
+    const catalog = getCurrentCatalog();
     const hasSelection = Boolean(state.selectedName);
     const selectedName = state.selectedName;
     const parts = [];
@@ -224,12 +247,12 @@ export function createConstellationTabController({ i18n, ui, constellationApi, o
       return;
     }
 
-    if (!catalogByName.has(name)) {
+    if (!staticCatalogByName.has(name)) {
       return;
     }
     state.selectedName = name;
     constellationApi.setHighlightedConstellation(name);
-    onSelectionChange?.(catalogByName.get(name));
+    onSelectionChange?.(getSelectedEntry());
     syncInfoCard();
     renderMap();
   }
@@ -248,11 +271,47 @@ export function createConstellationTabController({ i18n, ui, constellationApi, o
     allOption.textContent = i18n.t("constellationSelectAll");
     ui.constellationSelectEl.appendChild(allOption);
 
-    for (const entry of catalog) {
+    for (const name of sortedNames) {
+      const entry = staticCatalogByName.get(name);
+      if (!entry) {
+        continue;
+      }
       const option = document.createElement("option");
       option.value = entry.name;
       option.textContent = getConstellationOptionLabel(entry);
       ui.constellationSelectEl.appendChild(option);
+    }
+  }
+
+  function getWrappedAngleDeltaMagnitude(nextAngle, previousAngle) {
+    const delta = nextAngle - previousAngle;
+    return Math.abs(Math.atan2(Math.sin(delta), Math.cos(delta)));
+  }
+
+  function refreshDynamicState({ force = false } = {}) {
+    const currentAngle = constellationApi.getSeasonalPrecessionAngle?.() ?? 0;
+    if (!force && !state.isPanelActive) {
+      state.lastRenderedAngle = currentAngle;
+      return;
+    }
+
+    if (
+      !force &&
+      state.lastRenderedAngle !== null &&
+      getWrappedAngleDeltaMagnitude(currentAngle, state.lastRenderedAngle) < PRECESSION_RENDER_THRESHOLD_RAD
+    ) {
+      return;
+    }
+
+    syncInfoCard();
+    renderMap();
+    state.lastRenderedAngle = currentAngle;
+  }
+
+  function setPanelActive(active) {
+    state.isPanelActive = Boolean(active);
+    if (state.isPanelActive) {
+      refreshDynamicState({ force: true });
     }
   }
 
@@ -281,9 +340,14 @@ export function createConstellationTabController({ i18n, ui, constellationApi, o
   }
 
   return {
+    getSelectedConstellationName() {
+      return state.selectedName;
+    },
     initialize,
+    refreshDynamicState,
     refreshLocalizedUi,
     setConstellationsVisible,
+    setPanelActive,
     setSelectedConstellation,
   };
 }

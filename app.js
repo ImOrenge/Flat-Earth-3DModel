@@ -6,11 +6,13 @@ import {
 import {
   createSolarEclipseState,
   getMoonPhase,
+  getSeasonalPrecessionPhase,
+  getSeasonalPrecessionAngle,
   getSolarAltitudeFactor,
-} from "./modules/astronomy-utils.js?v=20260314-natural-eclipse2";
+} from "./modules/astronomy-utils.js?v=20260320-constellation-precession1";
 import { createAstronomyController } from "./modules/astronomy-controller.js?v=20260314-natural-eclipse4";
 import { createCameraController } from "./modules/camera-controller.js?v=20260313-tracking-angle1";
-import { createCelestialTrackingCameraController } from "./modules/celestial-tracking-camera-controller.js?v=20260319-tracking-angle2";
+import { createCelestialTrackingCameraController } from "./modules/celestial-tracking-camera-controller.js?v=20260320-constellation-precession1";
 import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js?v=20260312-darksun-eclipse1";
 import { createI18n } from "./modules/i18n.js?v=20260319-constellation-tab2";
 import { createMagneticFieldController } from "./modules/magnetic-field-controller.js?v=20260314-magnetic-pinecone3";
@@ -19,10 +21,10 @@ import { createTextureManager } from "./modules/texture-manager.js?v=20260311-gp
 import { createWalkerController } from "./modules/walker-controller.js?v=20260312-darksun-eclipse1";
 
 import * as constants from "./modules/constants.js";
-import { createEclipseController } from "./modules/eclipse-controller.js?v=20260314-natural-eclipse2";
+import { createEclipseController } from "./modules/eclipse-controller.js?v=20260320-constellation-precession1";
 import { createCelestialVisualsController } from "./modules/celestial-visuals-controller.js";
-import { createConstellationTabController } from "./modules/constellation-tab-controller.js?v=20260319-constellation-tab3";
-import { setupInputHandlers } from "./modules/input-handler.js";
+import { createConstellationTabController } from "./modules/constellation-tab-controller.js?v=20260320-constellation-precession1";
+import { setupInputHandlers } from "./modules/input-handler.js?v=20260320-constellation-precession1";
 import { createRocketController, SPACEPORTS } from "./modules/rocket-controller.js?v=20260319-parabola";
 const {
   DEFAULT_MAP_PATH,
@@ -429,6 +431,8 @@ function syncSeasonalEventButtonLabels() {
 applyStaticTranslations();
 syncSeasonalEventButtonLabels();
 
+let constellationTabApi;
+
 for (let i = 0; i < SPACEPORTS.length; i++) {
   const option = document.createElement("option");
   option.value = i;
@@ -446,10 +450,12 @@ function setControlTab(tabKey) {
     panel.classList.toggle("active", isActive);
     panel.hidden = !isActive;
   }
+
+  constellationTabApi?.setPanelActive(tabKey === "constellations");
 }
 
 import { setupScene } from "./modules/scene-setup.js";
-import { createConstellations } from "./modules/constellation-setup.js?v=20260319-constellation-tab2";
+import { createConstellations } from "./modules/constellation-setup.js?v=20260320-constellation-precession1";
 const {
   renderer,
   scene,
@@ -938,11 +944,18 @@ function focusCameraOnConstellation(entry) {
     return;
   }
 
-  const focus = entry.centroidWorldPoint ?? { x: 0, y: constants.SURFACE_Y * (5 / 6), z: 0 };
+  const resolveFocus = () => (
+    constellationApi.getConstellationState(entry.name)?.centroidWorldPoint ??
+    entry.centroidWorldPoint ??
+    { x: 0, y: constants.SURFACE_Y * (5 / 6), z: 0 }
+  );
+  const focus = resolveFocus();
   const polarisAngle = THREE.MathUtils.euclideanModulo(Math.atan2(focus.x, -focus.z), Math.PI * 2);
   const frontTheta = Math.PI - polarisAngle;
 
-  if (celestialTrackingCameraApi?.setCustomLookTarget) {
+  if (celestialTrackingCameraApi?.setCustomLookTargetResolver) {
+    celestialTrackingCameraApi.setCustomLookTargetResolver(resolveFocus, { immediate: true });
+  } else if (celestialTrackingCameraApi?.setCustomLookTarget) {
     celestialTrackingCameraApi.setCustomLookTarget(focus, { immediate: true });
   } else {
     cameraState.targetLookTarget.set(focus.x, focus.y, focus.z);
@@ -960,7 +973,7 @@ function focusCameraOnConstellation(entry) {
   cameraApi.clampCamera();
 }
 
-const constellationTabApi = createConstellationTabController({
+constellationTabApi = createConstellationTabController({
   i18n,
   constellationApi,
   onSelectionChange: focusCameraOnConstellation,
@@ -983,6 +996,9 @@ i18n.subscribe(() => {
 });
 
 constellationTabApi.initialize();
+setDemoSeasonPhaseFromDate(astronomyState.selectedDate.getTime());
+constellationApi.setSeasonalPrecessionAngle(getSeasonalPrecessionAngle(astronomyState.selectedDate));
+constellationTabApi.refreshDynamicState({ force: true });
 
 celestialTrackingCameraApi = createCelestialTrackingCameraController({
   buttons: cameraTrackButtons,
@@ -1009,7 +1025,7 @@ const rocketApi = createRocketController({
     astronomyState, renderState, walkerState, cameraState, astronomyApi,
     cameraApi, celestialTrackingCameraApi, celestialControlState,
     getGeoFromProjectedPosition, orbitMoon, orbitMoonBody, observerMoon, observerMoonBody,
-    getMoonPhase, solarEclipseToastTitleEl, solarEclipseToastCopyEl, solarEclipseToastEl, getBodyBandProgressStep, sunFullTrail, sunFullTrailPointsCloud, moonFullTrail, moonFullTrailPointsCloud, darkSunFullTrail, darkSunFullTrailPointsCloud, applyStaticTranslations, syncSeasonalEventButtonLabels, textureApi, magneticFieldApi, walkerApi, routeSimulationApi, syncPreparationPresentation: (...args) => celestialVisualsApi.syncPreparationPresentation(...args), observerSunBody, observerDarkSunBody, renderer, observerDarkSunRim, exitFirstPersonMode: () => celestialVisualsApi.exitFirstPersonMode(), realitySyncEl, realityLiveEl, setDemoMoonOrbitOffsetFromPhase, syncDemoMoonOrbitToSun, updateSunVisualEffects: (...args) => celestialVisualsApi.updateSunVisualEffects(...args)
+    getMoonPhase, solarEclipseToastTitleEl, solarEclipseToastCopyEl, solarEclipseToastEl, getBodyBandProgressStep, sunFullTrail, sunFullTrailPointsCloud, moonFullTrail, moonFullTrailPointsCloud, darkSunFullTrail, darkSunFullTrailPointsCloud, applyStaticTranslations, syncSeasonalEventButtonLabels, textureApi, magneticFieldApi, walkerApi, routeSimulationApi, syncPreparationPresentation: (...args) => celestialVisualsApi.syncPreparationPresentation(...args), observerSunBody, observerDarkSunBody, renderer, observerDarkSunRim, exitFirstPersonMode: () => celestialVisualsApi.exitFirstPersonMode(), realitySyncEl, realityLiveEl, setDemoMoonOrbitOffsetFromPhase, setDemoSeasonPhaseFromDate, syncDemoMoonOrbitToSun, updateSunVisualEffects: (...args) => celestialVisualsApi.updateSunVisualEffects(...args)
   });
   const {
     createSolarEclipseWindowSolverState,
@@ -1173,7 +1189,7 @@ const rocketApi = createRocketController({
     stagePreEclipseButton, stagePreEclipseScene: eclipseApi.stagePreEclipseScene,
     stagePreLunarEclipseButton, stagePreLunarEclipseScene: eclipseApi.stagePreLunarEclipseScene,
     skyAnalemmaOverlayEl, skyAnalemmaState, orbitModeButtons, cameraTrackButtons,
-    seasonalYearEl, seasonalEventButtons, setDemoMoonOrbitOffsetFromPhase
+    seasonalYearEl, seasonalEventButtons, setDemoMoonOrbitOffsetFromPhase, setDemoSeasonPhaseFromDate
   });
 
 function getBodyBandProgressStep(body) {
@@ -1206,6 +1222,15 @@ function setDemoMoonOrbitOffsetFromPhase(dateMs = simulationState.demoPhaseDateM
     return;
   }
   simulationState.moonSunOrbitOffsetRadians = moonPhase.phaseAngleRadians;
+}
+
+function setDemoSeasonPhaseFromDate(dateMs = simulationState.demoPhaseDateMs) {
+  const date = new Date(dateMs);
+  if (Number.isNaN(date.getTime())) {
+    return;
+  }
+
+  simulationState.orbitSeasonPhase = getSeasonalPrecessionPhase(date) * Math.PI * 2;
 }
 
 function syncDemoMoonOrbitToSun() {
@@ -1285,6 +1310,10 @@ function animate() {
     const speedMultiplier = celestialControlState.speedMultiplier * activeSpeedFactor;
     simulationState.orbitSunAngle += ORBIT_SUN_SPEED * speedMultiplier;
     simulationState.orbitMoonAngle += ORBIT_MOON_SPEED * speedMultiplier;
+    simulationState.orbitSeasonPhase = THREE.MathUtils.euclideanModulo(
+      simulationState.orbitSeasonPhase + (ORBIT_SUN_SEASON_SPEED * speedMultiplier),
+      Math.PI * 2
+    );
     // Decoupled dark sun: advances directly opposite the sun
     // Skip natural angle update when lunar stage is driving the dark sun's position
     if (!isLunarStagingActive) {
@@ -1368,6 +1397,12 @@ function animate() {
     astronomyApi.updateAstronomyUi(snapshot);
   }
 
+  const constellationPrecessionAngle = astronomyState.enabled
+    ? getSeasonalPrecessionAngle(projectionDate)
+    : -simulationState.orbitSeasonPhase;
+  constellationApi.setSeasonalPrecessionAngle(constellationPrecessionAngle);
+  constellationTabApi.refreshDynamicState();
+
   walkerApi.updateWalkerMovement(deltaSeconds);
   walkerApi.updateWalkerAvatar();
   walkerApi.updateWalkerPerspectiveGuides();
@@ -1412,6 +1447,7 @@ function animate() {
     
     // Global trap for playwright
     window.__E2E_SNAPSHOT = { 
+        constellationPrecessionAngle,
         moonPos: snapshot.moonPosition, 
         darkSunPos: snapshot.darkSunRenderPosition 
     };

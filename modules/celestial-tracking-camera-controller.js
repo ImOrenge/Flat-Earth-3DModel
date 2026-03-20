@@ -26,7 +26,8 @@ export function createCelestialTrackingCameraController({
   const state = {
     mode: "free",
     targetKey: "off",
-    customLookTarget: null
+    customLookTarget: null,
+    customLookTargetResolver: null
   };
 
   cameraState.mode = cameraState.mode ?? "free";
@@ -47,7 +48,20 @@ export function createCelestialTrackingCameraController({
     const hasTrackableTarget = state.targetKey !== "off" && Boolean(config?.object);
 
     if (!hasTrackableTarget) {
-      if (state.customLookTarget) {
+      if (state.customLookTargetResolver) {
+        const resolvedTarget = state.customLookTargetResolver();
+        if (resolvedTarget) {
+          tempWorldPosition.set(
+            resolvedTarget.x ?? 0,
+            resolvedTarget.y ?? 0,
+            resolvedTarget.z ?? 0
+          );
+        } else if (state.customLookTarget) {
+          tempWorldPosition.copy(state.customLookTarget);
+        } else {
+          tempWorldPosition.copy(defaultLookTarget);
+        }
+      } else if (state.customLookTarget) {
         tempWorldPosition.copy(state.customLookTarget);
       } else {
         tempWorldPosition.copy(defaultLookTarget);
@@ -78,6 +92,7 @@ export function createCelestialTrackingCameraController({
     state.targetKey = resolveTargetKey(nextTargetKey);
     if (state.targetKey !== "off") {
       state.customLookTarget = null;
+      state.customLookTargetResolver = null;
     }
     updateLookTarget(options);
     syncUi();
@@ -85,6 +100,7 @@ export function createCelestialTrackingCameraController({
 
   function clearTracking(options = {}) {
     state.customLookTarget = null;
+    state.customLookTargetResolver = null;
     setTarget("off", options);
   }
 
@@ -98,7 +114,20 @@ export function createCelestialTrackingCameraController({
       state.customLookTarget = new THREE.Vector3();
     }
 
+    state.customLookTargetResolver = null;
     state.customLookTarget.set(nextTarget.x ?? 0, nextTarget.y ?? 0, nextTarget.z ?? 0);
+    state.targetKey = "off";
+    updateLookTarget(options);
+    syncUi();
+  }
+
+  function setCustomLookTargetResolver(resolver, options = {}) {
+    if (typeof resolver !== "function") {
+      clearTracking(options);
+      return;
+    }
+
+    state.customLookTargetResolver = resolver;
     state.targetKey = "off";
     updateLookTarget(options);
     syncUi();
@@ -128,6 +157,7 @@ export function createCelestialTrackingCameraController({
     },
     refreshLocalizedUi,
     setCustomLookTarget,
+    setCustomLookTargetResolver,
     setTarget,
     update
   };
