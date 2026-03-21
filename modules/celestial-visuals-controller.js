@@ -212,9 +212,25 @@ export function createCelestialVisualsController(deps) {
     const topDownLightScale = visualProfile.environmentLightScale;
   
     if (walkerState.enabled) {
-      observerSunBody.material.emissiveIntensity *= bodyScale * visualProfile.sunBodyScale;
-      observerSunHalo.material.opacity *= haloScale * visualProfile.sunHaloScale;
-      observerSunLight.intensity *= lightScale * eclipseLightScale;
+      // First-person uses orbitSun directly — apply same pulse/eclipse effects
+      orbitSunBody.material.emissiveIntensity = easeEclipseLightValue(
+        orbitSunBody.material.emissiveIntensity,
+        ORBIT_SUN_BODY_EMISSIVE_INTENSITY * bodyScale * visualProfile.sunBodyScale,
+        phaseKey,
+        { riseBlend: 0.16, eclipseRiseBlend: 0.06, totalityRiseBlend: 0.01, fallBlend: 0.24 }
+      );
+      orbitSunHalo.material.opacity = easeEclipseLightValue(
+        orbitSunHalo.material.opacity,
+        ORBIT_SUN_HALO_OPACITY * haloScale * visualProfile.sunHaloScale,
+        phaseKey,
+        { riseBlend: 0.14, eclipseRiseBlend: 0.028, totalityRiseBlend: 0.006, fallBlend: 0.22 }
+      );
+      orbitSunLight.intensity = easeEclipseLightValue(
+        orbitSunLight.intensity,
+        ORBIT_SUN_LIGHT_INTENSITY * lightScale * eclipseLightScale,
+        phaseKey,
+        { riseBlend: 0.16, eclipseRiseBlend: 0.024, totalityRiseBlend: 0.004, fallBlend: 0.24 }
+      );
     } else {
       const orbitSunBodyTarget = ORBIT_SUN_BODY_EMISSIVE_INTENSITY * bodyScale * visualProfile.sunBodyScale;
       const orbitSunHaloTarget = ORBIT_SUN_HALO_OPACITY * haloScale * visualProfile.sunHaloScale;
@@ -733,94 +749,24 @@ export function createCelestialVisualsController(deps) {
       moonRenderState
     );
   
+    // Use orbitSun (main scene) directly — no observer clones in first-person
     orbitSun.visible = true;
-    sunFullTrail.visible = celestialControlState.showFullTrail;
-    sunFullTrailPointsCloud.visible = celestialControlState.showFullTrail;
-    sunTrail.visible = true;
-    sunTrailPointsCloud.visible = true;
-    observerSun.renderOrder = 24;
+    orbitSun.renderOrder = 24;
+    sunFullTrail.visible = false;
+    sunFullTrailPointsCloud.visible = false;
+    sunTrail.visible = false;
+    sunTrailPointsCloud.visible = false;
     observerSun.visible = false;
-    observerSunBody.material.depthTest = false;
-    observerSunBody.material.depthWrite = false;
-    observerSunBody.material.opacity += (sunOcclusionVisibility - observerSunBody.material.opacity) * 0.18;
-    observerSunBody.material.emissiveIntensity += (
-      (ORBIT_SUN_BODY_EMISSIVE_INTENSITY * sunOcclusionVisibility) - observerSunBody.material.emissiveIntensity
-    ) * 0.18;
-    observerSunHalo.material.depthTest = false;
-    observerSunHalo.material.depthWrite = false;
-    observerSunHalo.material.opacity += (
-      (ORBIT_SUN_HALO_OPACITY * sunOcclusionVisibility) - observerSunHalo.material.opacity
-    ) * 0.18;
-    observerSunLight.intensity += (
-      (ORBIT_SUN_LIGHT_INTENSITY * sunOcclusionVisibility) - observerSunLight.intensity
-    ) * 0.18;
-    observerDarkSun.renderOrder = 26;
-    const debugDarkSunBodyOpacity = simulationState.darkSunDebugVisible
-      ? ORBIT_DARK_SUN_DEBUG_OPACITY
-      : darkSunOcclusionVisibility;
-    const debugDarkSunRimOpacity = simulationState.darkSunDebugVisible
-      ? ORBIT_DARK_SUN_DEBUG_RIM_OPACITY
-      : (ORBIT_DARK_SUN_RIM_OPACITY * darkSunOcclusionVisibility);
-    observerDarkSunBody.material.opacity += (
-      debugDarkSunBodyOpacity - observerDarkSunBody.material.opacity
-    ) * 0.18;
-    observerDarkSunRim.material.opacity += (
-      debugDarkSunRimOpacity - observerDarkSunRim.material.opacity
-    ) * 0.18;
-    tempSunWorldPosition.copy(observerSun.position);
-    tempSunViewDirection.copy(observerSun.position).sub(camera.position);
-    const sunDistance = Math.max(tempSunViewDirection.length(), 0.0001);
-    tempSunViewDirection.divideScalar(sunDistance);
-    camera.getWorldDirection(tempCameraForward);
-    const lookAlignment = THREE.MathUtils.clamp(
-      (tempCameraForward.dot(tempSunViewDirection) - FIRST_PERSON_SUN_RAY_ALIGNMENT_START) /
-        (FIRST_PERSON_SUN_RAY_ALIGNMENT_END - FIRST_PERSON_SUN_RAY_ALIGNMENT_START),
-      0,
-      1
-    );
-    const lowSunBoost = THREE.MathUtils.lerp(
-      1.18,
-      0.62,
-      THREE.MathUtils.clamp(adjustedSunHorizontal.altitudeDegrees / 65, 0, 1)
-    );
-    const rayStrength = sunOcclusionVisibility * lookAlignment * lowSunBoost;
-  
-    firstPersonSunRayGroup.visible = rayStrength > 0.015;
-    if (firstPersonSunRayGroup.visible) {
-      const pulseTime = performance.now() * 0.0018;
-      const rayScale = THREE.MathUtils.lerp(0.9, 1.55, rayStrength);
-      firstPersonSunRayGroup.position.copy(tempSunWorldPosition);
-      firstPersonSunRayGroup.quaternion.copy(camera.quaternion);
-      firstPersonSunRayGroup.scale.setScalar(rayScale);
-  
-      for (const rayMesh of firstPersonSunRayMeshes) {
-        const shimmer = 0.82 + (Math.sin(pulseTime + rayMesh.userData.pulseOffset) * 0.18);
-        rayMesh.material.opacity = rayMesh.userData.baseOpacity * rayStrength * shimmer;
-      }
-    }
-  
-    orbitMoon.renderOrder = 23;
+    observerDarkSun.visible = false;
+    firstPersonSunRayGroup.visible = false;
+
     orbitMoon.visible = true;
-    moonFullTrail.visible = celestialControlState.showFullTrail;
-    moonFullTrailPointsCloud.visible = celestialControlState.showFullTrail;
-    moonTrail.visible = true;
-    moonTrailPointsCloud.visible = true;
-    observerMoon.renderOrder = 23;
+    orbitMoon.renderOrder = 23;
+    moonFullTrail.visible = false;
+    moonFullTrailPointsCloud.visible = false;
+    moonTrail.visible = false;
+    moonTrailPointsCloud.visible = false;
     observerMoon.visible = false;
-    observerMoonBody.material.depthTest = false;
-    observerMoonBody.material.depthWrite = false;
-    observerMoonBody.material.opacity += (moonOcclusionVisibility - observerMoonBody.material.opacity) * 0.18;
-    observerMoonBody.material.emissiveIntensity += (
-      ((moonRenderState.bodyEmissiveIntensity * moonOcclusionVisibility) - observerMoonBody.material.emissiveIntensity)
-    ) * 0.12;
-    observerMoonHalo.material.depthTest = false;
-    observerMoonHalo.material.depthWrite = false;
-    observerMoonHalo.material.opacity += (
-      (moonRenderState.haloOpacity * moonOcclusionVisibility) - observerMoonHalo.material.opacity
-    ) * 0.18;
-    observerMoonLight.intensity += (
-      (moonRenderState.lightIntensity * moonOcclusionVisibility) - observerMoonLight.intensity
-    ) * 0.18;
   }
   
   function configurePreparationCamera(targetCamera) {

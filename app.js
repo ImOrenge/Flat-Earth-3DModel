@@ -22,7 +22,7 @@ import { createWalkerController } from "./modules/walker-controller.js?v=2026031
 
 import * as constants from "./modules/constants.js";
 import { createEclipseController } from "./modules/eclipse-controller.js?v=20260320-reality-eclipse-sync2";
-import { createCelestialVisualsController } from "./modules/celestial-visuals-controller.js";
+import { createCelestialVisualsController } from "./modules/celestial-visuals-controller.js?v=20260321-sunset5";
 import { createConstellationTabController } from "./modules/constellation-tab-controller.js?v=20260320-constellation-precession1";
 import { setupInputHandlers } from "./modules/input-handler.js?v=20260320-hud-classic1";
 import { createRocketController, SPACEPORTS } from "./modules/rocket-controller.js?v=20260319-parabola";
@@ -1358,7 +1358,8 @@ const firstPersonWorldApi = createFirstPersonWorldController({
   ambient: firstPersonAmbient,
   keyLight: firstPersonKeyLight,
   rimLight: firstPersonRimLight,
-  topDownBackground: skyTexture
+  topDownBackground: skyTexture,
+  orbitSun
 });
 
 const routeSimulationApi = createRouteSimulationController({
@@ -2112,3 +2113,94 @@ runOnboarding();
   });
 })();
 
+// Sunset/Sunrise timelapse
+(function initSunsetTimelapse() {
+  const btn = document.getElementById('watch-sunset-btn');
+  if (!btn) return;
+
+  const STEP_MS = 60 * 1000;
+  const AIM_LERP = 0.06;
+  let active = false;
+  let targetEvent = 'sunset';
+  let aimHeading = null;
+
+  function getSunAltitudeDeg() {
+    const sunPos = orbitSun.position;
+    const wx = walkerState.position.x;
+    const wz = walkerState.position.z;
+    const eyeH = constants.WALKER_EYE_HEIGHT || 0;
+    const dx = sunPos.x - wx;
+    const dz = sunPos.z - wz;
+    const dy = Math.max(sunPos.y - eyeH, 0.0001);
+    const planar = Math.hypot(dx, dz);
+    const raw = THREE.MathUtils.radToDeg(Math.atan2(dy, planar));
+    return raw - (constants.LOCAL_LIGHT_HORIZON_OFFSET_DEGREES || 22);
+  }
+
+  function getSunHeading() {
+    const sunPos = orbitSun.position;
+    return Math.atan2(sunPos.x - walkerState.position.x, sunPos.z - walkerState.position.z);
+  }
+
+  function updateLabel() {
+    if (active) {
+      btn.textContent = i18n.t('stopTimelapse');
+    } else if (getSunAltitudeDeg() > 5) {
+      btn.textContent = i18n.t('watchSunsetButton');
+    } else {
+      btn.textContent = i18n.t('watchSunriseButton');
+    }
+  }
+
+  function stop() {
+    active = false;
+    aimHeading = null;
+    updateLabel();
+  }
+
+  function tick() {
+    if (!active) return;
+    if (renderState.preparing) { requestAnimationFrame(tick); return; }
+    if (!walkerState.enabled) { stop(); return; }
+
+    const alt = getSunAltitudeDeg();
+    const done = targetEvent === 'sunset' ? alt < -1.5 : alt > 4;
+    if (done) { stop(); return; }
+
+    astronomyState.live = false;
+    astronomyState.selectedDate = new Date(astronomyState.selectedDate.getTime() + STEP_MS);
+    if (astronomyApi.syncLiveObservationInput) {
+      astronomyApi.syncLiveObservationInput(astronomyState.selectedDate);
+    }
+
+    const target = getSunHeading();
+    if (aimHeading === null) aimHeading = target;
+    let delta = target - aimHeading;
+    if (delta > Math.PI) delta -= Math.PI * 2;
+    if (delta < -Math.PI) delta += Math.PI * 2;
+    aimHeading += delta * AIM_LERP;
+    walkerState.heading = aimHeading;
+    walkerState.pitch = THREE.MathUtils.clamp(
+      THREE.MathUtils.degToRad(getSunAltitudeDeg() * 0.6),
+      -1.08, 0.72
+    );
+
+    requestAnimationFrame(tick);
+  }
+
+  btn.addEventListener('click', () => {
+    if (active) { stop(); return; }
+    if (!walkerState.enabled) {
+      enterFirstPersonMode();
+    }
+    const alt = getSunAltitudeDeg();
+    targetEvent = alt > 5 ? 'sunset' : 'sunrise';
+    active = true;
+    aimHeading = null;
+    updateLabel();
+    requestAnimationFrame(tick);
+  });
+
+  updateLabel();
+  document.addEventListener('i18n-updated', () => { if (!active) updateLabel(); });
+})();

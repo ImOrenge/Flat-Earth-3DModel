@@ -154,7 +154,8 @@ export function createFirstPersonWorldController({
   ambient,
   keyLight,
   rimLight,
-  topDownBackground
+  topDownBackground,
+  orbitSun
 }) {
   const scaleDimension = (value) => value * (constants.MODEL_SCALE ?? 1);
   const root = new THREE.Group();
@@ -319,6 +320,7 @@ export function createFirstPersonWorldController({
     })
   );
   horizonWall.position.y = constants.SURFACE_Y + scaleDimension(10.5);
+  horizonWall.renderOrder = 27;
   root.add(horizonWall);
 
   const horizonGlow = new THREE.Mesh(
@@ -530,6 +532,14 @@ export function createFirstPersonWorldController({
       ambient.color.lerp(new THREE.Color(0xc5d7ff), 0.08);
       keyLight.color.lerp(new THREE.Color(0xeaf4ff), 0.08);
       rimLight.color.lerp(new THREE.Color(0x8fd9ff), 0.08);
+      // Restore sun opacity when leaving walker mode
+      if (orbitSun) {
+        orbitSun.traverse((child) => {
+          if (child.isMesh && child.material && child.material._baseOpacity !== undefined) {
+            child.material.opacity = child.material._baseOpacity;
+          }
+        });
+      }
       return;
     }
 
@@ -711,6 +721,23 @@ export function createFirstPersonWorldController({
     sunsetGlow.position.y = constants.SURFACE_Y + scaleDimension(6) + (Math.sin(sunAltitudeRadians) * scaleDimension(12));
     sunsetGlow.material.opacity = Math.max(0, (twilightFactor * 0.72) + (dayFactor * 0.08));
     sunsetGlow.visible = sunsetGlow.material.opacity > 0.01;
+
+    // Fade out the sun mesh as it approaches/goes below the horizon
+    if (orbitSun) {
+      const sunOpacity = THREE.MathUtils.clamp(
+        THREE.MathUtils.inverseLerp(-1.5, 3.0, sunAltitudeDegrees),
+        0,
+        1
+      );
+      orbitSun.traverse((child) => {
+        if (child.isMesh && child.material) {
+          if (child.material._baseOpacity === undefined) {
+            child.material._baseOpacity = child.material.opacity ?? 1;
+          }
+          child.material.opacity = sunOpacity * child.material._baseOpacity;
+        }
+      });
+    }
   }
 
   return {
