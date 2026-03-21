@@ -9,22 +9,22 @@ import {
   getSeasonalPrecessionPhase,
   getSeasonalPrecessionAngle,
   getSolarAltitudeFactor,
-} from "./modules/astronomy-utils.js?v=20260320-constellation-precession1";
-import { createAstronomyController } from "./modules/astronomy-controller.js?v=20260314-natural-eclipse4";
+} from "./modules/astronomy-utils.js?v=20260320-reality-eclipse-sync1";
+import { createAstronomyController } from "./modules/astronomy-controller.js?v=20260320-reality-eclipse-sync2";
 import { createCameraController } from "./modules/camera-controller.js?v=20260313-tracking-angle1";
 import { createCelestialTrackingCameraController } from "./modules/celestial-tracking-camera-controller.js?v=20260320-constellation-precession1";
 import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js?v=20260312-darksun-eclipse1";
-import { createI18n } from "./modules/i18n.js?v=20260319-constellation-tab2";
+import { createI18n } from "./modules/i18n.js?v=20260320-hudtabs2";
 import { createMagneticFieldController } from "./modules/magnetic-field-controller.js?v=20260314-magnetic-pinecone3";
 import { createRouteSimulationController } from "./modules/route-simulation-controller.js";
 import { createTextureManager } from "./modules/texture-manager.js?v=20260311-gpu-daynight";
 import { createWalkerController } from "./modules/walker-controller.js?v=20260312-darksun-eclipse1";
 
 import * as constants from "./modules/constants.js";
-import { createEclipseController } from "./modules/eclipse-controller.js?v=20260320-constellation-precession1";
+import { createEclipseController } from "./modules/eclipse-controller.js?v=20260320-reality-eclipse-sync2";
 import { createCelestialVisualsController } from "./modules/celestial-visuals-controller.js";
 import { createConstellationTabController } from "./modules/constellation-tab-controller.js?v=20260320-constellation-precession1";
-import { setupInputHandlers } from "./modules/input-handler.js?v=20260320-constellation-precession1";
+import { setupInputHandlers } from "./modules/input-handler.js?v=20260320-hud-classic1";
 import { createRocketController, SPACEPORTS } from "./modules/rocket-controller.js?v=20260319-parabola";
 const {
   DEFAULT_MAP_PATH,
@@ -266,6 +266,7 @@ const {
   ORBIT_RADIUS_AMPLITUDE
 } = constants;
 
+const appShellEl = document.querySelector(".app-shell");
 const canvas = document.getElementById("scene");
 const firstPersonOverlayEl = document.getElementById("first-person-overlay");
 const firstPersonHorizonEl = document.getElementById("first-person-horizon");
@@ -282,12 +283,37 @@ const languageToggleEl = document.getElementById("language-toggle");
 const languageToggleTextEl = document.getElementById("language-toggle-text");
 const uploadInput = document.getElementById("map-upload");
 const resetButton = document.getElementById("reset-camera");
+const summaryUtilitySlotEl = document.getElementById("summary-utility-slot");
+const languageToggleRowEl = document.getElementById("language-toggle-row");
+const summaryButtonRowEl = document.getElementById("summary-button-row");
+const topbarNavSlotEl = document.getElementById("topbar-nav-slot");
+const topbarUtilitySlotEl = document.getElementById("topbar-utility-slot");
+const settingsAnchorEl = document.getElementById("settings-anchor");
+const settingsToggleButtonEl = document.getElementById("settings-toggle");
+const settingsPopoverEl = document.getElementById("settings-popover");
+const detailTabsHomeEl = document.getElementById("detail-tabs-home");
 const detailTabsEl = document.getElementById("detail-tabs");
+const helpOpenButtonEl = document.getElementById("help-open");
+const helpModalLayerEl = document.getElementById("help-modal-layer");
+const helpModalBackdropEl = document.getElementById("help-modal-backdrop");
+const helpModalEl = document.getElementById("help-modal");
+const helpCloseButtonEl = document.getElementById("help-close");
+const layoutSwitchEl = document.getElementById("layout-switch");
+const layoutModeButtons = [...document.querySelectorAll("[data-layout-mode-switch]")];
+const hudSeasonLatitudeChipEl = document.getElementById("hud-season-latitude-chip");
+const hudSeasonStateChipEl = document.getElementById("hud-season-state-chip");
+const hudTimeChipEl = document.getElementById("hud-time-chip");
+const hudSystemChipEl = document.getElementById("hud-system-chip");
+const hudSideRailEl = document.getElementById("hud-side-rail");
+const hudSideCardEl = document.getElementById("hud-side-card");
+const hudSideCardTitleEl = document.getElementById("hud-side-card-title");
+const hudSideCardSlotEl = document.getElementById("hud-side-card-slot");
 const rocketSpaceportSelect = document.getElementById("rocket-spaceport-select");
 const rocketTypeSelect      = document.getElementById("rocket-type-select");
 const rocketLaunchBtn       = document.getElementById("rocket-launch-btn");
 const controlTabButtons = [...document.querySelectorAll("[data-control-tab]")];
 const controlTabPanels = [...document.querySelectorAll("[data-control-panel]")];
+const hudSubtabButtons = [...document.querySelectorAll("[data-hud-panel-tab]")];
 const translatableTextEls = [...document.querySelectorAll("[data-i18n]")];
 const translatableHtmlEls = [...document.querySelectorAll("[data-i18n-html]")];
 const orbitLabelEl = document.getElementById("orbit-label");
@@ -306,6 +332,10 @@ const seasonDetailEl = document.getElementById("season-detail");
 const realitySyncEl = document.getElementById("reality-sync");
 const realityLiveEl = document.getElementById("reality-live");
 const observationTimeEl = document.getElementById("observation-time");
+const observationMinusHourButton = document.getElementById("observation-minus-hour");
+const observationPlusHourButton = document.getElementById("observation-plus-hour");
+const observationMinusMinuteButton = document.getElementById("observation-minus-minute");
+const observationPlusMinuteButton = document.getElementById("observation-plus-minute");
 const applyObservationTimeButton = document.getElementById("apply-observation-time");
 const setCurrentTimeButton = document.getElementById("set-current-time");
 const timeSummaryEl = document.getElementById("time-summary");
@@ -317,6 +347,11 @@ const moonPhaseLabelEl = document.getElementById("moon-phase-label");
 const moonPhaseDegreesEl = document.getElementById("moon-phase-degrees");
 const moonPhaseStepEl = document.getElementById("moon-phase-step");
 const moonPhaseDirectionEl = document.getElementById("moon-phase-direction");
+const moonPhasePanelHomeEl = document.getElementById("moon-phase-panel-home");
+const moonPhasePanelEl = document.getElementById("moon-phase-panel");
+const solarEclipsePanelHomeEl = document.getElementById("solar-eclipse-panel-home");
+const solarEclipsePanelSlotEl = document.getElementById("solar-eclipse-panel-slot");
+const solarEclipsePanelEl = document.getElementById("solar-eclipse-panel");
 const dayNightOverlayEl = document.getElementById("day-night-overlay");
 const dayNightSummaryEl = document.getElementById("day-night-summary");
 const analemmaOverlayEl = document.getElementById("analemma-overlay");
@@ -364,7 +399,11 @@ const routeProgressEl = document.getElementById("route-progress");
 const routeGeoSummaryEl = document.getElementById("route-geo-summary");
 const constellationVisibilityToggleEl = document.getElementById("constellation-visibility-toggle");
 const constellationVisibilityTextEl = document.getElementById("constellation-visibility-text");
+const constellationLineVisibilityToggleEl = document.getElementById("constellation-line-visibility-toggle");
+const constellationLineVisibilityTextEl = document.getElementById("constellation-line-visibility-text");
 const constellationSelectEl = document.getElementById("constellation-select");
+const constellationMapHomeEl = document.getElementById("constellation-map-home");
+const constellationMapWrapEl = document.getElementById("constellation-map-wrap");
 const constellationMapEl = document.getElementById("constellation-map");
 const constellationDirectionEl = document.getElementById("constellation-direction");
 const constellationRaEl = document.getElementById("constellation-ra");
@@ -373,17 +412,350 @@ const constellationHemisphereEl = document.getElementById("constellation-hemisph
 const constellationSegmentsEl = document.getElementById("constellation-segments");
 const constellationStarsEl = document.getElementById("constellation-stars");
 const i18n = createI18n();
+const LAYOUT_STORAGE_KEY = "flat-earth-layout-mode";
+const HUD_PANEL_SECTION_DEFAULTS = {
+  astronomy: "time",
+  routes: "playback",
+  constellations: "controls",
+  rockets: "launch"
+};
+const HUD_SIDE_CARD_CONFIG = {
+  astronomy: {
+    home: moonPhasePanelHomeEl,
+    node: moonPhasePanelEl,
+    titleKey: "moonPhasePanelTitle"
+  },
+  constellations: {
+    home: constellationMapHomeEl,
+    node: constellationMapWrapEl,
+    titleKey: "constellationMapTitle"
+  }
+};
+const FOCUSABLE_SELECTOR = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "[tabindex]:not([tabindex='-1'])"
+].join(", ");
+
+let helpModalOpen = false;
+let settingsPanelOpen = false;
+let currentLayoutMode = getInitialLayoutMode();
+let currentControlTab = controlTabButtons.find((button) => button.classList.contains("active"))?.dataset.controlTab ?? "astronomy";
+let lastFocusedBeforeHelpModal = null;
+let lastFocusedBeforeSettingsPanel = null;
+const hudPanelSectionState = { ...HUD_PANEL_SECTION_DEFAULTS };
+
+function getInitialLayoutMode() {
+  try {
+    const storedLayoutMode = window.localStorage.getItem(LAYOUT_STORAGE_KEY);
+    if (storedLayoutMode === "hud" || storedLayoutMode === "classic") {
+      return storedLayoutMode;
+    }
+  } catch {}
+
+  return "hud";
+}
+
+function moveNodeToSlot(node, slot) {
+  if (!node || !slot || node.parentElement === slot) {
+    return;
+  }
+
+  slot.appendChild(node);
+}
+
+function syncSummaryUtilitySlotVisibility() {
+  if (!summaryUtilitySlotEl) {
+    return;
+  }
+
+  summaryUtilitySlotEl.hidden = summaryUtilitySlotEl.childElementCount === 0;
+}
+
+function syncLayoutAnchors(layoutMode) {
+  moveNodeToSlot(languageToggleRowEl, topbarUtilitySlotEl);
+  moveNodeToSlot(summaryButtonRowEl, topbarUtilitySlotEl);
+
+  if (layoutMode === "hud") {
+    moveNodeToSlot(detailTabsEl, topbarNavSlotEl);
+    syncSummaryUtilitySlotVisibility();
+    return;
+  }
+
+  moveNodeToSlot(detailTabsEl, detailTabsHomeEl);
+  syncSummaryUtilitySlotVisibility();
+}
+
+function syncHudMovablePanels() {
+  const eclipseTargetSlot = currentLayoutMode === "hud"
+    ? solarEclipsePanelSlotEl
+    : solarEclipsePanelHomeEl;
+
+  moveNodeToSlot(solarEclipsePanelEl, eclipseTargetSlot);
+}
+
+function syncHudSideCard() {
+  for (const config of Object.values(HUD_SIDE_CARD_CONFIG)) {
+    moveNodeToSlot(config.node, config.home);
+  }
+
+  const isDesktopHud = currentLayoutMode === "hud" && window.innerWidth > 1080;
+  const activeCardConfig = isDesktopHud ? HUD_SIDE_CARD_CONFIG[currentControlTab] : null;
+
+  if (!hudSideRailEl || !hudSideCardEl || !hudSideCardSlotEl || !hudSideCardTitleEl || !activeCardConfig) {
+    if (hudSideCardEl) {
+      hudSideCardEl.hidden = true;
+    }
+    if (hudSideRailEl) {
+      hudSideRailEl.hidden = true;
+    }
+    return;
+  }
+
+  hudSideRailEl.hidden = false;
+  hudSideCardEl.hidden = false;
+  hudSideCardTitleEl.textContent = i18n.t(activeCardConfig.titleKey);
+  moveNodeToSlot(activeCardConfig.node, hudSideCardSlotEl);
+}
+
+function syncHudPanelSections() {
+  const isHudLayout = currentLayoutMode === "hud";
+
+  for (const panel of controlTabPanels) {
+    const panelKey = panel.dataset.controlPanel;
+    const buttons = [...panel.querySelectorAll("[data-hud-panel-tab]")];
+    const sections = [...panel.querySelectorAll("[data-hud-panel-section]")];
+    const activeSection = hudPanelSectionState[panelKey] ?? buttons[0]?.dataset.hudPanelTab;
+
+    for (const button of buttons) {
+      const isActive = button.dataset.hudPanelTab === activeSection;
+      button.classList.toggle("active", isActive);
+      button.setAttribute("aria-pressed", String(isActive));
+    }
+
+    for (const section of sections) {
+      const isHudOnlySection = section.hasAttribute("data-hud-only-section");
+      const isActive = isHudLayout
+        ? section.dataset.hudPanelSection === activeSection
+        : !isHudOnlySection;
+      section.hidden = !isActive;
+      section.classList.toggle("active", isActive);
+    }
+  }
+
+  syncHudSideCard();
+}
+
+function setHudPanelSection(panelKey, sectionKey) {
+  if (!panelKey || !sectionKey) {
+    return;
+  }
+
+  hudPanelSectionState[panelKey] = sectionKey;
+  syncHudPanelSections();
+}
+
+function syncHudStatusChips() {
+  hudSeasonLatitudeChipEl.textContent = seasonLatitudeEl.textContent?.trim() || "--";
+  hudSeasonStateChipEl.textContent = seasonSummaryEl.textContent?.trim() || "--";
+  hudTimeChipEl.textContent = timeSummaryEl.textContent?.trim() || "--";
+  hudSystemChipEl.textContent = statusEl.textContent?.trim() || "--";
+}
+
+function setLayoutMode(layoutMode, { persist = true } = {}) {
+  const nextLayoutMode = layoutMode === "classic" ? "classic" : "hud";
+  currentLayoutMode = nextLayoutMode;
+
+  document.body.dataset.layoutMode = nextLayoutMode;
+  if (appShellEl) {
+    appShellEl.dataset.layoutMode = nextLayoutMode;
+  }
+
+  syncLayoutAnchors(nextLayoutMode);
+  syncHudMovablePanels();
+
+  for (const button of layoutModeButtons) {
+    const isActive = button.dataset.layoutModeSwitch === nextLayoutMode;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  }
+
+  if (persist) {
+    try {
+      window.localStorage.setItem(LAYOUT_STORAGE_KEY, nextLayoutMode);
+    } catch {}
+  }
+
+  syncHudStatusChips();
+  syncHudPanelSections();
+}
+
+function getFocusableElements(root) {
+  return [...root.querySelectorAll(FOCUSABLE_SELECTOR)]
+    .filter((element) => !element.hasAttribute("hidden") && element.getAttribute("aria-hidden") !== "true");
+}
+
+function trapFocus(event) {
+  if (!helpModalOpen) {
+    return;
+  }
+
+  const focusableElements = getFocusableElements(helpModalEl);
+  if (focusableElements.length === 0) {
+    event.preventDefault();
+    helpModalEl.focus();
+    return;
+  }
+
+  const firstElement = focusableElements[0];
+  const lastElement = focusableElements[focusableElements.length - 1];
+  const activeElement = document.activeElement;
+
+  if (event.shiftKey && activeElement === firstElement) {
+    event.preventDefault();
+    lastElement.focus();
+  } else if (!event.shiftKey && activeElement === lastElement) {
+    event.preventDefault();
+    firstElement.focus();
+  }
+}
+
+function resetMovementInputs() {
+  if (typeof movementState === "undefined") {
+    return;
+  }
+
+  movementState.forward = false;
+  movementState.backward = false;
+  movementState.left = false;
+  movementState.right = false;
+}
+
+function openSettingsPanel(trigger = settingsToggleButtonEl) {
+  if (!settingsToggleButtonEl || !settingsPopoverEl || settingsPanelOpen) {
+    return;
+  }
+
+  settingsPanelOpen = true;
+  lastFocusedBeforeSettingsPanel = trigger instanceof HTMLElement ? trigger : document.activeElement;
+  settingsPopoverEl.hidden = false;
+  settingsPopoverEl.classList.add("active");
+  settingsPopoverEl.setAttribute("aria-hidden", "false");
+  settingsToggleButtonEl.setAttribute("aria-expanded", "true");
+  document.body.classList.add("settings-panel-open");
+  resetMovementInputs();
+}
+
+function closeSettingsPanel({ restoreFocus = true } = {}) {
+  if (!settingsToggleButtonEl || !settingsPopoverEl || !settingsPanelOpen) {
+    return;
+  }
+
+  settingsPanelOpen = false;
+  settingsPopoverEl.classList.remove("active");
+  settingsPopoverEl.hidden = true;
+  settingsPopoverEl.setAttribute("aria-hidden", "true");
+  settingsToggleButtonEl.setAttribute("aria-expanded", "false");
+  document.body.classList.remove("settings-panel-open");
+  resetMovementInputs();
+
+  if (restoreFocus && lastFocusedBeforeSettingsPanel instanceof HTMLElement) {
+    lastFocusedBeforeSettingsPanel.focus();
+  }
+}
+
+function toggleSettingsPanel() {
+  if (settingsPanelOpen) {
+    closeSettingsPanel({ restoreFocus: false });
+    return;
+  }
+
+  openSettingsPanel(settingsToggleButtonEl);
+}
+
+function openHelpModal(trigger = helpOpenButtonEl) {
+  if (helpModalOpen) {
+    return;
+  }
+
+  closeSettingsPanel({ restoreFocus: false });
+  helpModalOpen = true;
+  lastFocusedBeforeHelpModal = trigger instanceof HTMLElement ? trigger : document.activeElement;
+  helpModalLayerEl.hidden = false;
+  helpModalLayerEl.classList.add("active");
+  helpModalLayerEl.setAttribute("aria-hidden", "false");
+  helpOpenButtonEl.setAttribute("aria-expanded", "true");
+  document.body.classList.add("help-modal-open");
+  resetMovementInputs();
+  window.requestAnimationFrame(() => {
+    helpCloseButtonEl.focus();
+  });
+}
+
+function closeHelpModal({ restoreFocus = true } = {}) {
+  if (!helpModalOpen) {
+    return;
+  }
+
+  helpModalOpen = false;
+  helpModalLayerEl.classList.remove("active");
+  helpModalLayerEl.hidden = true;
+  helpModalLayerEl.setAttribute("aria-hidden", "true");
+  helpOpenButtonEl.setAttribute("aria-expanded", "false");
+  document.body.classList.remove("help-modal-open");
+  resetMovementInputs();
+
+  if (restoreFocus && lastFocusedBeforeHelpModal instanceof HTMLElement) {
+    lastFocusedBeforeHelpModal.focus();
+  }
+}
+
+function handleOverlayKeydown(event) {
+  if (helpModalOpen) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeHelpModal();
+      return;
+    }
+
+    if (event.key === "Tab") {
+      trapFocus(event);
+    }
+
+    return;
+  }
+
+  if (settingsPanelOpen && event.key === "Escape") {
+    event.preventDefault();
+    closeSettingsPanel();
+  }
+}
+
+function isUiBlocking() {
+  return helpModalOpen || settingsPanelOpen;
+}
 
 function applyStaticTranslations() {
   document.documentElement.lang = i18n.getLanguage();
   document.title = i18n.t("documentTitle");
   detailTabsEl.setAttribute("aria-label", i18n.t("detailTabsAria"));
+  layoutSwitchEl.setAttribute("aria-label", i18n.t("layoutSwitchAria"));
   languageToggleEl.checked = i18n.getLanguage() === "en";
   languageToggleEl.setAttribute("aria-label", i18n.t("languageToggleAria"));
   languageToggleTextEl.textContent = i18n.getLanguage() === "en"
     ? i18n.t("languageNameEn")
     : i18n.t("languageNameKo");
   moonPhaseChartImageEl.alt = i18n.t("moonPhaseChartAlt");
+  helpOpenButtonEl.setAttribute("aria-controls", "help-modal");
+  helpOpenButtonEl.setAttribute("aria-haspopup", "dialog");
+  helpOpenButtonEl.setAttribute("aria-expanded", String(helpModalOpen));
+  settingsToggleButtonEl.setAttribute("aria-controls", "settings-popover");
+  settingsToggleButtonEl.setAttribute("aria-haspopup", "dialog");
+  settingsToggleButtonEl.setAttribute("aria-expanded", String(settingsPanelOpen));
+  settingsPopoverEl.setAttribute("aria-hidden", String(!settingsPanelOpen));
 
   for (const element of translatableTextEls) {
     element.textContent = i18n.t(element.dataset.i18n);
@@ -392,6 +764,8 @@ function applyStaticTranslations() {
   for (const element of translatableHtmlEls) {
     element.innerHTML = i18n.t(element.dataset.i18nHtml);
   }
+
+  syncHudPanelSections();
 }
 
 const orbitModes = {
@@ -430,6 +804,84 @@ function syncSeasonalEventButtonLabels() {
 
 applyStaticTranslations();
 syncSeasonalEventButtonLabels();
+syncHudStatusChips();
+setLayoutMode(currentLayoutMode, { persist: false });
+
+const hudStatusObserver = new MutationObserver(() => {
+  syncHudStatusChips();
+});
+
+for (const sourceElement of [seasonLatitudeEl, seasonSummaryEl, timeSummaryEl, statusEl]) {
+  hudStatusObserver.observe(sourceElement, {
+    childList: true,
+    characterData: true,
+    subtree: true
+  });
+}
+
+for (const button of layoutModeButtons) {
+  button.addEventListener("click", () => {
+    setLayoutMode(button.dataset.layoutModeSwitch);
+  });
+}
+
+for (const button of hudSubtabButtons) {
+  button.addEventListener("click", () => {
+    const panel = button.closest("[data-control-panel]");
+    const panelKey = panel?.dataset.controlPanel;
+    const sectionKey = button.dataset.hudPanelTab;
+    setHudPanelSection(panelKey, sectionKey);
+  });
+}
+
+settingsToggleButtonEl.addEventListener("click", () => {
+  toggleSettingsPanel();
+});
+
+helpOpenButtonEl.addEventListener("click", () => {
+  openHelpModal(helpOpenButtonEl);
+});
+
+helpCloseButtonEl.addEventListener("click", () => {
+  closeHelpModal();
+});
+
+helpModalBackdropEl.addEventListener("click", () => {
+  closeHelpModal();
+});
+
+document.addEventListener("pointerdown", (event) => {
+  if (!settingsPanelOpen || !settingsAnchorEl || !(event.target instanceof Node)) {
+    return;
+  }
+
+  if (!settingsAnchorEl.contains(event.target)) {
+    closeSettingsPanel({ restoreFocus: false });
+  }
+}, true);
+
+document.addEventListener("keydown", handleOverlayKeydown, true);
+document.addEventListener("focusin", (event) => {
+  if (helpModalOpen) {
+    if (helpModalEl.contains(event.target)) {
+      return;
+    }
+
+    helpCloseButtonEl.focus();
+    return;
+  }
+
+  if (!settingsPanelOpen || !settingsAnchorEl || !(event.target instanceof Node)) {
+    return;
+  }
+
+  if (!settingsAnchorEl.contains(event.target)) {
+    closeSettingsPanel({ restoreFocus: false });
+  }
+});
+window.addEventListener("resize", () => {
+  syncHudSideCard();
+});
 
 let constellationTabApi;
 
@@ -441,6 +893,8 @@ for (let i = 0; i < SPACEPORTS.length; i++) {
 }
 
 function setControlTab(tabKey) {
+  currentControlTab = tabKey;
+
   for (const button of controlTabButtons) {
     button.classList.toggle("active", button.dataset.controlTab === tabKey);
   }
@@ -451,6 +905,7 @@ function setControlTab(tabKey) {
     panel.hidden = !isActive;
   }
 
+  syncHudPanelSections();
   constellationTabApi?.setPanelActive(tabKey === "constellations");
 }
 
@@ -978,6 +1433,8 @@ constellationTabApi = createConstellationTabController({
   constellationApi,
   onSelectionChange: focusCameraOnConstellation,
   ui: {
+    constellationLineVisibilityTextEl,
+    constellationLineVisibilityToggleEl,
     constellationVisibilityToggleEl,
     constellationVisibilityTextEl,
     constellationSelectEl,
@@ -1173,7 +1630,7 @@ const rocketApi = createRocketController({
   setupInputHandlers({
     constants, canvas, cameraApi, walkerApi, celestialTrackingCameraApi, magneticFieldApi,
     routeSimulationApi, textureApi, astronomyApi, rocketApi, ui, renderState, walkerState, cameraState,
-    movementState, simulationState, astronomyState, celestialControlState, skyTexture, scene,
+    movementState, simulationState, astronomyState, celestialControlState, isUiBlocking, skyTexture, scene,
     setControlTab, createSolarEclipseState: eclipseApi.createSolarEclipseState, syncFullTrailVisibility: eclipseApi.syncFullTrailVisibility,
     resetDarkSunStageState: eclipseApi.resetDarkSunStageState, showSolarEclipseToast: eclipseApi.showSolarEclipseToast,
     resetDarkSunOcclusionMotion: eclipseApi.resetDarkSunOcclusionMotion, darkSunOcclusionState,
@@ -1181,7 +1638,8 @@ const rocketApi = createRocketController({
     exitFirstPersonMode, enterFirstPersonMode, walkerModeEl, resetWalkerButton,
     routeSelectEl, routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl,
     celestialFullTrailEl, routePlaybackButton, routeResetButton, realitySyncEl,
-    realityLiveEl, observationTimeEl, applyObservationTimeButton, setCurrentTimeButton,
+    realityLiveEl, observationTimeEl, observationMinusHourButton, observationPlusHourButton,
+    observationMinusMinuteButton, observationPlusMinuteButton, applyObservationTimeButton, setCurrentTimeButton,
     dayNightOverlayEl, dayNightState, getGeoFromProjectedPosition: astronomyApi.getGeoFromProjectedPosition, orbitSun,
     analemmaOverlayEl, analemmaState, magneticFieldOverlayEl, magneticFieldState,
     darkSunDebugEl, getCurrentUiSnapshot: eclipseApi.getCurrentUiSnapshot,
@@ -1448,8 +1906,10 @@ function animate() {
     // Global trap for playwright
     window.__E2E_SNAPSHOT = { 
         constellationPrecessionAngle,
+        dateIso: snapshot.date?.toISOString?.() ?? null,
         moonPos: snapshot.moonPosition, 
-        darkSunPos: snapshot.darkSunRenderPosition 
+        darkSunPos: snapshot.darkSunRenderPosition,
+        activeLunarEclipseData: snapshot.activeLunarEclipseData ?? null
     };
 
     evaluateSolarEclipse(snapshot, deltaSeconds);

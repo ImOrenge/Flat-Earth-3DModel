@@ -109,6 +109,7 @@ export function createConstellationTabController({ i18n, ui, constellationApi, o
   const sortedNames = initialCatalog.map((entry) => entry.name);
 
   const state = {
+    areLinesVisible: constellationApi.getConstellationLinesVisible?.() ?? false,
     isVisible: true,
     isPanelActive: false,
     lastRenderedAngle: null,
@@ -144,6 +145,12 @@ export function createConstellationTabController({ i18n, ui, constellationApi, o
       : i18n.t("constellationVisibilityOff");
   }
 
+  function getLineVisibilityLabel() {
+    return state.areLinesVisible
+      ? i18n.t("constellationLinesOn")
+      : i18n.t("constellationLinesOff");
+  }
+
   function syncVisibilityUi() {
     if (ui.constellationVisibilityToggleEl) {
       ui.constellationVisibilityToggleEl.checked = state.isVisible;
@@ -152,6 +159,16 @@ export function createConstellationTabController({ i18n, ui, constellationApi, o
       ui.constellationVisibilityTextEl.textContent = getVisibilityLabel();
     }
     ui.constellationSelectEl.disabled = !state.isVisible;
+  }
+
+  function syncLineVisibilityUi() {
+    if (ui.constellationLineVisibilityToggleEl) {
+      ui.constellationLineVisibilityToggleEl.checked = state.areLinesVisible;
+      ui.constellationLineVisibilityToggleEl.disabled = !state.isVisible;
+    }
+    if (ui.constellationLineVisibilityTextEl) {
+      ui.constellationLineVisibilityTextEl.textContent = getLineVisibilityLabel();
+    }
   }
 
   function syncInfoCard() {
@@ -199,13 +216,15 @@ export function createConstellationTabController({ i18n, ui, constellationApi, o
         const starOpacity = hasSelection ? (isSelected ? 0.94 : 0.22) : 0.56;
         const starRadius = hasSelection ? (isSelected ? 0.34 : 0.22) : 0.26;
 
-        parts.push(
-          `<g stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="${segmentOpacity.toFixed(3)}" stroke-width="${segmentWidth.toFixed(2)}">`
-        );
-        for (const segment of entry.mapSegments) {
-          parts.push(buildSegmentSvg(segment));
+        if (state.areLinesVisible) {
+          parts.push(
+            `<g stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="${segmentOpacity.toFixed(3)}" stroke-width="${segmentWidth.toFixed(2)}">`
+          );
+          for (const segment of entry.mapSegments) {
+            parts.push(buildSegmentSvg(segment));
+          }
+          parts.push("</g>");
         }
-        parts.push("</g>");
 
         parts.push(
           `<g fill="#f7fbff" opacity="${starOpacity.toFixed(3)}">`
@@ -261,6 +280,14 @@ export function createConstellationTabController({ i18n, ui, constellationApi, o
     state.isVisible = Boolean(visible);
     constellationApi.setConstellationsVisible(state.isVisible);
     syncVisibilityUi();
+    syncLineVisibilityUi();
+    renderMap();
+  }
+
+  function setConstellationLinesVisible(visible) {
+    state.areLinesVisible = Boolean(visible);
+    constellationApi.setConstellationLinesVisible(state.areLinesVisible);
+    syncLineVisibilityUi();
     renderMap();
   }
 
@@ -320,6 +347,7 @@ export function createConstellationTabController({ i18n, ui, constellationApi, o
     populateSelect();
     ui.constellationSelectEl.value = selectedValue;
     syncVisibilityUi();
+    syncLineVisibilityUi();
     ui.constellationMapEl.setAttribute("aria-label", i18n.t("constellationMapAria"));
     syncInfoCard();
     renderMap();
@@ -334,8 +362,12 @@ export function createConstellationTabController({ i18n, ui, constellationApi, o
     ui.constellationVisibilityToggleEl?.addEventListener("change", () => {
       setConstellationsVisible(ui.constellationVisibilityToggleEl.checked);
     });
+    ui.constellationLineVisibilityToggleEl?.addEventListener("change", () => {
+      setConstellationLinesVisible(ui.constellationLineVisibilityToggleEl.checked);
+    });
     setSelectedConstellation(state.selectedName);
     setConstellationsVisible(state.isVisible);
+    setConstellationLinesVisible(state.areLinesVisible);
     refreshLocalizedUi();
   }
 
@@ -347,6 +379,7 @@ export function createConstellationTabController({ i18n, ui, constellationApi, o
     refreshDynamicState,
     refreshLocalizedUi,
     setConstellationsVisible,
+    setConstellationLinesVisible,
     setPanelActive,
     setSelectedConstellation,
   };

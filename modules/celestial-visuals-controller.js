@@ -1,5 +1,5 @@
 import * as THREE from "../vendor/three.module.js";
-import { createSolarEclipseState } from "./astronomy-utils.js?v=20260314-natural-eclipse2";
+import { createSolarEclipseState } from "./astronomy-utils.js?v=20260320-reality-eclipse-sync1";
 
 export function createCelestialVisualsController(deps) {
   const {

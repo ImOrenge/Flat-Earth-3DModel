@@ -10,6 +10,9 @@ import {
 import {
   createSolarEclipseState,
   getAstronomySnapshot as buildAstronomySnapshot,
+  getMoonEclipticLatitudeDegrees,
+  getMoonPhase,
+  getMoonSubpoint,
   getSunSubpoint,
   getSeasonalEventMoments,
   getSeasonalMoonAudit,
@@ -17,7 +20,8 @@ import {
   getMoonHorizontalCoordinates,
   getSunHorizontalCoordinates,
   SEASONAL_EVENT_DEFINITIONS
-} from "./astronomy-utils.js?v=20260314-natural-eclipse2";
+} from "./astronomy-utils.js?v=20260320-reality-eclipse-sync1";
+import { getEclipseAlignmentTarget } from "./eclipse-events-utils.js?v=20260320-reality-eclipse-events1";
 
 export function createAstronomyController({
   constants,
@@ -85,6 +89,23 @@ export function createAstronomyController({
   const DARK_SUN_START_DIRECTION = -1;
   const DARK_SUN_ORBIT_SPEED_FACTOR = 0.72;
   const DARK_SUN_BAND_SPEED_FACTOR = 1.08;
+  const SYNODIC_MONTH_DAYS = 29.530588853;
+  const REALITY_ECLIPSE_MIN_ALIGNMENT = constants.REALITY_ECLIPSE_MIN_ALIGNMENT ?? 0.24;
+  const REALITY_ECLIPSE_MAX_ALIGNMENT_OFFSET_RADIANS = (
+    constants.REALITY_ECLIPSE_MAX_ALIGNMENT_OFFSET_RADIANS ?? (Math.PI * 0.42)
+  );
+  const REALITY_SOLAR_ECLIPSE_PHASE_WINDOW_DAYS = (
+    constants.REALITY_SOLAR_ECLIPSE_PHASE_WINDOW_DAYS ?? 1.6
+  );
+  const REALITY_LUNAR_ECLIPSE_PHASE_WINDOW_DAYS = (
+    constants.REALITY_LUNAR_ECLIPSE_PHASE_WINDOW_DAYS ?? 1.8
+  );
+  const REALITY_SOLAR_ECLIPSE_NODE_LIMIT_DEGREES = (
+    constants.REALITY_SOLAR_ECLIPSE_NODE_LIMIT_DEGREES ?? 1.55
+  );
+  const REALITY_LUNAR_ECLIPSE_NODE_LIMIT_DEGREES = (
+    constants.REALITY_LUNAR_ECLIPSE_NODE_LIMIT_DEGREES ?? 1.2
+  );
   let lastSeasonalSunKey = "";
   let lastSolarEclipseState = createSolarEclipseState();
   const bandCenterProgressByMode = {
@@ -706,15 +727,115 @@ export function createAstronomyController({
     };
   }
 
-  function getRealityDarkSunState(date) {
-    const elapsedFrames = (date.getTime() - DARK_SUN_REFERENCE_TIME_MS) / (1000 / 60);
+  function getWrappedPhaseDelta(phaseProgress = 0, targetPhase = 0) {
+    return THREE.MathUtils.euclideanModulo((phaseProgress - targetPhase) + 0.5, 1) - 0.5;
+  }
 
-    // Independent retrograde orbit angle — advances opposite to the sun
+  function getPhaseWindowFactor(distanceDays = 0, windowDays = 1) {
+    return THREE.MathUtils.clamp(
+      1 - (Math.abs(distanceDays) / Math.max(windowDays, 0.0001)),
+      0,
+      1
+    );
+  }
+
+  function getShortestAngleDeltaRadians(fromAngle = 0, toAngle = 0) {
+    return Math.atan2(
+      Math.sin(toAngle - fromAngle),
+      Math.cos(toAngle - fromAngle)
+    );
+  }
+
+  function lerpAngleRadians(fromAngle = 0, toAngle = 0, alpha = 0) {
+    return fromAngle + (
+      getShortestAngleDeltaRadians(fromAngle, toAngle) * THREE.MathUtils.clamp(alpha, 0, 1)
+    );
+  }
+
+  function getRealitySunRenderStateAtDate(date) {
+    const sun = getSunSubpoint(date);
+    const projectedRadius = THREE.MathUtils.clamp(
+      projectedRadiusFromLatitude(sun.latitudeDegrees, constants.DISC_RADIUS),
+      0,
+      constants.DOME_RADIUS - 0.2
+    );
+
+    return getSunRenderState({
+      longitudeDegrees: sun.longitudeDegrees,
+      projectedRadius,
+      source: "reality"
+    });
+  }
+
+  function getRealityMoonRenderStateAtDate(date) {
+    const moon = getMoonSubpoint(date);
+    const projectedRadius = THREE.MathUtils.clamp(
+      projectedRadiusFromLatitude(moon.latitudeDegrees, constants.DISC_RADIUS),
+      0,
+      constants.DOME_RADIUS - 0.2
+    );
+
+    return getMoonRenderState({
+      longitudeDegrees: moon.longitudeDegrees,
+      orbitAngleRadians: THREE.MathUtils.degToRad(moon.longitudeDegrees),
+      projectedRadius,
+      source: "reality"
+    });
+  }
+
+  function getRealityEclipseAlignmentState(date) {
+    const moonPhase = getMoonPhase(date);
+    const phaseProgress = THREE.MathUtils.euclideanModulo(moonPhase?.phaseProgress ?? 0, 1);
+    const phaseDeltaToNew = getWrappedPhaseDelta(phaseProgress, 0);
+    const phaseDeltaToFull = getWrappedPhaseDelta(phaseProgress, 0.5);
+    const signedDaysToNew = phaseDeltaToNew * SYNODIC_MONTH_DAYS;
+    const signedDaysToFull = phaseDeltaToFull * SYNODIC_MONTH_DAYS;
+    const solarPhaseFactor = getPhaseWindowFactor(
+      signedDaysToNew,
+      REALITY_SOLAR_ECLIPSE_PHASE_WINDOW_DAYS
+    );
+    const lunarPhaseFactor = getPhaseWindowFactor(
+      signedDaysToFull,
+      REALITY_LUNAR_ECLIPSE_PHASE_WINDOW_DAYS
+    );
+    const nodeLatitudeDegrees = Math.abs(getMoonEclipticLatitudeDegrees(date));
+    const solarNodeFactor = THREE.MathUtils.clamp(
+      1 - (nodeLatitudeDegrees / Math.max(REALITY_SOLAR_ECLIPSE_NODE_LIMIT_DEGREES, 0.0001)),
+      0,
+      1
+    );
+    const lunarNodeFactor = THREE.MathUtils.clamp(
+      1 - (nodeLatitudeDegrees / Math.max(REALITY_LUNAR_ECLIPSE_NODE_LIMIT_DEGREES, 0.0001)),
+      0,
+      1
+    );
+    const solarStrength = Math.pow(solarPhaseFactor, 1.2) * Math.pow(solarNodeFactor, 1.35);
+    const lunarStrength = Math.pow(lunarPhaseFactor, 1.1) * Math.pow(lunarNodeFactor, 1.3);
+    let mode = "none";
+    let strength = 0;
+
+    if (solarStrength >= REALITY_ECLIPSE_MIN_ALIGNMENT && solarStrength >= (lunarStrength * 1.05)) {
+      mode = "solar";
+      strength = solarStrength;
+    } else if (lunarStrength >= REALITY_ECLIPSE_MIN_ALIGNMENT) {
+      mode = "lunar";
+      strength = lunarStrength;
+    }
+
+    return {
+      lunarStrength,
+      mode,
+      signedDaysToFull,
+      signedDaysToNew,
+      solarStrength,
+      strength
+    };
+  }
+
+  function getRealityBaselineDarkSunState(date) {
+    const elapsedFrames = (date.getTime() - DARK_SUN_REFERENCE_TIME_MS) / (1000 / 60);
     const darkSunOrbitSpeed = constants.ORBIT_SUN_SPEED * DARK_SUN_ORBIT_SPEED_FACTOR;
     const orbitAngleRadians = DARK_SUN_START_ANGLE - (elapsedFrames * darkSunOrbitSpeed);
-
-    // Independent band progress — analytical triangle wave (O(1), handles any elapsed time)
-    // DARK_SUN_START_DIRECTION = -1 so mirror: linearPos = 2 - startProgress
     const bandStep = getBodyBandProgressStep("darkSun");
     const totalDelta = bandStep * elapsedFrames;
     const linearPos = (2 - DARK_SUN_START_PROGRESS + totalDelta) % 2;
@@ -729,20 +850,153 @@ export function createAstronomyController({
     };
   }
 
+  function getDarkSunEventContactOffsetRadians(mode = "solar", anchorRenderState = null) {
+    const centerRadius = Math.max(anchorRenderState?.centerRadius ?? constants.EQUATOR_RADIUS, 0.0001);
+    const anchorBodyRadius = mode === "solar"
+      ? constants.ORBIT_SUN_SIZE
+      : constants.ORBIT_MOON_SIZE;
+    const contactSpan = (anchorBodyRadius + constants.ORBIT_DARK_SUN_SIZE) * 1.04;
+    const contactRatio = THREE.MathUtils.clamp(contactSpan / centerRadius, 0, 0.98);
+    return Math.max(2 * Math.asin(contactRatio), 0.0005);
+  }
+
+  function getEventAnchoredDarkSunState(date, {
+    baselineState,
+    moonRenderState = null,
+    sunRenderState = null
+  } = {}) {
+    const alignment = getEclipseAlignmentTarget({
+      baselineState,
+      dateMs: date.getTime(),
+      moonRenderState,
+      sunRenderState
+    });
+
+    if (alignment.mode === "none") {
+      return null;
+    }
+
+    const targetAnchorState = alignment.mode === "solar" ? sunRenderState : moonRenderState;
+    let targetOrbitAngle = alignment.targetOrbitAngleRadians ?? baselineState.orbitAngleRadians;
+    const eventType = alignment.eventMeta?.type ?? "";
+    if (targetAnchorState && (eventType === "partial" || eventType === "total")) {
+      const anchorOrbitAngle = targetAnchorState.orbitAngleRadians ?? baselineState.orbitAngleRadians;
+      const maxContactOffset = getDarkSunEventContactOffsetRadians(alignment.mode, targetAnchorState);
+      const rawOffset = getShortestAngleDeltaRadians(anchorOrbitAngle, targetOrbitAngle);
+      const overlapScale = eventType === "total" ? 0.35 : 0.78;
+      const overlapLimit = maxContactOffset * overlapScale;
+      const clampedOffset = THREE.MathUtils.clamp(rawOffset, -overlapLimit, overlapLimit);
+      targetOrbitAngle = anchorOrbitAngle + clampedOffset;
+    }
+
+    const blendFactor = THREE.MathUtils.clamp(alignment.blendFactor ?? 0, 0, 1);
+    return {
+      direction: alignment.direction ?? baselineState.direction,
+      eventMeta: alignment.eventMeta ?? null,
+      orbitAngleRadians: lerpAngleRadians(
+        baselineState.orbitAngleRadians,
+        targetOrbitAngle,
+        blendFactor
+      ),
+      orbitMode: "auto",
+      progress: THREE.MathUtils.clamp(
+        THREE.MathUtils.lerp(
+          baselineState.progress,
+          alignment.targetProgress ?? baselineState.progress,
+          blendFactor
+        ),
+        0,
+        1
+      )
+    };
+  }
+
+  function getRealityDarkSunState(date, { sunRenderState = null, moonRenderState = null } = {}) {
+    const baselineState = getRealityBaselineDarkSunState(date);
+    const eventAnchoredState = getEventAnchoredDarkSunState(date, {
+      baselineState,
+      moonRenderState,
+      sunRenderState
+    });
+    if (eventAnchoredState) {
+      return eventAnchoredState;
+    }
+    const eclipseAlignment = getRealityEclipseAlignmentState(date);
+
+    if (eclipseAlignment.mode === "none") {
+      return baselineState;
+    }
+
+    const modeConfig = eclipseAlignment.mode === "solar"
+      ? {
+        signedDays: eclipseAlignment.signedDaysToNew,
+        windowDays: REALITY_SOLAR_ECLIPSE_PHASE_WINDOW_DAYS
+      }
+      : {
+        signedDays: eclipseAlignment.signedDaysToFull,
+        windowDays: REALITY_LUNAR_ECLIPSE_PHASE_WINDOW_DAYS
+      };
+    const targetRenderState = eclipseAlignment.mode === "solar"
+      ? (sunRenderState ?? getRealitySunRenderStateAtDate(date))
+      : (moonRenderState ?? getRealityMoonRenderStateAtDate(date));
+
+    if (!targetRenderState) {
+      return baselineState;
+    }
+
+    const blendFactor = THREE.MathUtils.clamp(
+      (eclipseAlignment.strength - REALITY_ECLIPSE_MIN_ALIGNMENT) /
+      Math.max(1 - REALITY_ECLIPSE_MIN_ALIGNMENT, 0.0001),
+      0,
+      1
+    );
+    const normalizedPhaseOffset = THREE.MathUtils.clamp(
+      modeConfig.signedDays / Math.max(modeConfig.windowDays, 0.0001),
+      -1,
+      1
+    );
+    const targetOrbitAngle = (
+      (targetRenderState.orbitAngleRadians ?? baselineState.orbitAngleRadians) +
+      (normalizedPhaseOffset * REALITY_ECLIPSE_MAX_ALIGNMENT_OFFSET_RADIANS)
+    );
+    const targetProgress = (
+      targetRenderState.corridorProgress ??
+      targetRenderState.macroProgress ??
+      baselineState.progress
+    );
+
+    return {
+      direction: normalizedPhaseOffset >= 0 ? 1 : -1,
+      orbitAngleRadians: lerpAngleRadians(
+        baselineState.orbitAngleRadians,
+        targetOrbitAngle,
+        blendFactor
+      ),
+      orbitMode: "auto",
+      progress: THREE.MathUtils.clamp(
+        THREE.MathUtils.lerp(baselineState.progress, targetProgress, blendFactor),
+        0,
+        1
+      )
+    };
+  }
+
   function getDarkSunRenderState({
     date = astronomyState.selectedDate,
     direction = simulationState.darkSunBandDirection ?? DARK_SUN_START_DIRECTION,
     orbitAngleRadians = simulationState.orbitDarkSunAngle ?? DARK_SUN_START_ANGLE,
     phaseOffsetRadians = simulationState.darkSunOrbitPhaseOffsetRadians ?? DARK_SUN_START_ANGLE,
+    moonRenderState = null,
     progress = simulationState.darkSunBandProgress ?? DARK_SUN_START_PROGRESS,
     source = "reality",
     sunDirection = simulationState.sunBandDirection ?? 1,
+    sunRenderState = null,
     sunOrbitAngleRadians = simulationState.orbitSunAngle ?? 0,
     sunProgress = simulationState.sunBandProgress ?? 0.5,
     useExplicitOrbit = true,
     orbitMode = source === "demo" ? simulationState.orbitMode : "auto"
   } = {}) {
-    // Dark sun always uses independent orbit (both reality and demo modes)
+    // Demo keeps explicit orbit. Reality derives dark sun from real sun/moon cycle sync.
     const darkSunState = source === "demo"
       ? {
         // Demo mode: use explicit state from simulationState (independent orbit)
@@ -751,7 +1005,10 @@ export function createAstronomyController({
         orbitMode,
         progress
       }
-      : getRealityDarkSunState(date);
+      : getRealityDarkSunState(date, {
+        moonRenderState,
+        sunRenderState
+      });
     const renderState = getBodyCoilRenderState({
       body: "darkSun",
       orbitAngleRadians: darkSunState.orbitAngleRadians,
@@ -794,10 +1051,11 @@ export function createAstronomyController({
     source = "reality",
     orbitMode = source === "demo" ? simulationState.orbitMode : "auto"
   }) {
-    // Use 'sun' corridor so the moon traces the same spiral geometry as the sun.
-    // The angular offset (orbitMoonAngle vs orbitSunAngle) keeps them apart on the same track.
+    // Reality mode must preserve the exact projected radius from astronomical latitude.
+    // Demo mode can mirror the sun corridor for stylized synchronized orbit behavior.
+    const coilBody = source === "reality" ? "moon" : "sun";
     return getBodyCoilRenderState({
-      body: "sun",
+      body: coilBody,
       longitudeDegrees,
       orbitAngleRadians,
       orbitMode,
@@ -1573,12 +1831,65 @@ export function createAstronomyController({
     ui.seasonDetailEl.textContent = i18n.t("seasonDetailSouth");
   }
 
+  function syncBandProgressFromSnapshot(progressKey, directionKey, value) {
+    if (!Number.isFinite(value)) {
+      return;
+    }
+    const nextProgress = THREE.MathUtils.clamp(value, 0, 1);
+    const previousProgress = simulationState[progressKey];
+    if (
+      Number.isFinite(previousProgress) &&
+      Math.abs(nextProgress - previousProgress) > 0.0001
+    ) {
+      simulationState[directionKey] = nextProgress > previousProgress ? 1 : -1;
+    }
+    simulationState[progressKey] = nextProgress;
+  }
+
+  function normalizeOrbitAngleRadians(angleRadians) {
+    if (!Number.isFinite(angleRadians)) {
+      return angleRadians;
+    }
+    return THREE.MathUtils.euclideanModulo(angleRadians, Math.PI * 2);
+  }
+
+  function syncSimulationStateFromAstronomySnapshot(snapshot) {
+    if (Number.isFinite(snapshot.sunRenderState?.orbitAngleRadians)) {
+      simulationState.orbitSunAngle = normalizeOrbitAngleRadians(snapshot.sunRenderState.orbitAngleRadians);
+    }
+    if (Number.isFinite(snapshot.moonRenderState?.orbitAngleRadians)) {
+      simulationState.orbitMoonAngle = normalizeOrbitAngleRadians(snapshot.moonRenderState.orbitAngleRadians);
+    }
+    if (Number.isFinite(snapshot.darkSunRenderState?.orbitAngleRadians)) {
+      simulationState.orbitDarkSunAngle = normalizeOrbitAngleRadians(snapshot.darkSunRenderState.orbitAngleRadians);
+    }
+    if (Number.isFinite(snapshot.darkSunRenderState?.direction)) {
+      simulationState.darkSunBandDirection = snapshot.darkSunRenderState.direction >= 0 ? 1 : -1;
+    }
+    syncBandProgressFromSnapshot(
+      "sunBandProgress",
+      "sunBandDirection",
+      snapshot.sunRenderState?.corridorProgress ?? snapshot.sunRenderState?.macroProgress
+    );
+    syncBandProgressFromSnapshot(
+      "moonBandProgress",
+      "moonBandDirection",
+      snapshot.moonRenderState?.corridorProgress ?? snapshot.moonRenderState?.macroProgress
+    );
+    syncBandProgressFromSnapshot(
+      "darkSunBandProgress",
+      "darkSunBandDirection",
+      snapshot.darkSunRenderState?.corridorProgress ?? snapshot.darkSunRenderState?.macroProgress
+    );
+  }
+
   function applyAstronomySnapshot(snapshot) {
     orbitSun.position.copy(snapshot.sunRenderPosition ?? snapshot.sunPosition);
     if (snapshot.darkSunRenderPosition) {
       orbitDarkSun.position.copy(snapshot.darkSunRenderPosition);
     }
     orbitMoon.position.copy(snapshot.moonRenderPosition ?? snapshot.moonPosition);
+    syncSimulationStateFromAstronomySnapshot(snapshot);
     updateSeasonPresentation(projectedRadiusFromLatitude(snapshot.sun.latitudeDegrees, constants.DISC_RADIUS));
     updateAstronomyUi(snapshot);
     syncSeasonalSunUi();

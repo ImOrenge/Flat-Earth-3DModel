@@ -260,6 +260,7 @@ function createConstellationVisual({
   const linePositions = [];
   const starPositions = [];
   const starColors = [];
+  const lineObjects = [];
   const localStarKeys = new Set();
   const mapSegments = [];
   const mapStars = [];
@@ -278,6 +279,7 @@ function createConstellationVisual({
       const lineGeometry = new THREE.BufferGeometry().setFromPoints(sampledPoints);
       const line = new THREE.Line(lineGeometry, lineMaterial);
       line.renderOrder = 22;
+      lineObjects.push(line);
       group.add(line);
       mapSegments.push(sampledPoints.map(toMapPoint));
     } else {
@@ -315,6 +317,7 @@ function createConstellationVisual({
     lineGeometry.setAttribute("position", new THREE.Float32BufferAttribute(linePositions, 3));
     const lines = new THREE.LineSegments(lineGeometry, lineMaterial);
     lines.renderOrder = 22;
+    lineObjects.push(lines);
     group.add(lines);
   }
 
@@ -331,6 +334,7 @@ function createConstellationVisual({
     name: constellation.name,
     code: constellation.code,
     group,
+    lineObjects,
     lineMaterial,
     starMaterial,
     catalogEntry: createConstellationCatalogEntry(constellation, {
@@ -387,10 +391,12 @@ export function createConstellations() {
     group.add(visual.group);
   }
 
-  group.add(createGridGroup());
+  const gridGroup = createGridGroup();
+  group.add(gridGroup);
 
   let highlightedConstellation = null;
   let areConstellationsVisible = true;
+  let areConstellationLinesVisible = false;
   let seasonalPrecessionAngle = 0;
   let cosPrecessionAngle = 1;
   let sinPrecessionAngle = 0;
@@ -412,6 +418,15 @@ export function createConstellations() {
     }
   }
 
+  function applyLineVisibilityState() {
+    gridGroup.visible = areConstellationLinesVisible;
+    for (const visual of constellationVisuals) {
+      for (const lineObject of visual.lineObjects) {
+        lineObject.visible = areConstellationLinesVisible;
+      }
+    }
+  }
+
   function setHighlightedConstellation(nameOrNull) {
     const nextName = typeof nameOrNull === "string" && nameOrNull.length > 0
       ? nameOrNull
@@ -423,6 +438,15 @@ export function createConstellations() {
   function setConstellationsVisible(visible) {
     areConstellationsVisible = Boolean(visible);
     group.visible = areConstellationsVisible;
+  }
+
+  function setConstellationLinesVisible(visible) {
+    areConstellationLinesVisible = Boolean(visible);
+    applyLineVisibilityState();
+  }
+
+  function getConstellationLinesVisible() {
+    return areConstellationLinesVisible;
   }
 
   function setSeasonalPrecessionAngle(angleRadians = 0) {
@@ -458,6 +482,7 @@ export function createConstellations() {
   }
 
   applyHighlightState();
+  applyLineVisibilityState();
   setConstellationsVisible(true);
   setSeasonalPrecessionAngle(0);
 
@@ -468,7 +493,9 @@ export function createConstellations() {
   return {
     group,
     getConstellationState,
+    getConstellationLinesVisible,
     setConstellationsVisible,
+    setConstellationLinesVisible,
     setSeasonalPrecessionAngle,
     setHighlightedConstellation,
     getConstellationCatalog,
