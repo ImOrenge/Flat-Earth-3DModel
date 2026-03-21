@@ -7,35 +7,35 @@
   --topbar-border: rgba(183, 221, 255, 0.2);
   --hud-shell-bg: linear-gradient(180deg, rgba(13, 24, 43, 0.92), rgba(4, 8, 17, 0.88));
   --hud-shell-shadow: 0 28px 80px rgba(0, 0, 0, 0.4);
-  --hud-compact-detail-width: min(860px, calc(100vw - 48px));
-  --hud-compact-detail-max-height: min(46svh, 500px);
-  --hud-compact-detail-padding: 15px 16px;
-  --hud-compact-detail-radius: 24px;
-  --hud-compact-detail-bottom: 16px;
-  --hud-compact-content-columns: minmax(136px, 156px) minmax(0, 1fr);
-  --hud-compact-content-gap: 8px 10px;
-  --hud-compact-subtabs-gap: 6px;
-  --hud-compact-subtabs-padding: 7px;
-  --hud-compact-subtabs-radius: 16px;
-  --hud-compact-subtab-min-height: 34px;
-  --hud-compact-subtab-padding: 7px 10px;
-  --hud-compact-subtab-font-size: 0.76rem;
-  --hud-compact-card-padding: 11px;
-  --hud-compact-card-radius: 14px;
-  --hud-compact-overlay-gap: 8px;
-  --hud-compact-copy-margin-top: 8px;
-  --hud-compact-copy-font-size: 0.86rem;
-  --hud-compact-subtle-font-size: 0.8rem;
-  --hud-compact-coord-grid-gap: 7px;
-  --hud-compact-coord-grid-margin-top: 8px;
-  --hud-compact-coord-card-padding: 9px;
-  --hud-compact-coord-card-radius: 13px;
-  --hud-compact-button-compact-margin-top: 8px;
-  --hud-compact-button-compact-padding: 7px 11px;
-  --hud-compact-side-rail-width: min(256px, calc(100vw - 40px));
-  --hud-compact-side-card-max-height: min(36svh, 360px);
-  --hud-compact-side-card-padding: 10px;
-  --hud-compact-side-card-radius: 18px;
+  --hud-compact-detail-width: min(640px, calc(100vw - 48px));
+  --hud-compact-detail-max-height: min(48svh, 460px);
+  --hud-compact-detail-padding: 12px 13px;
+  --hud-compact-detail-radius: 20px;
+  --hud-compact-detail-bottom: 20px;
+  --hud-compact-content-columns: minmax(100px, 110px) minmax(0, 1fr);
+  --hud-compact-content-gap: 6px 8px;
+  --hud-compact-subtabs-gap: 5px;
+  --hud-compact-subtabs-padding: 6px;
+  --hud-compact-subtabs-radius: 14px;
+  --hud-compact-subtab-min-height: 30px;
+  --hud-compact-subtab-padding: 5px 8px;
+  --hud-compact-subtab-font-size: 0.72rem;
+  --hud-compact-card-padding: 9px;
+  --hud-compact-card-radius: 12px;
+  --hud-compact-overlay-gap: 6px;
+  --hud-compact-copy-margin-top: 6px;
+  --hud-compact-copy-font-size: 0.81rem;
+  --hud-compact-subtle-font-size: 0.76rem;
+  --hud-compact-coord-grid-gap: 5px;
+  --hud-compact-coord-grid-margin-top: 6px;
+  --hud-compact-coord-card-padding: 7px;
+  --hud-compact-coord-card-radius: 11px;
+  --hud-compact-button-compact-margin-top: 6px;
+  --hud-compact-button-compact-padding: 6px 10px;
+  --hud-compact-side-rail-width: min(220px, calc(100vw - 40px));
+  --hud-compact-side-card-max-height: min(34svh, 320px);
+  --hud-compact-side-card-padding: 8px;
+  --hud-compact-side-card-radius: 16px;
   --hud-compact-mobile-detail-max-height: min(56svh, 560px);
   --hud-compact-mobile-detail-padding: 14px 12px 14px;
   --hud-compact-mobile-detail-radius: 22px 22px 0 0;
@@ -483,6 +483,17 @@ code {
   display: grid;
   gap: 12px;
   justify-content: stretch;
+}
+
+.settings-overlay-group {
+  display: grid;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.settings-overlay-group .overlay-row {
+  padding: 4px 0;
 }
 
 .topbar-utility-slot .language-toggle-row {
@@ -1505,11 +1516,22 @@ body[data-layout-mode="hud"] .summary-panel {
   display: none;
 }
 
-body[data-layout-mode="hud"] .detail-panel {
+body[data-layout-mode="hud"] .detail-panel-shell {
   position: absolute;
   left: 50%;
   bottom: var(--hud-compact-detail-bottom);
   width: var(--hud-compact-detail-width);
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: auto;
+  z-index: 10;
+}
+
+body[data-layout-mode="hud"] .detail-panel {
+  position: relative;
+  width: 100%;
   max-height: var(--hud-compact-detail-max-height);
   padding: var(--hud-compact-detail-padding);
   border-radius: var(--hud-compact-detail-radius);
@@ -1518,11 +1540,50 @@ body[data-layout-mode="hud"] .detail-panel {
   border-color: rgba(196, 224, 255, 0.22);
   overflow-x: hidden;
   overflow-y: auto;
-  transform: translateX(-50%);
 }
 
 body[data-layout-mode="hud"] .detail-panel > .eyebrow {
   display: none;
+}
+
+/* ── 접기 버튼 ─────────────────────────────── */
+.detail-panel-collapse-btn {
+  display: none;
+}
+
+body[data-layout-mode="hud"] .detail-panel-collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  order: -1;
+  width: 40px;
+  height: 20px;
+  border-radius: 10px 10px 0 0;
+  background: var(--hud-shell-bg);
+  border: 1px solid rgba(196, 224, 255, 0.18);
+  border-bottom: none;
+  box-shadow: 0 -4px 10px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.6rem;
+  padding: 0;
+  transition: color 0.15s;
+}
+
+body[data-layout-mode="hud"] .detail-panel-collapse-btn:hover {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* 패널 접힌 상태 */
+body[data-layout-mode="hud"] .detail-panel-shell--collapsed .detail-panel-collapse-icon {
+  transform: rotate(180deg);
+}
+
+body[data-layout-mode="hud"] .detail-panel-shell--collapsed .detail-panel {
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  overflow: hidden;
 }
 
 body[data-layout-mode="hud"] .topbar-nav-slot:empty {
@@ -1537,18 +1598,25 @@ body[data-layout-mode="hud"] .detail-panel .panel-tab-content {
   align-items: start;
 }
 
+body[data-layout-mode="hud"] .detail-panel .coord-grid,
+body[data-layout-mode="hud"] .detail-panel .seasonal-sun-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 body[data-layout-mode="hud"] .detail-panel .panel-tabs-home {
   display: none;
 }
 
 body[data-layout-mode="hud"] .topbar-nav-slot .panel-tabs {
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  gap: 5px;
 }
 
 body[data-layout-mode="hud"] .topbar-nav-slot .panel-tab {
-  min-height: 44px;
-  border-radius: 14px;
+  min-height: 32px;
+  padding: 6px 10px;
+  font-size: 0.82rem;
+  border-radius: 10px;
 }
 
 body[data-layout-mode="hud"] .detail-panel .hud-subtabs {
@@ -1590,6 +1658,36 @@ body[data-layout-mode="hud"] .detail-panel .hud-subpanel + .hud-subpanel:not([hi
   margin-top: 0;
 }
 
+body[data-layout-mode="hud"] .detail-panel .hud-split-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 10px;
+  align-items: start;
+}
+
+body[data-layout-mode="hud"] .detail-panel .hud-split-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+body[data-layout-mode="hud"] .detail-panel .hud-split-col .field {
+  margin-top: 0;
+}
+
+body[data-layout-mode="hud"] .detail-panel .hud-split-col .button-row.compact {
+  margin-top: 0;
+}
+
+body[data-layout-mode="hud"] .detail-panel .hud-split-col .sync-copy {
+  margin-top: 0;
+}
+
+body[data-layout-mode="hud"] .detail-panel .hud-split-col .coord-grid {
+  margin-top: 0;
+}
+
 body[data-layout-mode="hud"] .detail-panel .sync-panel,
 body[data-layout-mode="hud"] .detail-panel .walker-panel,
 body[data-layout-mode="hud"] .detail-panel .moon-audit-panel,
@@ -1618,6 +1716,17 @@ body[data-layout-mode="hud"] .detail-panel .compact-button {
   padding: var(--hud-compact-button-compact-padding);
 }
 
+body[data-layout-mode="hud"] .detail-panel .button {
+  padding: 7px 13px;
+  font-size: 0.82rem;
+}
+
+body[data-layout-mode="hud"] .detail-panel .orbit-mode {
+  padding: 7px 10px;
+  font-size: 0.82rem;
+  border-radius: 10px;
+}
+
 body[data-layout-mode="hud"] .detail-panel .sync-copy {
   margin-top: var(--hud-compact-copy-margin-top);
   font-size: var(--hud-compact-copy-font-size);
@@ -1644,6 +1753,31 @@ body[data-layout-mode="hud"] .detail-panel .hud-panel-slot > .sun-audit-panel {
 
 body[data-layout-mode="hud"] .solar-eclipse-toast {
   top: 92px;
+}
+
+/* ── HUD desktop topbar compaction ───────────────────
+   Status chips: 2×2 grid → cuts topbar height ~40% → ~20%
+   ──────────────────────────────────────────────────── */
+body[data-layout-mode="hud"] .topbar-status {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+body[data-layout-mode="hud"] .topbar-chip {
+  max-width: none;
+}
+
+@media (min-width: 1081px) {
+  body[data-layout-mode="hud"] .topbar-left {
+    min-width: 340px;
+    flex-shrink: 0;
+    align-items: flex-start;
+  }
+
+  body[data-layout-mode="hud"] .topbar-brand {
+    min-width: 110px;
+  }
 }
 
 @media (max-width: 1320px) {
@@ -1763,6 +1897,17 @@ body[data-layout-mode="hud"] .solar-eclipse-toast {
     justify-content: flex-start;
     overflow-x: auto;
     overflow-y: hidden;
+    scrollbar-width: none;
+  }
+
+  body[data-layout-mode="hud"] .topbar-nav-slot::-webkit-scrollbar {
+    display: none;
+  }
+
+  body[data-layout-mode="hud"] .topbar-nav-slot .panel-tab {
+    min-width: 72px;
+    padding: 10px 8px;
+    font-size: 0.85rem;
   }
 
   body[data-layout-mode="hud"] .topbar-nav-slot .panel-tabs {

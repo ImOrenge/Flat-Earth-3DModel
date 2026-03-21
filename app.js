@@ -558,11 +558,16 @@ function setHudPanelSection(panelKey, sectionKey) {
   syncHudPanelSections();
 }
 
+function setChip(el, value) {
+  el.textContent = value;
+  el.title = value;
+}
+
 function syncHudStatusChips() {
-  hudSeasonLatitudeChipEl.textContent = seasonLatitudeEl.textContent?.trim() || "--";
-  hudSeasonStateChipEl.textContent = seasonSummaryEl.textContent?.trim() || "--";
-  hudTimeChipEl.textContent = timeSummaryEl.textContent?.trim() || "--";
-  hudSystemChipEl.textContent = statusEl.textContent?.trim() || "--";
+  setChip(hudSeasonLatitudeChipEl, seasonLatitudeEl.textContent?.trim() || "--");
+  setChip(hudSeasonStateChipEl, seasonSummaryEl.textContent?.trim() || "--");
+  setChip(hudTimeChipEl, timeSummaryEl.textContent?.trim() || "--");
+  setChip(hudSystemChipEl, statusEl.textContent?.trim() || "--");
 }
 
 function setLayoutMode(layoutMode, { persist = true } = {}) {
@@ -2088,4 +2093,22 @@ resetDarkSunStageState();
 astronomyApi.enableRealityMode({ live: true, date: astronomyState.selectedDate });
 animate();
 runOnboarding();
+
+// ── 하단 패널 접기 ──────────────────────────
+(function initDetailPanelCollapse() {
+  const btn = document.getElementById('detail-panel-collapse');
+  const shell = btn && btn.closest('.detail-panel-shell');
+  if (!btn || !shell) return;
+
+  const STORAGE_KEY = 'flat-earth-detail-collapsed';
+  const collapsed = localStorage.getItem(STORAGE_KEY) === '1';
+  if (collapsed) shell.classList.add('detail-panel-shell--collapsed');
+
+  btn.addEventListener('click', () => {
+    const isCollapsed = shell.classList.toggle('detail-panel-shell--collapsed');
+    try { localStorage.setItem(STORAGE_KEY, isCollapsed ? '1' : '0'); } catch {}
+    btn.title = isCollapsed ? '패널 펼치기' : '패널 접기';
+    btn.setAttribute('aria-label', isCollapsed ? '패널 펼치기' : '패널 접기');
+  });
+})();
 

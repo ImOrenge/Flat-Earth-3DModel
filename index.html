@@ -23,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="./styles.css?v=20260321-onboarding1">
+    <link rel="stylesheet" href="./styles.css?v=20260321-scale2">
 </head>
 <body>
   <div class="app-shell">
@@ -106,6 +106,32 @@
                   <button class="layout-mode-button" id="layout-mode-classic" data-layout-mode-switch="classic" type="button" data-i18n="layoutModeClassic">Classic</button>
                 </div>
                 <div class="topbar-utility-slot settings-utility-slot" id="topbar-utility-slot"></div>
+                <div class="settings-overlay-group">
+                  <div class="sync-row overlay-row">
+                    <span class="sync-title" data-i18n="dayNightOverlayTitle">Day/Night Overlay</span>
+                    <label class="toggle">
+                      <input id="day-night-overlay" type="checkbox" role="switch" checked>
+                      <span class="toggle-switch" aria-hidden="true"></span>
+                      <span class="toggle-text" data-i18n="toggleClear">Clear</span>
+                    </label>
+                  </div>
+                  <div class="sync-row overlay-row">
+                    <span class="sync-title" data-i18n="groundAnalemmaTitle">Ground Analemma</span>
+                    <label class="toggle">
+                      <input id="analemma-overlay" type="checkbox" role="switch" checked>
+                      <span class="toggle-switch" aria-hidden="true"></span>
+                      <span class="toggle-text" data-i18n="toggleYearlyPath">Yearly Path</span>
+                    </label>
+                  </div>
+                  <div class="sync-row overlay-row">
+                    <span class="sync-title" data-i18n="magneticFieldTitle">Magnetic Field</span>
+                    <label class="toggle">
+                      <input id="magnetic-field-overlay" type="checkbox" role="switch">
+                      <span class="toggle-switch" aria-hidden="true"></span>
+                      <span class="toggle-text" data-i18n="toggleMagneticField">Field Lines</span>
+                    </label>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -257,6 +283,10 @@
         <p class="hint" id="status" data-i18n="statusLoadingBundledMap">Loading the bundled default map.</p>
       </aside>
 
+      <div class="detail-panel-shell">
+        <button class="detail-panel-collapse-btn" id="detail-panel-collapse" type="button" aria-label="패널 접기" title="패널 접기">
+          <span class="detail-panel-collapse-icon" aria-hidden="true">▼</span>
+        </button>
       <aside class="control-panel detail-panel">
         <p class="eyebrow" data-i18n="detailEyebrow">DETAIL CONTROLS</p>
         <div class="panel-tabs-home" id="detail-tabs-home">
@@ -277,45 +307,51 @@
               <button class="hud-subtab" data-hud-panel-tab="orbit" type="button"><span class="subtab-icon" aria-hidden="true">◎</span><span data-i18n="hudAstronomySectionOrbit">Orbit</span></button>
             </div>
           <section class="sync-panel hud-subpanel active" data-hud-panel-section="time">
-            <div class="sync-row">
-              <span class="sync-title" data-i18n="realitySyncTitle">Reality Sync</span>
-              <label class="toggle">
-                <input id="reality-sync" type="checkbox" role="switch" checked>
-                <span class="toggle-switch" aria-hidden="true"></span>
-                <span class="toggle-text" data-i18n="toggleOn">On</span>
-              </label>
-            </div>
-            <div class="sync-row">
-              <span class="sync-title" data-i18n="useCurrentTimeTitle">Use Current Time</span>
-              <label class="toggle">
-                <input id="reality-live" type="checkbox" role="switch" checked>
-                <span class="toggle-switch" aria-hidden="true"></span>
-                <span class="toggle-text" data-i18n="toggleLive">Live</span>
-              </label>
-            </div>
-            <label class="field" for="observation-time">
-              <span class="field-label" data-i18n="observationTimeLabel">Observation Time</span>
-              <input class="datetime-input" id="observation-time" type="datetime-local" step="60">
-            </label>
-            <div class="button-row compact" id="observation-time-step-row">
-              <button class="button secondary compact-button" id="observation-minus-hour" type="button">-1h</button>
-              <button class="button secondary compact-button" id="observation-plus-hour" type="button">+1h</button>
-              <button class="button secondary compact-button" id="observation-minus-minute" type="button">-10m</button>
-              <button class="button secondary compact-button" id="observation-plus-minute" type="button">+10m</button>
-            </div>
-            <div class="button-row compact">
-              <button class="button secondary compact-button" id="apply-observation-time" type="button" data-i18n="previewTimeButton">Preview Time</button>
-              <button class="button secondary compact-button" id="set-current-time" type="button" data-i18n="backToNowButton">Back To Now</button>
-            </div>
-            <p class="sync-copy" id="time-summary">Syncing to the current local time.</p>
-            <div class="coord-grid">
-              <div class="coord-card">
-                <span class="coord-label" data-i18n="coordSun">Sun</span>
-                <strong class="coord-value" id="sun-coordinates">0.00degN / 0.00degE</strong>
+            <div class="hud-split-cols">
+              <div class="hud-split-col">
+                <div class="sync-row">
+                  <span class="sync-title" data-i18n="realitySyncTitle">Reality Sync</span>
+                  <label class="toggle">
+                    <input id="reality-sync" type="checkbox" role="switch" checked>
+                    <span class="toggle-switch" aria-hidden="true"></span>
+                    <span class="toggle-text" data-i18n="toggleOn">On</span>
+                  </label>
+                </div>
+                <div class="sync-row">
+                  <span class="sync-title" data-i18n="useCurrentTimeTitle">Use Current Time</span>
+                  <label class="toggle">
+                    <input id="reality-live" type="checkbox" role="switch" checked>
+                    <span class="toggle-switch" aria-hidden="true"></span>
+                    <span class="toggle-text" data-i18n="toggleLive">Live</span>
+                  </label>
+                </div>
+                <label class="field" for="observation-time">
+                  <span class="field-label" data-i18n="observationTimeLabel">Observation Time</span>
+                  <input class="datetime-input" id="observation-time" type="datetime-local" step="60">
+                </label>
+                <div class="button-row compact" id="observation-time-step-row">
+                  <button class="button secondary compact-button" id="observation-minus-hour" type="button">-1h</button>
+                  <button class="button secondary compact-button" id="observation-plus-hour" type="button">+1h</button>
+                  <button class="button secondary compact-button" id="observation-minus-minute" type="button">-10m</button>
+                  <button class="button secondary compact-button" id="observation-plus-minute" type="button">+10m</button>
+                </div>
+                <div class="button-row compact">
+                  <button class="button secondary compact-button" id="apply-observation-time" type="button" data-i18n="previewTimeButton">Preview Time</button>
+                  <button class="button secondary compact-button" id="set-current-time" type="button" data-i18n="backToNowButton">Back To Now</button>
+                </div>
               </div>
-              <div class="coord-card">
-                <span class="coord-label" data-i18n="coordMoon">Moon</span>
-                <strong class="coord-value" id="moon-coordinates">0.00degN / 0.00degE</strong>
+              <div class="hud-split-col">
+                <p class="sync-copy" id="time-summary">Syncing to the current local time.</p>
+                <div class="coord-grid">
+                  <div class="coord-card">
+                    <span class="coord-label" data-i18n="coordSun">Sun</span>
+                    <strong class="coord-value" id="sun-coordinates">0.00degN / 0.00degE</strong>
+                  </div>
+                  <div class="coord-card">
+                    <span class="coord-label" data-i18n="coordMoon">Moon</span>
+                    <strong class="coord-value" id="moon-coordinates">0.00degN / 0.00degE</strong>
+                  </div>
+                </div>
               </div>
             </div>
             <div class="hud-side-home" id="moon-phase-panel-home">
@@ -356,35 +392,11 @@
                 </div>
               </section>
             </div>
-            <div class="sync-row overlay-row">
-              <span class="sync-title" data-i18n="dayNightOverlayTitle">Day/Night Overlay</span>
-              <label class="toggle">
-                <input id="day-night-overlay" type="checkbox" role="switch" checked>
-                <span class="toggle-switch" aria-hidden="true"></span>
-                <span class="toggle-text" data-i18n="toggleClear">Clear</span>
-              </label>
-            </div>
-            <p class="sync-copy subtle" id="day-night-summary">Night side overlay is active.</p>
-            <div class="sync-row overlay-row">
-              <span class="sync-title" data-i18n="groundAnalemmaTitle">Ground Analemma</span>
-              <label class="toggle">
-                <input id="analemma-overlay" type="checkbox" role="switch" checked>
-                <span class="toggle-switch" aria-hidden="true"></span>
-                <span class="toggle-text" data-i18n="toggleYearlyPath">Yearly Path</span>
-              </label>
-            </div>
-            <p class="sync-copy subtle" id="analemma-summary">
+            <p class="sync-copy subtle" id="day-night-summary" hidden>Night side overlay is active.</p>
+            <p class="sync-copy subtle" id="analemma-summary" hidden>
               Ground projection samples one sun position per day for the current local clock time.
             </p>
-            <div class="sync-row overlay-row">
-              <span class="sync-title" data-i18n="magneticFieldTitle">Magnetic Field</span>
-              <label class="toggle">
-                <input id="magnetic-field-overlay" type="checkbox" role="switch">
-                <span class="toggle-switch" aria-hidden="true"></span>
-                <span class="toggle-text" data-i18n="toggleMagneticField">Field Lines</span>
-              </label>
-            </div>
-            <p class="sync-copy subtle" id="magnetic-field-summary">
+            <p class="sync-copy subtle" id="magnetic-field-summary" hidden>
               Magnetic field lines keep a toroidal donut opening at the center while pinecone-like spiral scales sweep across the torus surface.
             </p>
             <div class="hud-panel-home" id="solar-eclipse-panel-home">
@@ -440,61 +452,73 @@
           </section>
 
           <section class="walker-panel hud-subpanel" data-hud-panel-section="walker">
-            <div class="sync-row">
-              <span class="sync-title" data-i18n="walkerViewTitle">Walker View</span>
-              <label class="toggle">
-                <input id="walker-mode" type="checkbox" role="switch">
-                <span class="toggle-switch" aria-hidden="true"></span>
-                <span class="toggle-text" data-i18n="toggleFirstPerson">First Person</span>
-              </label>
-            </div>
-            <p class="sync-copy" id="walker-summary">
-              Walk on the map with WASD or the arrow keys and judge day or night from the observer position.
-            </p>
-            <div class="coord-grid">
-              <div class="coord-card">
-                <span class="coord-label" data-i18n="coordObserver">Observer</span>
-                <strong class="coord-value" id="walker-coordinates">0.00degN / 0.00degE</strong>
+            <div class="hud-split-cols">
+              <div class="hud-split-col">
+                <div class="sync-row">
+                  <span class="sync-title" data-i18n="walkerViewTitle">Walker View</span>
+                  <label class="toggle">
+                    <input id="walker-mode" type="checkbox" role="switch">
+                    <span class="toggle-switch" aria-hidden="true"></span>
+                    <span class="toggle-text" data-i18n="toggleFirstPerson">First Person</span>
+                  </label>
+                </div>
+                <p class="sync-copy" id="walker-summary">
+                  Walk on the map with WASD or the arrow keys and judge day or night from the observer position.
+                </p>
               </div>
-              <div class="coord-card">
-                <span class="coord-label" data-i18n="coordLocalLight">Local Light</span>
-                <strong class="coord-value" id="walker-light">Day</strong>
+              <div class="hud-split-col">
+                <div class="coord-grid">
+                  <div class="coord-card">
+                    <span class="coord-label" data-i18n="coordObserver">Observer</span>
+                    <strong class="coord-value" id="walker-coordinates">0.00degN / 0.00degE</strong>
+                  </div>
+                  <div class="coord-card">
+                    <span class="coord-label" data-i18n="coordLocalLight">Local Light</span>
+                    <strong class="coord-value" id="walker-light">Day</strong>
+                  </div>
+                </div>
+                <div class="button-row compact">
+                  <button class="button secondary compact-button" id="reset-walker" type="button" data-i18n="resetWalkerButton">Reset Walker</button>
+                </div>
               </div>
-            </div>
-            <div class="button-row compact">
-              <button class="button secondary compact-button" id="reset-walker" type="button" data-i18n="resetWalkerButton">Reset Walker</button>
             </div>
           </section>
 
           <section class="moon-audit-panel hud-subpanel" data-hud-panel-section="seasonal">
-            <p class="orbit-title" data-i18n="seasonalAuditControlsTitle">Seasonal Audit Controls</p>
-            <label class="field" for="seasonal-year">
-              <span class="field-label" data-i18n="auditYearLabel">Audit Year</span>
-              <input class="datetime-input seasonal-year-input" id="seasonal-year" type="number" min="1900" max="2100" step="1">
-            </label>
-            <div class="seasonal-event-grid">
-              <button class="orbit-mode" data-seasonal-event="springEquinox" type="button">Spring Equinox</button>
-              <button class="orbit-mode" data-seasonal-event="summerSolstice" type="button">Summer Solstice</button>
-              <button class="orbit-mode" data-seasonal-event="autumnEquinox" type="button">Autumn Equinox</button>
-              <button class="orbit-mode" data-seasonal-event="winterSolstice" type="button">Winter Solstice</button>
-            </div>
-            <p class="sync-copy" id="seasonal-event-time">
-              Select a solstice or equinox to update both the sun and moon audits from the same anchor.
-            </p>
-            <p class="audit-block-title" data-i18n="moonAuditTitle">Moon Audit</p>
-            <div class="coord-grid">
-              <div class="coord-card">
-                <span class="coord-label" data-i18n="moonAnchorLabel">Moon Anchor</span>
-                <strong class="coord-value" id="seasonal-moon-anchor">0.00degN / 0.00degE</strong>
+            <div class="hud-split-cols">
+              <div class="hud-split-col">
+                <p class="orbit-title" data-i18n="seasonalAuditControlsTitle">Seasonal Audit Controls</p>
+                <label class="field" for="seasonal-year">
+                  <span class="field-label" data-i18n="auditYearLabel">Audit Year</span>
+                  <input class="datetime-input seasonal-year-input" id="seasonal-year" type="number" min="1900" max="2100" step="1">
+                </label>
+                <div class="seasonal-event-grid">
+                  <button class="orbit-mode" data-seasonal-event="springEquinox" type="button">Spring Equinox</button>
+                  <button class="orbit-mode" data-seasonal-event="summerSolstice" type="button">Summer Solstice</button>
+                  <button class="orbit-mode" data-seasonal-event="autumnEquinox" type="button">Autumn Equinox</button>
+                  <button class="orbit-mode" data-seasonal-event="winterSolstice" type="button">Winter Solstice</button>
+                </div>
               </div>
-              <div class="coord-card">
-                <span class="coord-label" data-i18n="moonDriftLabel">24h Drift</span>
-                <strong class="coord-value" id="seasonal-moon-drift">dLat 0.0deg / dLon 0.0deg</strong>
+              <div class="hud-split-col">
+                <p class="sync-copy" id="seasonal-event-time">
+                  Select a solstice or equinox to update both the sun and moon audits from the same anchor.
+                </p>
+                <p class="audit-block-title" data-i18n="moonAuditTitle">Moon Audit</p>
+                <div class="coord-grid">
+                  <div class="coord-card">
+                    <span class="coord-label" data-i18n="moonAnchorLabel">Moon Anchor</span>
+                    <strong class="coord-value" id="seasonal-moon-anchor">0.00degN / 0.00degE</strong>
+                  </div>
+                  <div class="coord-card">
+                    <span class="coord-label" data-i18n="moonDriftLabel">24h Drift</span>
+                    <strong class="coord-value" id="seasonal-moon-drift">dLat 0.0deg / dLon 0.0deg</strong>
+                  </div>
+                </div>
+                <p class="sync-copy subtle" id="seasonal-moon-summary">
+                  The selected seasonal anchor loads an exact preview time and summarizes the moon's 24-hour subpoint swing.
+                </p>
               </div>
             </div>
-            <p class="sync-copy subtle" id="seasonal-moon-summary">
-              The selected seasonal anchor loads an exact preview time and summarizes the moon's 24-hour subpoint swing.
-            </p>
           </section>
 
           <section class="orbit-panel hud-subpanel" data-hud-panel-section="orbit">
@@ -693,21 +717,21 @@
             <button class="hud-subtab" data-hud-panel-tab="telemetry" type="button"><span class="subtab-icon" aria-hidden="true">⊟</span><span data-i18n="hudRocketsSectionTelemetry">Telemetry</span></button>
           </div>
           <section class="route-panel hud-subpanel active" data-hud-panel-section="launch">
-            <p class="orbit-title">Rocket Simulation</p>
-            <p class="sync-copy">Select a real-world spaceport and launch a rocket toward the Bermuda Triangle.</p>
+            <p class="orbit-title" data-i18n="rocketSimulationTitle">Rocket Simulation</p>
+            <p class="sync-copy" data-i18n="rocketSimulationCopy">Select a real-world spaceport and launch a rocket toward the Bermuda Triangle.</p>
             <label class="field" for="rocket-spaceport-select">
-              <span class="field-label">Launchpad</span>
+              <span class="field-label" data-i18n="rocketLaunchpadLabel">Launchpad</span>
               <select class="select-input" id="rocket-spaceport-select"></select>
             </label>
             <label class="field" for="rocket-type-select">
-              <span class="field-label">Rocket Type</span>
+              <span class="field-label" data-i18n="rocketTypeLabel">Rocket Type</span>
               <select class="select-input" id="rocket-type-select">
-                <option value="two-stage" selected>2-Stage (Maneuvering)</option>
-                <option value="single">Single Stage</option>
+                <option value="two-stage" selected data-i18n="rocketTwoStageLabel">2-Stage (Maneuvering)</option>
+                <option value="single" data-i18n="rocketSingleStageLabel">Single Stage</option>
               </select>
             </label>
             <div class="button-row compact" style="margin-top: 16px;">
-              <button class="button primary compact-button" id="rocket-launch-btn" type="button">Launch Rocket</button>
+              <button class="button primary compact-button" id="rocket-launch-btn" type="button" data-i18n="rocketLaunchButton">Launch Rocket</button>
             </div>
           </section>
 
@@ -742,6 +766,7 @@
           </section>
         </div>
       </aside>
+      </div>
     </div>
   </div>
 
