@@ -2004,6 +2004,71 @@ function animate() {
   }
 }
 
+const ONBOARDING_STORAGE_KEY = "flat-earth-onboarding-v1";
+
+function runOnboarding() {
+  try {
+    if (window.localStorage.getItem(ONBOARDING_STORAGE_KEY)) return;
+  } catch { return; }
+
+  if (currentLayoutMode !== "hud") return;
+
+  const calloutEl = document.getElementById("onboarding-callout");
+  const textEl = document.getElementById("onboarding-callout-text");
+  const skipEl = document.getElementById("onboarding-skip");
+  if (!calloutEl || !textEl) return;
+
+  const STEPS = [
+    { tab: "astronomy",      key: "onboardingAstronomy" },
+    { tab: "routes",         key: "onboardingRoutes" },
+    { tab: "constellations", key: "onboardingConstellations" },
+    { tab: "rockets",        key: "onboardingRockets" },
+  ];
+
+  let step = 0;
+  let timer = null;
+  let done = false;
+
+  function finish() {
+    if (done) return;
+    done = true;
+    clearTimeout(timer);
+    calloutEl.classList.remove("visible");
+    for (const btn of controlTabButtons) btn.classList.remove("onboarding-active");
+    try { window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "1"); } catch {}
+    document.removeEventListener("pointerdown", onSkip, true);
+  }
+
+  function onSkip() { finish(); }
+
+  function showStep(index) {
+    if (done || index >= STEPS.length) { finish(); return; }
+    const { tab, key } = STEPS[index];
+
+    for (const btn of controlTabButtons) btn.classList.remove("onboarding-active");
+    const activeBtn = controlTabButtons.find(b => b.dataset.controlTab === tab);
+    if (activeBtn) {
+      activeBtn.classList.add("onboarding-active");
+      const rect = activeBtn.getBoundingClientRect();
+      const midX = rect.left + rect.width / 2;
+      calloutEl.style.top = (rect.bottom + 10) + "px";
+      calloutEl.style.left = midX + "px";
+      calloutEl.style.transform = "translateX(-50%)";
+    }
+
+    textEl.textContent = i18n.t(key);
+    if (skipEl) skipEl.textContent = i18n.t("onboardingSkip");
+    calloutEl.classList.add("visible");
+
+    timer = setTimeout(() => showStep(index + 1), 1900);
+  }
+
+  document.addEventListener("pointerdown", onSkip, true);
+  if (skipEl) skipEl.addEventListener("click", (e) => { e.stopPropagation(); finish(); });
+
+  setTimeout(() => showStep(0), 1000);
+}
+
 cameraApi.resize();
 textureApi.loadDefaultTexture();
 walkerApi.resetWalkerPosition();
@@ -2022,4 +2087,5 @@ syncFullTrailVisibility();
 resetDarkSunStageState();
 astronomyApi.enableRealityMode({ live: true, date: astronomyState.selectedDate });
 animate();
+runOnboarding();
 

@@ -646,7 +646,12 @@ Object.assign(TRANSLATIONS.en, {
   helpNavigationCopy: "Drag the scene to orbit, use the mouse wheel to zoom, and use Reset Camera to restore the default top-down view. Your active section stays selected when you switch layouts.",
   helpFirstPersonTitle: "First Person",
   helpFirstPersonCopy: "Enable Walker View to explore from the surface. Use WASD or arrow keys to move, drag to look around, and open Help to pause movement input safely.",
-  statusLoadingBundledMap: "Loading the bundled default map."
+  statusLoadingBundledMap: "Loading the bundled default map.",
+  onboardingAstronomy: "Track the sun, moon, and eclipses — start here.",
+  onboardingRoutes: "Replay aircraft routes across the disc.",
+  onboardingConstellations: "Explore star patterns in the dome.",
+  onboardingRockets: "Launch rockets and watch live telemetry.",
+  onboardingSkip: "Click anywhere to skip",
 });
 
 Object.assign(TRANSLATIONS.ko, {
@@ -657,7 +662,7 @@ Object.assign(TRANSLATIONS.ko, {
     hudSideEyebrow: "\uC0AC\uC774\uB4DC \uBDF0",
     hudAstronomySectionTime: "\uC2DC\uAC04",
     hudAstronomySectionEclipse: "\uC77C\uC2DD",
-    hudAstronomySectionWalker: "\uC6CC\uCEE4",
+    hudAstronomySectionWalker: "\ud0d0\ud5d8",
     hudAstronomySectionSeason: "\uACC4\uC808",
     hudAstronomySectionOrbit: "\uADA4\uB3C4",
   hudRoutesSectionPlayback: "\uC7AC\uC0DD",
@@ -688,7 +693,12 @@ Object.assign(TRANSLATIONS.ko, {
   helpFirstPersonTitle: "1\uC778\uCE6D",
   helpFirstPersonCopy: "Walker View\uB97C \uCF1C\uBA74 \uD45C\uBA74 \uC2DC\uC810\uC73C\uB85C \uD0D0\uC0C9\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4. WASD \uB610\uB294 \uD654\uC0B4\uD45C \uD0A4\uB85C \uC774\uB3D9\uD558\uACE0, \uB4DC\uB798\uADF8\uB85C \uC2DC\uC57C\uB97C \uB3CC\uB9AC\uBA70, \uB3C4\uC6C0\uB9D0\uC744 \uC5F4\uBA74 \uC774\uB3D9 \uC785\uB825\uC774 \uC548\uC804\uD558\uAC8C \uC77C\uC2DC \uC815\uC9C0\uB429\uB2C8\uB2E4.",
   statusLoadingBundledMap: "\uAE30\uBCF8 \uBC88\uB4E4 \uC9C0\uB3C4\uB97C \uBD88\uB7EC\uC624\uB294 \uC911\uC785\uB2C8\uB2E4.",
-  stagePreLunarEclipseButton: "\uC6D4\uC2DD \uC9C1\uC804 \uC774\uB3D9"
+  stagePreLunarEclipseButton: "\uC6D4\uC2DD \uC9C1\uC804 \uC774\uB3D9",
+  onboardingAstronomy: "\ud0dc\uc591\u00b7\ub2ec\u00b7\uc77c\uc2dd\uc744 \uc5ec\uae30\uc11c \uc81c\uc5b4\ud558\uc138\uc694.",
+  onboardingRoutes: "\uc6d0\ud310 \uc704\uc758 \ud56d\uacf5 \uacbd\ub85c\ub97c \uc7ac\uc0dd\ud569\ub2c8\ub2e4.",
+  onboardingConstellations: "\ub3fc \uc548\uc758 \ubcc4\uc790\ub9ac\ub97c \ud0d0\uc0c9\ud558\uc138\uc694.",
+  onboardingRockets: "\ub85c\ucf13\uc744 \ubc1c\uc0ac\ud558\uace0 \ud154\ub808\uba54\ud2b8\ub9ac\ub97c \ud655\uc778\ud558\uc138\uc694.",
+  onboardingSkip: "\uc544\ubb34 \uacf3\uc774\ub098 \ud074\ub9ad\ud558\uba74 \uac74\ub108\ub6f9\ub2c8\ub2e4",
 });
 
 function interpolate(template, params) {

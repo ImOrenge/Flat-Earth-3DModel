@@ -23,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="./styles.css?v=20260321-hudcompact2">
+    <link rel="stylesheet" href="./styles.css?v=20260321-onboarding1">
 </head>
 <body>
   <div class="app-shell">
@@ -53,6 +53,13 @@
       <p class="solar-eclipse-toast-copy" id="solar-eclipse-toast-copy">
         A natural eclipse contact is about to begin. Motion has slowed for observation.
       </p>
+    </div>
+    <div class="onboarding-callout" id="onboarding-callout" aria-hidden="true">
+      <div class="onboarding-callout-arrow" aria-hidden="true"></div>
+      <div class="onboarding-callout-bubble">
+        <span id="onboarding-callout-text"></span>
+        <button type="button" class="onboarding-skip" id="onboarding-skip" data-i18n="onboardingSkip">Click anywhere to skip</button>
+      </div>
     </div>
     <header class="app-topbar" id="app-topbar">
       <div class="topbar-left">
@@ -263,11 +270,11 @@
 
         <div class="panel-tab-content active" data-control-panel="astronomy">
             <div class="hud-subtabs" data-hud-panel-tabs="astronomy">
-              <button class="hud-subtab active" data-hud-panel-tab="time" type="button" data-i18n="hudAstronomySectionTime">Time</button>
-              <button class="hud-subtab" data-hud-panel-tab="eclipse" type="button" data-i18n="hudAstronomySectionEclipse">Eclipse</button>
-              <button class="hud-subtab" data-hud-panel-tab="walker" type="button" data-i18n="hudAstronomySectionWalker">Walker</button>
-              <button class="hud-subtab" data-hud-panel-tab="seasonal" type="button" data-i18n="hudAstronomySectionSeason">Season</button>
-              <button class="hud-subtab" data-hud-panel-tab="orbit" type="button" data-i18n="hudAstronomySectionOrbit">Orbit</button>
+              <button class="hud-subtab active" data-hud-panel-tab="time" type="button"><span class="subtab-icon" aria-hidden="true">◷</span><span data-i18n="hudAstronomySectionTime">Time</span></button>
+              <button class="hud-subtab" data-hud-panel-tab="eclipse" type="button"><span class="subtab-icon" aria-hidden="true">◑</span><span data-i18n="hudAstronomySectionEclipse">Eclipse</span></button>
+              <button class="hud-subtab" data-hud-panel-tab="walker" type="button"><span class="subtab-icon" aria-hidden="true">⊙</span><span data-i18n="hudAstronomySectionWalker">Walker</span></button>
+              <button class="hud-subtab" data-hud-panel-tab="seasonal" type="button"><span class="subtab-icon" aria-hidden="true">✦</span><span data-i18n="hudAstronomySectionSeason">Season</span></button>
+              <button class="hud-subtab" data-hud-panel-tab="orbit" type="button"><span class="subtab-icon" aria-hidden="true">◎</span><span data-i18n="hudAstronomySectionOrbit">Orbit</span></button>
             </div>
           <section class="sync-panel hud-subpanel active" data-hud-panel-section="time">
             <div class="sync-row">
@@ -548,8 +555,8 @@
 
         <div class="panel-tab-content" data-control-panel="routes" hidden>
           <div class="hud-subtabs" data-hud-panel-tabs="routes">
-            <button class="hud-subtab active" data-hud-panel-tab="playback" type="button" data-i18n="hudRoutesSectionPlayback">Playback</button>
-            <button class="hud-subtab" data-hud-panel-tab="summary" type="button" data-i18n="hudRoutesSectionSummary">Summary</button>
+            <button class="hud-subtab active" data-hud-panel-tab="playback" type="button"><span class="subtab-icon" aria-hidden="true">▷</span><span data-i18n="hudRoutesSectionPlayback">Playback</span></button>
+            <button class="hud-subtab" data-hud-panel-tab="summary" type="button"><span class="subtab-icon" aria-hidden="true">≡</span><span data-i18n="hudRoutesSectionSummary">Summary</span></button>
           </div>
           <section class="route-panel hud-subpanel active" data-hud-panel-section="playback">
             <p class="orbit-title" data-i18n="offlineRouteLibraryTitle">Offline Route Library</p>
@@ -618,8 +625,8 @@
 
         <div class="panel-tab-content" data-control-panel="constellations" hidden>
           <div class="hud-subtabs" data-hud-panel-tabs="constellations">
-            <button class="hud-subtab active" data-hud-panel-tab="controls" type="button" data-i18n="hudConstellationsSectionControls">Controls</button>
-            <button class="hud-subtab" data-hud-panel-tab="info" type="button" data-i18n="hudConstellationsSectionInfo">Info</button>
+            <button class="hud-subtab active" data-hud-panel-tab="controls" type="button"><span class="subtab-icon" aria-hidden="true">⋆</span><span data-i18n="hudConstellationsSectionControls">Controls</span></button>
+            <button class="hud-subtab" data-hud-panel-tab="info" type="button"><span class="subtab-icon" aria-hidden="true">ℹ</span><span data-i18n="hudConstellationsSectionInfo">Info</span></button>
           </div>
           <section class="constellation-panel hud-subpanel active" data-hud-panel-section="controls">
             <p class="orbit-title" data-i18n="constellationMapTitle">Constellation Map</p>
@@ -682,8 +689,8 @@
 
         <div class="panel-tab-content" data-control-panel="rockets" hidden>
           <div class="hud-subtabs" data-hud-panel-tabs="rockets">
-            <button class="hud-subtab active" data-hud-panel-tab="launch" type="button" data-i18n="hudRocketsSectionLaunch">Launch</button>
-            <button class="hud-subtab" data-hud-panel-tab="telemetry" type="button" data-i18n="hudRocketsSectionTelemetry">Telemetry</button>
+            <button class="hud-subtab active" data-hud-panel-tab="launch" type="button"><span class="subtab-icon" aria-hidden="true">↑</span><span data-i18n="hudRocketsSectionLaunch">Launch</span></button>
+            <button class="hud-subtab" data-hud-panel-tab="telemetry" type="button"><span class="subtab-icon" aria-hidden="true">⊟</span><span data-i18n="hudRocketsSectionTelemetry">Telemetry</span></button>
           </div>
           <section class="route-panel hud-subpanel active" data-hud-panel-section="launch">
             <p class="orbit-title">Rocket Simulation</p>

@@ -2,10 +2,10 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "Flat Earth Preview Server",
-      "runtimeExecutable": "py",
-      "runtimeArgs": ["-m", "http.server"],
-      "port": 8000,
+      "name": "flat-earth",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["-e", "const http=require('http'),fs=require('fs'),path=require('path'),port=process.env.PORT||8765;http.createServer((req,res)=>{const u=new URL(req.url,'http://x');let f=path.join('.',decodeURIComponent(u.pathname==='/'?'/index.html':u.pathname));fs.readFile(f,(e,d)=>{if(e){res.writeHead(404);res.end();}else{const ext=path.extname(f);const ct={'html':'text/html','css':'text/css','js':'application/javascript','json':'application/json'}[ext.slice(1)]||'text/plain';res.writeHead(200,{'Content-Type':ct});res.end(d);}});}).listen(port,()=>console.log('ready on '+port))"],
+      "port": 8765,
       "autoPort": true
     }
   ]
