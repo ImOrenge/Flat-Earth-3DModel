@@ -89,6 +89,10 @@
       <div class="topbar-nav-slot" id="topbar-nav-slot"></div>
       <div class="topbar-right">
         <div class="topbar-persistent-actions">
+          <div class="layout-switch" id="layout-switch" role="group" aria-label="Layout switcher">
+            <button class="layout-mode-button active" id="layout-mode-hud" data-layout-mode-switch="hud" type="button" data-i18n="layoutModeHud">HUD</button>
+            <button class="layout-mode-button" id="layout-mode-classic" data-layout-mode-switch="classic" type="button" data-i18n="layoutModeClassic">Classic</button>
+          </div>
           <button class="button secondary compact-button topbar-action" id="help-open" type="button" data-i18n="helpButtonLabel">Help</button>
           <div class="settings-anchor" id="settings-anchor">
             <button class="button secondary compact-button topbar-action settings-toggle-button" id="settings-toggle" type="button">
@@ -101,10 +105,6 @@
                 <strong class="settings-popover-title" id="settings-popover-title" data-i18n="settingsPanelTitle">App Settings</strong>
               </div>
               <div class="settings-popover-body">
-                <div class="layout-switch" id="layout-switch" role="group" aria-label="Layout switcher">
-                  <button class="layout-mode-button active" id="layout-mode-hud" data-layout-mode-switch="hud" type="button" data-i18n="layoutModeHud">HUD</button>
-                  <button class="layout-mode-button" id="layout-mode-classic" data-layout-mode-switch="classic" type="button" data-i18n="layoutModeClassic">Classic</button>
-                </div>
                 <div class="topbar-utility-slot settings-utility-slot" id="topbar-utility-slot"></div>
                 <div class="settings-overlay-group">
                   <div class="sync-row overlay-row">
