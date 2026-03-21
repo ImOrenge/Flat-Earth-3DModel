@@ -20,6 +20,7 @@ export function setupInputHandlers(deps) {
     simulationState,
     astronomyState,
     celestialControlState,
+    isUiBlocking,
     skyTexture,
     scene,
     setControlTab,
@@ -33,7 +34,8 @@ export function setupInputHandlers(deps) {
     exitFirstPersonMode, enterFirstPersonMode, walkerModeEl, resetWalkerButton,
     routeSelectEl, routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl,
     celestialFullTrailEl, routePlaybackButton, routeResetButton, realitySyncEl,
-    realityLiveEl, observationTimeEl, applyObservationTimeButton, setCurrentTimeButton,
+    realityLiveEl, observationTimeEl, observationMinusHourButton, observationPlusHourButton,
+    observationMinusMinuteButton, observationPlusMinuteButton, applyObservationTimeButton, setCurrentTimeButton,
     dayNightOverlayEl, dayNightState, getGeoFromProjectedPosition, orbitSun,
     analemmaOverlayEl, analemmaState, magneticFieldOverlayEl, magneticFieldState,
     darkSunDebugEl, getCurrentUiSnapshot, syncDarkSunPresentation,
@@ -67,7 +69,7 @@ export function setupInputHandlers(deps) {
   
   canvas.addEventListener("pointerdown", (event) => {
   
-    if (renderState.preparing) {
+    if (renderState.preparing || isUiBlocking?.()) {
   
       return;
   
@@ -87,7 +89,7 @@ export function setupInputHandlers(deps) {
   
   canvas.addEventListener("pointermove", (event) => {
   
-    if (!isDragging || renderState.preparing) {
+    if (!isDragging || renderState.preparing || isUiBlocking?.()) {
   
       return;
   
@@ -173,7 +175,7 @@ export function setupInputHandlers(deps) {
   
   canvas.addEventListener("wheel", (event) => {
   
-    if (walkerState.enabled || renderState.preparing) {
+    if (walkerState.enabled || renderState.preparing || isUiBlocking?.()) {
   
       return;
   
@@ -375,6 +377,68 @@ export function setupInputHandlers(deps) {
   
   
   
+  function getObservationBaseDate() {
+  
+    const inputDate = new Date(observationTimeEl.value);
+  
+    if (!Number.isNaN(inputDate.getTime())) {
+  
+      return inputDate;
+  
+    }
+  
+    if (astronomyState.selectedDate instanceof Date && !Number.isNaN(astronomyState.selectedDate.getTime())) {
+  
+      return new Date(astronomyState.selectedDate.getTime());
+  
+    }
+  
+    return new Date();
+  
+  }
+  
+  
+  
+  function applyObservationPreviewDate(nextDate) {
+  
+    const safeDate = (
+      nextDate instanceof Date && !Number.isNaN(nextDate.getTime())
+    )
+      ? nextDate
+      : new Date();
+  
+    realitySyncEl.checked = true;
+  
+    realityLiveEl.checked = false;
+  
+    resetDarkSunStageState();
+  
+    astronomyApi.enableRealityMode({ live: false, date: safeDate });
+  
+  }
+  
+  
+  
+  function shiftObservationTimeByMinutes(minuteDelta = 0) {
+  
+    if (!Number.isFinite(minuteDelta) || minuteDelta === 0) {
+  
+      return;
+  
+    }
+  
+    const baseDate = getObservationBaseDate();
+  
+    const nextDate = new Date(baseDate.getTime() + (minuteDelta * 60_000));
+  
+    astronomyApi.setObservationInputValue(nextDate);
+  
+    applyObservationPreviewDate(nextDate);
+  
+  }
+  
+  
+  
   realitySyncEl.addEventListener("change", () => {
   
     if (realitySyncEl.checked) {
@@ -447,6 +511,54 @@ export function setupInputHandlers(deps) {
     astronomyApi.applyObservationTimeSelection();
   
   });
+  
+  
+  
+  if (observationMinusHourButton) {
+  
+    observationMinusHourButton.addEventListener("click", () => {
+  
+      shiftObservationTimeByMinutes(-60);
+  
+    });
+  
+  }
+  
+  
+  
+  if (observationPlusHourButton) {
+  
+    observationPlusHourButton.addEventListener("click", () => {
+  
+      shiftObservationTimeByMinutes(60);
+  
+    });
+  
+  }
+  
+  
+  
+  if (observationMinusMinuteButton) {
+  
+    observationMinusMinuteButton.addEventListener("click", () => {
+  
+      shiftObservationTimeByMinutes(-10);
+  
+    });
+  
+  }
+  
+  
+  
+  if (observationPlusMinuteButton) {
+  
+    observationPlusMinuteButton.addEventListener("click", () => {
+  
+      shiftObservationTimeByMinutes(10);
+  
+    });
+  
+  }
   
   
   
@@ -608,7 +720,7 @@ export function setupInputHandlers(deps) {
   
   window.addEventListener("keydown", (event) => {
   
-    if (event.repeat || renderState.preparing) {
+    if (event.repeat || renderState.preparing || isUiBlocking?.()) {
   
       return;
   
@@ -669,6 +781,12 @@ export function setupInputHandlers(deps) {
   
   
   window.addEventListener("keyup", (event) => {
+  
+    if (isUiBlocking?.()) {
+  
+      return;
+  
+    }
   
     switch (event.code) {
   

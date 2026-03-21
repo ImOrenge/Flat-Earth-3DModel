@@ -1,5 +1,5 @@
 import * as THREE from "../vendor/three.module.js";
-import { createSolarEclipseState, createLunarEclipseState } from "./astronomy-utils.js?v=20260314-natural-eclipse2";
+import { createSolarEclipseState, createLunarEclipseState } from "./astronomy-utils.js?v=20260320-reality-eclipse-sync1";
 
 export function createEclipseController(deps) {
   const {
@@ -3340,6 +3340,14 @@ export function createEclipseController(deps) {
     const darkSunGroup = walkerState.enabled ? observerDarkSun : orbitDarkSun;
     const moonBody = orbitMoonBody ?? moonGroup.children[0];
     const darkSunBody = walkerState.enabled ? observerDarkSunBody : orbitDarkSunBody;
+    const moonOrbitAngleForDebug = (
+      snapshot?.moonRenderState?.orbitAngleRadians ??
+      simulationState.orbitMoonAngle
+    );
+    const darkSunOrbitAngleForDebug = (
+      snapshot?.darkSunRenderState?.orbitAngleRadians ??
+      simulationState.orbitDarkSunAngle
+    );
 
     // ─── Full Moon Gate ───
     // Lunar eclipse (blood moon) only occurs during a full moon.
@@ -3426,8 +3434,8 @@ export function createEclipseController(deps) {
         stagedShadow,
         stagedTint,
         rawStageKey,
-        moonAngle: simulationState.orbitMoonAngle,
-        darkSunAngle: simulationState.orbitDarkSunAngle
+        moonAngle: moonOrbitAngleForDebug,
+        darkSunAngle: darkSunOrbitAngleForDebug
       };
 
       return stagedTint;
@@ -3445,13 +3453,15 @@ export function createEclipseController(deps) {
     // World-space position formula: x = -cos(orbitAngle)*R, z = sin(orbitAngle)*R
     // → worldAngle = atan2(z, x) = π - orbitAngle
     // → ΔworldAngle = -ΔorbitAngle
-    const moonRadiusXZ = Math.hypot(tempLunarEclipseMoonWorldPos.x, tempLunarEclipseMoonWorldPos.z);
-    const moonWorldAngleXZ = Math.atan2(tempLunarEclipseMoonWorldPos.z, tempLunarEclipseMoonWorldPos.x);
-    const orbitAngleDiff = simulationState.orbitDarkSunAngle - simulationState.orbitMoonAngle;
-    const projectedAngle = moonWorldAngleXZ - orbitAngleDiff;
-    tempLunarEclipseDarkSunWorldPos.x = Math.cos(projectedAngle) * moonRadiusXZ;
-    tempLunarEclipseDarkSunWorldPos.z = Math.sin(projectedAngle) * moonRadiusXZ;
-    tempLunarEclipseDarkSunWorldPos.y = tempLunarEclipseMoonWorldPos.y;
+    if (!astronomyState.enabled) {
+      const moonRadiusXZ = Math.hypot(tempLunarEclipseMoonWorldPos.x, tempLunarEclipseMoonWorldPos.z);
+      const moonWorldAngleXZ = Math.atan2(tempLunarEclipseMoonWorldPos.z, tempLunarEclipseMoonWorldPos.x);
+      const orbitAngleDiff = (darkSunOrbitAngleForDebug ?? 0) - (moonOrbitAngleForDebug ?? 0);
+      const projectedAngle = moonWorldAngleXZ - orbitAngleDiff;
+      tempLunarEclipseDarkSunWorldPos.x = Math.cos(projectedAngle) * moonRadiusXZ;
+      tempLunarEclipseDarkSunWorldPos.z = Math.sin(projectedAngle) * moonRadiusXZ;
+      tempLunarEclipseDarkSunWorldPos.y = tempLunarEclipseMoonWorldPos.y;
+    }
 
     const moonDisc = getProjectedDisc(
       tempLunarEclipseMoonWorldPos,
@@ -3471,6 +3481,8 @@ export function createEclipseController(deps) {
       moonRad: moonDisc.radius,
       sunVis: darkSunDisc.visible,
       sunRad: darkSunDisc.radius,
+      moonAngle: moonOrbitAngleForDebug,
+      darkSunAngle: darkSunOrbitAngleForDebug,
       sunWorldPos: tempLunarEclipseDarkSunWorldPos,
       moonWorldPos: tempLunarEclipseMoonWorldPos
     };
@@ -3500,8 +3512,8 @@ export function createEclipseController(deps) {
       darkSunVisible: darkSunDisc.visible,
       overallVisibleInView: visibleInView,
       sunAngle: simulationState.orbitSunAngle,
-      moonAngle: simulationState.orbitMoonAngle,
-      darkSunAngle: simulationState.orbitDarkSunAngle
+      moonAngle: moonOrbitAngleForDebug,
+      darkSunAngle: darkSunOrbitAngleForDebug
     };
     const { contactDepthPx, normalizedDistance, visibleContactDepthPx } = eclipseMetrics;
     const previousCoverage = lunarEclipseState.previousCoverage;

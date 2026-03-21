@@ -203,6 +203,10 @@ export function getMoonSubpoint(date) {
   return getSubpointFromEquatorial(rightAscension, declination, daysSinceJ2000);
 }
 
+export function getMoonEclipticLatitudeDegrees(date) {
+  return toDegrees(getMoonEquatorialPosition(date).eclipticLatitude);
+}
+
 function getClosestDeclinationMatch(startDate, endDate, targetDegrees) {
   let bestDate = startDate;
   let bestDelta = Number.POSITIVE_INFINITY;
@@ -560,7 +564,9 @@ export function getAstronomySnapshot({
   const darkSunRenderState = getDarkSunRenderState
     ? getDarkSunRenderState({
       date,
-      source: "reality"
+      moonRenderState,
+      source: "reality",
+      sunRenderState
     })
     : null;
   const darkSunRenderPosition = darkSunRenderState?.position?.clone() ?? null;
