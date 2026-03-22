@@ -8,23 +8,24 @@ import {
   getMoonPhase,
   getSeasonalPrecessionPhase,
   getSeasonalPrecessionAngle,
+  getSiderealZodiacOffsetRadians,
   getSolarAltitudeFactor,
 } from "./modules/astronomy-utils.js?v=20260320-reality-eclipse-sync1";
 import { createAstronomyController } from "./modules/astronomy-controller.js?v=20260320-reality-eclipse-sync2";
-import { createCameraController } from "./modules/camera-controller.js?v=20260313-tracking-angle1";
+import { createCameraController } from "./modules/camera-controller.js?v=20260322-topview-zodiac2";
 import { createCelestialTrackingCameraController } from "./modules/celestial-tracking-camera-controller.js?v=20260320-constellation-precession1";
-import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js?v=20260312-darksun-eclipse1";
-import { createI18n } from "./modules/i18n.js?v=20260320-hudtabs2";
+import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js?v=20260322-fp-sun1";
+import { createI18n } from "./modules/i18n.js?v=20260322-topview-zodiac6";
 import { createMagneticFieldController } from "./modules/magnetic-field-controller.js?v=20260314-magnetic-pinecone3";
 import { createRouteSimulationController } from "./modules/route-simulation-controller.js";
 import { createTextureManager } from "./modules/texture-manager.js?v=20260311-gpu-daynight";
 import { createWalkerController } from "./modules/walker-controller.js?v=20260312-darksun-eclipse1";
 
-import * as constants from "./modules/constants.js";
+import * as constants from "./modules/constants.js?v=20260322-topview-zodiac4";
 import { createEclipseController } from "./modules/eclipse-controller.js?v=20260320-reality-eclipse-sync2";
-import { createCelestialVisualsController } from "./modules/celestial-visuals-controller.js";
-import { createConstellationTabController } from "./modules/constellation-tab-controller.js?v=20260320-constellation-precession1";
-import { setupInputHandlers } from "./modules/input-handler.js?v=20260320-hud-classic1";
+import { createCelestialVisualsController } from "./modules/celestial-visuals-controller.js?v=20260322-fp-sun1";
+import { createConstellationTabController } from "./modules/constellation-tab-controller.js?v=20260322-topview-zodiac6";
+import { setupInputHandlers } from "./modules/input-handler.js?v=20260322-topview-zodiac4";
 import { createRocketController, SPACEPORTS } from "./modules/rocket-controller.js?v=20260319-parabola";
 const {
   DEFAULT_MAP_PATH,
@@ -286,7 +287,10 @@ const resetButton = document.getElementById("reset-camera");
 const summaryUtilitySlotEl = document.getElementById("summary-utility-slot");
 const languageToggleRowEl = document.getElementById("language-toggle-row");
 const summaryButtonRowEl = document.getElementById("summary-button-row");
+const cameraPresetRowEl = document.getElementById("camera-preset-row");
+const cameraPresetButtons = [...document.querySelectorAll("[data-camera-preset]")];
 const topbarNavSlotEl = document.getElementById("topbar-nav-slot");
+const topbarQuickSlotEl = document.getElementById("topbar-quick-slot");
 const topbarUtilitySlotEl = document.getElementById("topbar-utility-slot");
 const settingsAnchorEl = document.getElementById("settings-anchor");
 const settingsToggleButtonEl = document.getElementById("settings-toggle");
@@ -401,6 +405,8 @@ const constellationVisibilityToggleEl = document.getElementById("constellation-v
 const constellationVisibilityTextEl = document.getElementById("constellation-visibility-text");
 const constellationLineVisibilityToggleEl = document.getElementById("constellation-line-visibility-toggle");
 const constellationLineVisibilityTextEl = document.getElementById("constellation-line-visibility-text");
+const zodiacWheelToggleEl = document.getElementById("zodiac-wheel-toggle");
+const zodiacWheelTextEl = document.getElementById("zodiac-wheel-text");
 const constellationSelectEl = document.getElementById("constellation-select");
 const constellationMapHomeEl = document.getElementById("constellation-map-home");
 const constellationMapWrapEl = document.getElementById("constellation-map-wrap");
@@ -411,6 +417,15 @@ const constellationDecEl = document.getElementById("constellation-dec");
 const constellationHemisphereEl = document.getElementById("constellation-hemisphere");
 const constellationSegmentsEl = document.getElementById("constellation-segments");
 const constellationStarsEl = document.getElementById("constellation-stars");
+const zodiacAgeHomeEl = document.getElementById("zodiac-age-home");
+const zodiacAgeViewWrapEl = document.getElementById("zodiac-age-view-wrap");
+const zodiacAgeViewEl = document.getElementById("zodiac-age-view");
+const zodiacAgeSummaryEl = document.getElementById("zodiac-age-summary");
+const zodiacCurrentAgeEl = document.getElementById("zodiac-current-age");
+const zodiacCurrentTropicalEl = document.getElementById("zodiac-current-tropical");
+const zodiacSiderealOffsetEl = document.getElementById("zodiac-sidereal-offset");
+const zodiacAgeCycleEl = document.getElementById("zodiac-age-cycle");
+const zodiacObservationDateEl = document.getElementById("zodiac-observation-date");
 const i18n = createI18n();
 const LAYOUT_STORAGE_KEY = "flat-earth-layout-mode";
 const HUD_PANEL_SECTION_DEFAULTS = {
@@ -428,7 +443,14 @@ const HUD_SIDE_CARD_CONFIG = {
   constellations: {
     home: constellationMapHomeEl,
     node: constellationMapWrapEl,
-    titleKey: "constellationMapTitle"
+    titleKey: "constellationMapTitle",
+    sections: {
+      zodiac: {
+        home: zodiacAgeHomeEl,
+        node: zodiacAgeViewWrapEl,
+        titleKey: "zodiacAgeViewTitle"
+      }
+    }
   }
 };
 const FOCUSABLE_SELECTOR = [
@@ -476,8 +498,11 @@ function syncSummaryUtilitySlotVisibility() {
 }
 
 function syncLayoutAnchors(layoutMode) {
-  moveNodeToSlot(languageToggleRowEl, topbarUtilitySlotEl);
-  moveNodeToSlot(summaryButtonRowEl, topbarUtilitySlotEl);
+  const utilitySlotTarget = layoutMode === "hud" ? topbarUtilitySlotEl : summaryUtilitySlotEl;
+  const cameraSlotTarget = layoutMode === "hud" ? topbarQuickSlotEl : summaryUtilitySlotEl;
+  moveNodeToSlot(languageToggleRowEl, utilitySlotTarget);
+  moveNodeToSlot(summaryButtonRowEl, utilitySlotTarget);
+  moveNodeToSlot(cameraPresetRowEl, cameraSlotTarget);
 
   if (layoutMode === "hud") {
     moveNodeToSlot(detailTabsEl, topbarNavSlotEl);
@@ -498,12 +523,22 @@ function syncHudMovablePanels() {
 }
 
 function syncHudSideCard() {
+  const allCardConfigs = [];
   for (const config of Object.values(HUD_SIDE_CARD_CONFIG)) {
+    allCardConfigs.push(config);
+    for (const sectionConfig of Object.values(config.sections ?? {})) {
+      allCardConfigs.push(sectionConfig);
+    }
+  }
+
+  for (const config of allCardConfigs) {
     moveNodeToSlot(config.node, config.home);
   }
 
   const isDesktopHud = currentLayoutMode === "hud" && window.innerWidth > 1080;
-  const activeCardConfig = isDesktopHud ? HUD_SIDE_CARD_CONFIG[currentControlTab] : null;
+  const baseCardConfig = isDesktopHud ? HUD_SIDE_CARD_CONFIG[currentControlTab] : null;
+  const activeSectionKey = hudPanelSectionState[currentControlTab];
+  const activeCardConfig = baseCardConfig?.sections?.[activeSectionKey] ?? baseCardConfig ?? null;
 
   if (!hudSideRailEl || !hudSideCardEl || !hudSideCardSlotEl || !hudSideCardTitleEl || !activeCardConfig) {
     if (hudSideCardEl) {
@@ -914,8 +949,9 @@ function setControlTab(tabKey) {
   constellationTabApi?.setPanelActive(tabKey === "constellations");
 }
 
-import { setupScene } from "./modules/scene-setup.js";
+import { setupScene } from "./modules/scene-setup.js?v=20260322-topview-zodiac4";
 import { createConstellations } from "./modules/constellation-setup.js?v=20260320-constellation-precession1";
+import { createZodiacWheel } from "./modules/zodiac-wheel.js?v=20260322-topview-zodiac2";
 const {
   renderer,
   scene,
@@ -1069,6 +1105,8 @@ const {
 // Add constellations
 const constellationApi = createConstellations();
 scalableStage.add(constellationApi.group);
+const zodiacWheelApi = createZodiacWheel({ i18n });
+scalableStage.add(zodiacWheelApi.group);
 
 const simulationState = {
   darkSunBandDirection: -1,
@@ -1394,11 +1432,11 @@ function focusCameraOnConstellation(entry) {
   if (!entry) {
     celestialTrackingCameraApi?.clearTracking();
     cameraState.targetLookTarget.set(0, constants.SURFACE_Y * (5 / 6), 0);
-    cameraState.targetTheta = -0.55;
+    cameraState.targetTheta = constants.CAMERA_TOPDOWN_EXACT_THETA;
     cameraState.theta = cameraState.targetTheta;
-    cameraState.targetPhi = 1.12;
+    cameraState.targetPhi = constants.CAMERA_TOPDOWN_EXACT_PHI;
     cameraState.phi = cameraState.targetPhi;
-    cameraState.targetRadius = constants.CAMERA_TOPDOWN_DEFAULT_RADIUS;
+    cameraState.targetRadius = constants.CAMERA_TOPDOWN_FULL_RADIUS;
     cameraState.radius = cameraState.targetRadius;
     cameraApi.clampCamera();
     return;
@@ -1436,12 +1474,16 @@ function focusCameraOnConstellation(entry) {
 constellationTabApi = createConstellationTabController({
   i18n,
   constellationApi,
+  getObservationDate: () => astronomyState.selectedDate,
   onSelectionChange: focusCameraOnConstellation,
+  zodiacWheelApi,
   ui: {
     constellationLineVisibilityTextEl,
     constellationLineVisibilityToggleEl,
     constellationVisibilityToggleEl,
     constellationVisibilityTextEl,
+    zodiacWheelTextEl,
+    zodiacWheelToggleEl,
     constellationSelectEl,
     constellationMapEl,
     constellationDirectionEl,
@@ -1450,16 +1492,28 @@ constellationTabApi = createConstellationTabController({
     constellationHemisphereEl,
     constellationSegmentsEl,
     constellationStarsEl,
+    zodiacAgeViewEl,
+    zodiacAgeSummaryEl,
+    zodiacCurrentAgeEl,
+    zodiacCurrentTropicalEl,
+    zodiacSiderealOffsetEl,
+    zodiacAgeCycleEl,
+    zodiacObservationDateEl,
   },
 });
 
 i18n.subscribe(() => {
   constellationTabApi.refreshLocalizedUi();
+  syncHudSideCard();
 });
 
 constellationTabApi.initialize();
 setDemoSeasonPhaseFromDate(astronomyState.selectedDate.getTime());
-constellationApi.setSeasonalPrecessionAngle(getSeasonalPrecessionAngle(astronomyState.selectedDate));
+const initialSeasonalAngle = getSeasonalPrecessionAngle(astronomyState.selectedDate);
+const initialSiderealOffset = getSiderealZodiacOffsetRadians(astronomyState.selectedDate);
+constellationApi.setSeasonalPrecessionAngle(initialSeasonalAngle);
+zodiacWheelApi.setSeasonalAngle(initialSeasonalAngle);
+zodiacWheelApi.setSiderealOffset(initialSiderealOffset);
 constellationTabApi.refreshDynamicState({ force: true });
 
 celestialTrackingCameraApi = createCelestialTrackingCameraController({
@@ -1639,7 +1693,7 @@ const rocketApi = createRocketController({
     setControlTab, createSolarEclipseState: eclipseApi.createSolarEclipseState, syncFullTrailVisibility: eclipseApi.syncFullTrailVisibility,
     resetDarkSunStageState: eclipseApi.resetDarkSunStageState, showSolarEclipseToast: eclipseApi.showSolarEclipseToast,
     resetDarkSunOcclusionMotion: eclipseApi.resetDarkSunOcclusionMotion, darkSunOcclusionState,
-    controlTabButtons, languageToggleEl, i18n, uploadInput, resetButton,
+    controlTabButtons, languageToggleEl, i18n, uploadInput, resetButton, cameraPresetButtons,
     exitFirstPersonMode, enterFirstPersonMode, walkerModeEl, resetWalkerButton,
     routeSelectEl, routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl,
     celestialFullTrailEl, routePlaybackButton, routeResetButton, realitySyncEl,
@@ -1863,8 +1917,19 @@ function animate() {
   const constellationPrecessionAngle = astronomyState.enabled
     ? getSeasonalPrecessionAngle(projectionDate)
     : -simulationState.orbitSeasonPhase;
+  const siderealZodiacOffset = getSiderealZodiacOffsetRadians(projectionDate);
   constellationApi.setSeasonalPrecessionAngle(constellationPrecessionAngle);
+  zodiacWheelApi.setSeasonalAngle(constellationPrecessionAngle);
+  zodiacWheelApi.setSiderealOffset(siderealZodiacOffset);
+  zodiacWheelApi.setSuppressed(walkerState.enabled);
   constellationTabApi.refreshDynamicState();
+
+  const isFreeTopViewPresentation = !walkerState.enabled &&
+    cameraState.mode === "free" &&
+    cameraState.phi <= 0.5 &&
+    cameraState.radius >= (constants.CAMERA_TOPDOWN_FULL_RADIUS * 0.72);
+  dome.visible = !isFreeTopViewPresentation;
+  domeRing.visible = !isFreeTopViewPresentation;
 
   walkerApi.updateWalkerMovement(deltaSeconds);
   walkerApi.updateWalkerAvatar();

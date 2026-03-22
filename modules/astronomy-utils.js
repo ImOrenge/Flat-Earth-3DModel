@@ -11,6 +11,13 @@ const HOUR_MS = 3_600_000;
 const J2000 = 2451545;
 const FULL_CIRCLE_RADIANS = Math.PI * 2;
 const FULL_CIRCLE_DEGREES = 360;
+const SIDEREAL_ZODIAC_REFERENCE_DATE_MS = Date.parse("2026-03-21T00:00:00Z");
+const SIDEREAL_ZODIAC_REFERENCE_OFFSET_DEGREES = 24.125;
+const EARTH_PRECESSION_ARCSECONDS_PER_YEAR = 50.29;
+const TROPICAL_TO_SIDEREAL_DEGREES_PER_MS = (
+  (EARTH_PRECESSION_ARCSECONDS_PER_YEAR / 3600) /
+  (365.2422 * DAY_MS)
+);
 const SYNODIC_MONTH_DAYS = 29.530588853;
 const REFERENCE_NEW_MOON_JULIAN_DATE = 2451550.1;
 const MOON_PHASE_STEP_COUNT = 16;
@@ -363,6 +370,18 @@ export function getSeasonalPrecessionPhase(date) {
 
 export function getSeasonalPrecessionAngle(date) {
   return -getSeasonalPrecessionPhase(date) * FULL_CIRCLE_RADIANS;
+}
+
+export function getSiderealZodiacOffsetRadians(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return 0;
+  }
+
+  const elapsedMs = date.getTime() - SIDEREAL_ZODIAC_REFERENCE_DATE_MS;
+  const offsetDegrees = SIDEREAL_ZODIAC_REFERENCE_OFFSET_DEGREES + (
+    elapsedMs * TROPICAL_TO_SIDEREAL_DEGREES_PER_MS
+  );
+  return THREE.MathUtils.euclideanModulo(toRadians(offsetDegrees), FULL_CIRCLE_RADIANS);
 }
 
 function getMoonMotionWindow(date) {

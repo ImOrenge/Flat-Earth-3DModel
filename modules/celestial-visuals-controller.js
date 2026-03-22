@@ -733,11 +733,11 @@ export function createCelestialVisualsController(deps) {
       moonRenderState
     );
   
-    orbitSun.visible = true;
-    sunFullTrail.visible = celestialControlState.showFullTrail;
-    sunFullTrailPointsCloud.visible = celestialControlState.showFullTrail;
-    sunTrail.visible = true;
-    sunTrailPointsCloud.visible = true;
+    orbitSun.visible = false;
+    sunFullTrail.visible = false;
+    sunFullTrailPointsCloud.visible = false;
+    sunTrail.visible = false;
+    sunTrailPointsCloud.visible = false;
     observerSun.renderOrder = 24;
     observerSun.visible = false;
     observerSunBody.material.depthTest = false;
@@ -800,11 +800,11 @@ export function createCelestialVisualsController(deps) {
     }
   
     orbitMoon.renderOrder = 23;
-    orbitMoon.visible = true;
-    moonFullTrail.visible = celestialControlState.showFullTrail;
-    moonFullTrailPointsCloud.visible = celestialControlState.showFullTrail;
-    moonTrail.visible = true;
-    moonTrailPointsCloud.visible = true;
+    orbitMoon.visible = false;
+    moonFullTrail.visible = false;
+    moonFullTrailPointsCloud.visible = false;
+    moonTrail.visible = false;
+    moonTrailPointsCloud.visible = false;
     observerMoon.renderOrder = 23;
     observerMoon.visible = false;
     observerMoonBody.material.depthTest = false;

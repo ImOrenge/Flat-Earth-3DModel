@@ -293,6 +293,7 @@ code {
 
 .topbar-left,
 .topbar-nav-slot,
+.topbar-quick-slot,
 .topbar-right,
 .topbar-persistent-actions,
 .topbar-utility-slot {
@@ -400,6 +401,29 @@ code {
   justify-content: flex-end;
   gap: 10px;
   flex: 1 1 0;
+}
+
+.topbar-quick-slot {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.topbar-quick-slot .camera-preset-row {
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--topbar-border);
+  border-radius: 999px;
+  background: var(--topbar-bg);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(18px);
+}
+
+.topbar-quick-slot .button {
+  min-width: 120px;
+  white-space: nowrap;
 }
 
 .topbar-persistent-actions {
@@ -987,6 +1011,10 @@ h1 {
   background: linear-gradient(180deg, rgba(255, 230, 174, 0.09), rgba(126, 208, 255, 0.08));
 }
 
+.constellation-zodiac-panel {
+  background: linear-gradient(180deg, rgba(255, 196, 109, 0.12), rgba(126, 168, 255, 0.08));
+}
+
 .constellation-map-wrap {
   margin-top: 14px;
   padding: 10px;
@@ -1004,6 +1032,29 @@ h1 {
 }
 
 .constellation-map svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.zodiac-age-view-wrap {
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(circle at 50% 18%, rgba(255, 204, 118, 0.16), transparent 42%),
+    radial-gradient(circle at 50% 80%, rgba(126, 196, 255, 0.12), transparent 48%),
+    rgba(5, 11, 24, 0.7);
+}
+
+.zodiac-age-view {
+  width: 100%;
+  aspect-ratio: 1;
+  min-height: 240px;
+}
+
+.zodiac-age-view svg {
   display: block;
   width: 100%;
   height: auto;
@@ -1171,6 +1222,16 @@ h1 {
 
 .button-row.compact {
   margin-top: 14px;
+}
+
+.camera-preset-row {
+  margin-top: 10px;
+}
+
+.camera-preset-row .button {
+  flex: 1 1 0;
+  justify-content: center;
+  text-align: center;
 }
 
 .compact-button {
@@ -1509,6 +1570,15 @@ body[data-layout-mode="hud"] .hud-side-card-slot .constellation-map-wrap {
 }
 
 body[data-layout-mode="hud"] .hud-side-card-slot .constellation-map {
+  min-height: 152px;
+}
+
+body[data-layout-mode="hud"] .hud-side-card-slot .zodiac-age-view-wrap {
+  margin-top: 0;
+  padding: 8px;
+}
+
+body[data-layout-mode="hud"] .hud-side-card-slot .zodiac-age-view {
   min-height: 152px;
 }
 
@@ -1922,24 +1992,29 @@ body[data-layout-mode="hud"] .topbar-chip {
     align-items: stretch;
   }
 
+  body[data-layout-mode="hud"] .topbar-quick-slot,
   body[data-layout-mode="hud"] .topbar-persistent-actions,
   body[data-layout-mode="hud"] .topbar-utility-slot {
     width: 100%;
   }
 
+  body[data-layout-mode="hud"] .topbar-quick-slot .button-row,
   body[data-layout-mode="hud"] .topbar-persistent-actions {
     justify-content: space-between;
   }
 
+  body[data-layout-mode="hud"] .topbar-quick-slot .button-row,
   body[data-layout-mode="hud"] .topbar-utility-slot {
     justify-content: stretch;
   }
 
+  body[data-layout-mode="hud"] .topbar-quick-slot .button-row,
   body[data-layout-mode="hud"] .topbar-utility-slot .language-toggle-row,
   body[data-layout-mode="hud"] .topbar-utility-slot .button-row {
     width: 100%;
   }
 
+  body[data-layout-mode="hud"] .topbar-quick-slot .button-row .button,
   body[data-layout-mode="hud"] .topbar-utility-slot .button-row .button {
     flex: 1 1 0;
     text-align: center;

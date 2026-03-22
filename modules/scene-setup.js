@@ -1,5 +1,5 @@
 import * as THREE from "../vendor/three.module.js";
-import * as constants from "./constants.js";
+import * as constants from "./constants.js?v=20260322-topview-zodiac4";
 
 const {
   DEFAULT_MAP_PATH,
@@ -263,13 +263,13 @@ export function setupScene({ canvas }) {
   const cameraState = {
     lookTarget: defaultCameraLookTarget.clone(),
     mode: "free",
-    radius: CAMERA_TOPDOWN_DEFAULT_RADIUS,
-    theta: -0.55,
-    phi: 1.12,
+    radius: constants.CAMERA_TOPDOWN_FULL_RADIUS,
+    theta: constants.CAMERA_TOPDOWN_EXACT_THETA,
+    phi: constants.CAMERA_TOPDOWN_EXACT_PHI,
     targetLookTarget: defaultCameraLookTarget.clone(),
-    targetTheta: -0.55,
-    targetPhi: 1.12,
-    targetRadius: CAMERA_TOPDOWN_DEFAULT_RADIUS,
+    targetTheta: constants.CAMERA_TOPDOWN_EXACT_THETA,
+    targetPhi: constants.CAMERA_TOPDOWN_EXACT_PHI,
+    targetRadius: constants.CAMERA_TOPDOWN_FULL_RADIUS,
     trackingAzimuth: CAMERA_TRACKING_DEFAULT_AZIMUTH,
     trackingDistance: CAMERA_TRACKING_DEFAULT_DISTANCE,
     trackingElevation: CAMERA_TRACKING_DEFAULT_ELEVATION,

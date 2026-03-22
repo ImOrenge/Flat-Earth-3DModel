@@ -1,5 +1,5 @@
 import * as THREE from "../vendor/three.module.js";
-import { getDisplayLocalSolarAltitudeDegreesFromModel } from "./astronomy-utils.js?v=20260312-darksun-eclipse1";
+import { getDisplayLocalSolarAltitudeDegreesFromModel } from "./astronomy-utils.js?v=20260322-fp-sun1";
 
 const DEFAULT_FOG_COLOR = new THREE.Color(0x06101d);
 
@@ -403,6 +403,62 @@ export function createFirstPersonWorldController({
   skyDome.visible = false;
   root.add(skyDome);
 
+  // --- FP Sun (direction-based placement on sky) ---
+  const FP_SKY_BODY_DIST = 250; // must be < camera far (280)
+  const fpSunBody = new THREE.Mesh(
+    new THREE.SphereGeometry(scaleDimension(12), 32, 24),
+    new THREE.MeshBasicMaterial({
+      color: 0xfff4d6,
+      transparent: true,
+      opacity: 1,
+      depthWrite: false
+    })
+  );
+  fpSunBody.renderOrder = 14;
+  root.add(fpSunBody);
+
+  const fpSunHalo = new THREE.Mesh(
+    new THREE.SphereGeometry(scaleDimension(6.5), 24, 16),
+    new THREE.MeshBasicMaterial({
+      color: 0xffd781,
+      transparent: true,
+      opacity: 0.18,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    })
+  );
+  fpSunHalo.renderOrder = 12;
+  root.add(fpSunHalo);
+
+  // --- FP Moon (direction-based placement on sky) ---
+  const fpMoonBody = new THREE.Mesh(
+    new THREE.SphereGeometry(scaleDimension(1.5), 32, 24),
+    new THREE.MeshBasicMaterial({
+      color: 0xeeeef4,
+      transparent: true,
+      opacity: 1,
+      depthWrite: false
+    })
+  );
+  fpMoonBody.renderOrder = 10;
+  root.add(fpMoonBody);
+
+  const fpMoonHalo = new THREE.Mesh(
+    new THREE.SphereGeometry(scaleDimension(4.0), 24, 16),
+    new THREE.MeshBasicMaterial({
+      color: 0xcfd8f7,
+      transparent: true,
+      opacity: 0.12,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    })
+  );
+  fpMoonHalo.renderOrder = 8;
+  root.add(fpMoonHalo);
+
+  const tempMoonDirection = new THREE.Vector3();
+
   const glowTexture = createGlowTexture();
   const silhouetteTexture = createSilhouetteTexture();
   const horizonVeilTexture = createHorizonVeilTexture();
@@ -664,6 +720,43 @@ export function createFirstPersonWorldController({
 
     syncSkyShader(dayFactor, twilightFactor, nightFactor);
     skyDome.material.uniforms.uSunDirection.value.copy(tempSunDirection);
+
+    // --- FP Sun position (direction-based, rises from horizon) ---
+    const sunAboveHorizon = tempSunDirection.y > -0.03;
+    fpSunBody.visible = sunAboveHorizon;
+    fpSunHalo.visible = sunAboveHorizon;
+    if (sunAboveHorizon) {
+      fpSunBody.position.copy(tempSunDirection).multiplyScalar(FP_SKY_BODY_DIST);
+      fpSunHalo.position.copy(fpSunBody.position);
+      // Fade near horizon
+      const horizonFade = THREE.MathUtils.smoothstep(tempSunDirection.y, -0.03, 0.04);
+      fpSunBody.material.opacity = horizonFade;
+      fpSunHalo.material.opacity = 0.18 * horizonFade;
+      // Eclipse dimming
+      const eclipseRed = THREE.MathUtils.clamp(snapshot.solarEclipse?.lightReduction ?? 0, 0, 1);
+      fpSunBody.material.color.lerpColors(
+        new THREE.Color(0xfff4d6), new THREE.Color(0xff6633), eclipseRed * 0.7
+      );
+      fpSunHalo.material.opacity *= (1 - eclipseRed * 0.6);
+    }
+
+    // --- FP Moon position ---
+    const moonPos = snapshot.moonRenderPosition ?? snapshot.moonPosition;
+    tempMoonDirection.set(
+      moonPos.x - walkerState.position.x,
+      moonPos.y - constants.WALKER_EYE_HEIGHT,
+      moonPos.z - walkerState.position.z
+    ).normalize();
+    const moonAboveHorizon = tempMoonDirection.y > -0.03;
+    fpMoonBody.visible = moonAboveHorizon;
+    fpMoonHalo.visible = moonAboveHorizon;
+    if (moonAboveHorizon) {
+      fpMoonBody.position.copy(tempMoonDirection).multiplyScalar(FP_SKY_BODY_DIST);
+      fpMoonHalo.position.copy(fpMoonBody.position);
+      const moonHorizonFade = THREE.MathUtils.smoothstep(tempMoonDirection.y, -0.03, 0.04);
+      fpMoonBody.material.opacity = moonHorizonFade;
+      fpMoonHalo.material.opacity = 0.12 * moonHorizonFade;
+    }
 
     tempLightPosition.copy(root.position)
       .addScaledVector(tempSunDirection, scaleDimension(56));

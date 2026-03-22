@@ -1,4 +1,9 @@
 import { getLocalizedConstellationName } from "./constellation-name-locales.js";
+import {
+  CALENDAR_MONTH_SEQUENCE,
+  ZODIAC_SIGNS,
+  getAgeSignIndexFromSiderealOffset
+} from "./zodiac-wheel.js?v=20260322-topview-zodiac2";
 
 const DIRECTION_KEYS_16 = [
   "constellationDirectionN",
@@ -22,7 +27,19 @@ const DIRECTION_KEYS_16 = [
 const MAP_SIZE = 100;
 const MAP_CENTER = MAP_SIZE / 2;
 const MAP_RADIUS = 46;
+const FULL_CIRCLE_RADIANS = Math.PI * 2;
 const PRECESSION_RENDER_THRESHOLD_RAD = Math.PI / 360;
+const ZODIAC_VIEW_SIZE = 100;
+const ZODIAC_VIEW_CENTER = ZODIAC_VIEW_SIZE / 2;
+const ZODIAC_MONTH_INNER_RADIUS = 39;
+const ZODIAC_MONTH_OUTER_RADIUS = 46;
+const ZODIAC_SIGN_INNER_RADIUS = 19;
+const ZODIAC_SIGN_OUTER_RADIUS = 37;
+const ZODIAC_SIGN_LABEL_RADIUS = 28;
+const ZODIAC_MONTH_LABEL_RADIUS = 42.5;
+const ZODIAC_MARKER_INNER_RADIUS = 15;
+const ZODIAC_MARKER_OUTER_RADIUS = 48;
+const ZODIAC_SEGMENT_ARC = FULL_CIRCLE_RADIANS / ZODIAC_SIGNS.length;
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
@@ -35,6 +52,10 @@ function formatHours(hours) {
 function formatSignedDegrees(degrees) {
   const sign = degrees > 0 ? "+" : "";
   return `${sign}${degrees.toFixed(2)}\u00B0`;
+}
+
+function formatUnsignedDegrees(degrees) {
+  return `${degrees.toFixed(2)}\u00B0`;
 }
 
 function getHemisphereKey(entry) {
@@ -61,6 +82,55 @@ function toSvgPoint(point) {
     x: MAP_CENTER + (point.x * MAP_RADIUS),
     y: MAP_CENTER + (point.y * MAP_RADIUS),
   };
+}
+
+function normalizeAngle(angleRadians) {
+  return ((angleRadians % FULL_CIRCLE_RADIANS) + FULL_CIRCLE_RADIANS) % FULL_CIRCLE_RADIANS;
+}
+
+function getWheelSvgPoint(radius, angleRadians) {
+  return {
+    x: ZODIAC_VIEW_CENTER + (radius * Math.sin(angleRadians)),
+    y: ZODIAC_VIEW_CENTER - (radius * Math.cos(angleRadians)),
+  };
+}
+
+function buildAnnularSectorPath(innerRadius, outerRadius, startAngle, endAngle) {
+  const normalizedEndAngle = endAngle < startAngle ? endAngle + FULL_CIRCLE_RADIANS : endAngle;
+  const span = normalizedEndAngle - startAngle;
+  const largeArc = span > Math.PI ? 1 : 0;
+  const outerStart = getWheelSvgPoint(outerRadius, startAngle);
+  const outerEnd = getWheelSvgPoint(outerRadius, normalizedEndAngle);
+  const innerEnd = getWheelSvgPoint(innerRadius, normalizedEndAngle);
+  const innerStart = getWheelSvgPoint(innerRadius, startAngle);
+  return [
+    `M ${outerStart.x.toFixed(2)} ${outerStart.y.toFixed(2)}`,
+    `A ${outerRadius.toFixed(2)} ${outerRadius.toFixed(2)} 0 ${largeArc} 1 ${outerEnd.x.toFixed(2)} ${outerEnd.y.toFixed(2)}`,
+    `L ${innerEnd.x.toFixed(2)} ${innerEnd.y.toFixed(2)}`,
+    `A ${innerRadius.toFixed(2)} ${innerRadius.toFixed(2)} 0 ${largeArc} 0 ${innerStart.x.toFixed(2)} ${innerStart.y.toFixed(2)}`,
+    "Z",
+  ].join(" ");
+}
+
+function colorValueToHex(colorValue) {
+  return `#${colorValue.toString(16).padStart(6, "0")}`;
+}
+
+function getMonthLabel(monthIndex, i18n) {
+  return i18n.formatDate(
+    new Date(Date.UTC(2026, monthIndex, 1)),
+    { month: i18n.getLanguage() === "ko" ? "numeric" : "short", timeZone: "UTC" }
+  );
+}
+
+function getWheelLabelFontFamily(i18n) {
+  return i18n.getLanguage() === "ko"
+    ? '"Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif'
+    : '"Segoe UI", "Noto Sans", sans-serif';
+}
+
+function getTropicalSignIndex(seasonalAngleRadians) {
+  return Math.floor(normalizeAngle(-seasonalAngleRadians) / ZODIAC_SEGMENT_ARC) % ZODIAC_SIGNS.length;
 }
 
 function buildSegmentSvg(segmentPoints) {
@@ -101,7 +171,14 @@ function buildGridSvg() {
   `;
 }
 
-export function createConstellationTabController({ i18n, ui, constellationApi, onSelectionChange }) {
+export function createConstellationTabController({
+  i18n,
+  ui,
+  constellationApi,
+  onSelectionChange,
+  zodiacWheelApi,
+  getObservationDate
+}) {
   const initialCatalog = constellationApi
     .getConstellationCatalog()
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -113,7 +190,9 @@ export function createConstellationTabController({ i18n, ui, constellationApi, o
     isVisible: true,
     isPanelActive: false,
     lastRenderedAngle: null,
+    lastRenderedSiderealOffset: null,
     selectedName: null,
+    zodiacVisible: zodiacWheelApi?.getVisible?.() ?? true,
   };
 
   function getCurrentCatalogMap() {
@@ -151,6 +230,29 @@ export function createConstellationTabController({ i18n, ui, constellationApi, o
       : i18n.t("constellationLinesOff");
   }
 
+  function getZodiacVisibilityLabel() {
+    return state.zodiacVisible
+      ? i18n.t("zodiacWheelVisibilityOn")
+      : i18n.t("zodiacWheelVisibilityOff");
+  }
+
+  function getZodiacViewState() {
+    const seasonalAngleRadians = zodiacWheelApi?.getSeasonalAngle?.() ?? 0;
+    const siderealOffsetRadians = zodiacWheelApi?.getSiderealOffset?.() ?? 0;
+    const tropicalSignIndex = getTropicalSignIndex(seasonalAngleRadians);
+    const ageSignIndex = zodiacWheelApi?.getAgeSignIndex?.() ?? getAgeSignIndexFromSiderealOffset(siderealOffsetRadians);
+    const observationDate = getObservationDate?.() ?? null;
+    return {
+      ageSign: ZODIAC_SIGNS[ageSignIndex],
+      ageSignIndex,
+      observationDate,
+      seasonalAngleRadians,
+      siderealOffsetRadians,
+      tropicalSign: ZODIAC_SIGNS[tropicalSignIndex],
+      tropicalSignIndex,
+    };
+  }
+
   function syncVisibilityUi() {
     if (ui.constellationVisibilityToggleEl) {
       ui.constellationVisibilityToggleEl.checked = state.isVisible;
@@ -168,6 +270,15 @@ export function createConstellationTabController({ i18n, ui, constellationApi, o
     }
     if (ui.constellationLineVisibilityTextEl) {
       ui.constellationLineVisibilityTextEl.textContent = getLineVisibilityLabel();
+    }
+  }
+
+  function syncZodiacVisibilityUi() {
+    if (ui.zodiacWheelToggleEl) {
+      ui.zodiacWheelToggleEl.checked = state.zodiacVisible;
+    }
+    if (ui.zodiacWheelTextEl) {
+      ui.zodiacWheelTextEl.textContent = getZodiacVisibilityLabel();
     }
   }
 
@@ -256,6 +367,111 @@ export function createConstellationTabController({ i18n, ui, constellationApi, o
     ui.constellationMapEl.innerHTML = parts.join("\n");
   }
 
+  function renderZodiacAgeView() {
+    if (!ui.zodiacAgeViewEl) {
+      return;
+    }
+
+    const {
+      ageSign,
+      ageSignIndex,
+      observationDate,
+      seasonalAngleRadians,
+      siderealOffsetRadians,
+      tropicalSign,
+      tropicalSignIndex,
+    } = getZodiacViewState();
+    const fontFamily = getWheelLabelFontFamily(i18n);
+    const markerAngle = seasonalAngleRadians;
+    const parts = [];
+
+    parts.push(
+      `<svg class="zodiac-age-svg" xmlns="http://www.w3.org/2000/svg" width="${ZODIAC_VIEW_SIZE}" height="${ZODIAC_VIEW_SIZE}" viewBox="0 0 ${ZODIAC_VIEW_SIZE} ${ZODIAC_VIEW_SIZE}" aria-hidden="true">`
+    );
+    parts.push("<defs>");
+    parts.push(`<radialGradient id="zodiac-age-core" cx="50%" cy="50%" r="50%">`);
+    parts.push(`<stop offset="0%" stop-color="rgba(255, 232, 178, 0.92)" />`);
+    parts.push(`<stop offset="100%" stop-color="rgba(255, 232, 178, 0)" />`);
+    parts.push("</radialGradient>");
+    parts.push("</defs>");
+    parts.push(`<rect x="0" y="0" width="${ZODIAC_VIEW_SIZE}" height="${ZODIAC_VIEW_SIZE}" fill="#07111f" />`);
+    parts.push(`<circle cx="${ZODIAC_VIEW_CENTER}" cy="${ZODIAC_VIEW_CENTER}" r="${ZODIAC_MONTH_OUTER_RADIUS}" fill="#091528" opacity="0.84" />`);
+
+    for (let index = 0; index < ZODIAC_SIGNS.length; index += 1) {
+      const sign = ZODIAC_SIGNS[index];
+      const startAngle = seasonalAngleRadians + siderealOffsetRadians + (index * ZODIAC_SEGMENT_ARC);
+      const endAngle = startAngle + ZODIAC_SEGMENT_ARC;
+      const centerAngle = startAngle + (ZODIAC_SEGMENT_ARC / 2);
+      const labelPoint = getWheelSvgPoint(ZODIAC_SIGN_LABEL_RADIUS, centerAngle);
+      const isAgeSign = index === ageSignIndex;
+      const fillOpacity = isAgeSign ? 0.82 : 0.28;
+      const strokeOpacity = isAgeSign ? 0.96 : 0.34;
+
+      parts.push(
+        `<path d="${buildAnnularSectorPath(ZODIAC_SIGN_INNER_RADIUS, ZODIAC_SIGN_OUTER_RADIUS, startAngle, endAngle)}" fill="${colorValueToHex(sign.color)}" fill-opacity="${fillOpacity.toFixed(2)}" stroke="${colorValueToHex(sign.color)}" stroke-opacity="${strokeOpacity.toFixed(2)}" stroke-width="${isAgeSign ? "0.85" : "0.35"}" />`
+      );
+      parts.push(
+        `<text x="${labelPoint.x.toFixed(2)}" y="${labelPoint.y.toFixed(2)}" fill="#f7fbff" font-family="${fontFamily}" font-size="5.8" font-weight="700" text-anchor="middle" dominant-baseline="central">${sign.glyph}</text>`
+      );
+    }
+
+    parts.push(
+      `<circle cx="${ZODIAC_VIEW_CENTER}" cy="${ZODIAC_VIEW_CENTER}" r="${ZODIAC_SIGN_INNER_RADIUS - 2.8}" fill="#08111f" stroke="rgba(255,255,255,0.12)" stroke-width="0.45" />`
+    );
+    parts.push(
+      `<circle cx="${ZODIAC_VIEW_CENTER}" cy="${ZODIAC_VIEW_CENTER}" r="${ZODIAC_SIGN_OUTER_RADIUS}" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="0.5" />`
+    );
+
+    for (let index = 0; index < CALENDAR_MONTH_SEQUENCE.length; index += 1) {
+      const monthIndex = CALENDAR_MONTH_SEQUENCE[index];
+      const monthAngle = seasonalAngleRadians + (index * ZODIAC_SEGMENT_ARC) + (ZODIAC_SEGMENT_ARC / 2);
+      const monthPoint = getWheelSvgPoint(ZODIAC_MONTH_LABEL_RADIUS, monthAngle);
+      const isTropicalSign = index === tropicalSignIndex;
+      parts.push(
+        `<path d="${buildAnnularSectorPath(ZODIAC_MONTH_INNER_RADIUS, ZODIAC_MONTH_OUTER_RADIUS, seasonalAngleRadians + (index * ZODIAC_SEGMENT_ARC), seasonalAngleRadians + ((index + 1) * ZODIAC_SEGMENT_ARC))}" fill="${isTropicalSign ? "rgba(255, 226, 146, 0.30)" : "rgba(158, 205, 255, 0.08)"}" stroke="rgba(255,255,255,0.14)" stroke-width="0.28" />`
+      );
+      parts.push(
+        `<text x="${monthPoint.x.toFixed(2)}" y="${monthPoint.y.toFixed(2)}" fill="${isTropicalSign ? "#fff2bc" : "#b8cae9"}" font-family="${fontFamily}" font-size="${i18n.getLanguage() === "ko" ? "4.2" : "4.4"}" font-weight="700" text-anchor="middle" dominant-baseline="central">${getMonthLabel(monthIndex, i18n)}</text>`
+      );
+    }
+
+    const markerInnerPoint = getWheelSvgPoint(ZODIAC_MARKER_INNER_RADIUS, markerAngle);
+    const markerOuterPoint = getWheelSvgPoint(ZODIAC_MARKER_OUTER_RADIUS, markerAngle);
+    parts.push(
+      `<line x1="${markerInnerPoint.x.toFixed(2)}" y1="${markerInnerPoint.y.toFixed(2)}" x2="${markerOuterPoint.x.toFixed(2)}" y2="${markerOuterPoint.y.toFixed(2)}" stroke="#ffe8a4" stroke-width="1.1" stroke-linecap="round" />`
+    );
+    parts.push(
+      `<circle cx="${markerOuterPoint.x.toFixed(2)}" cy="${markerOuterPoint.y.toFixed(2)}" r="1.75" fill="#ffe8a4" />`
+    );
+    parts.push(
+      `<circle cx="${ZODIAC_VIEW_CENTER}" cy="${ZODIAC_VIEW_CENTER}" r="6.5" fill="url(#zodiac-age-core)" />`
+    );
+    parts.push(
+      `<circle cx="${ZODIAC_VIEW_CENTER}" cy="${ZODIAC_VIEW_CENTER}" r="1.4" fill="#fff1c2" />`
+    );
+    parts.push("</svg>");
+
+    ui.zodiacAgeViewEl.innerHTML = parts.join("\n");
+    ui.zodiacAgeViewEl.setAttribute("aria-label", i18n.t("zodiacAgeViewAria"));
+    ui.zodiacCurrentAgeEl.textContent = `${ageSign.glyph} ${i18n.t(ageSign.nameKey)}`;
+    ui.zodiacCurrentTropicalEl.textContent = `${tropicalSign.glyph} ${i18n.t(tropicalSign.nameKey)}`;
+    ui.zodiacSiderealOffsetEl.textContent = formatUnsignedDegrees((siderealOffsetRadians * 180) / Math.PI);
+    if (ui.zodiacAgeCycleEl) {
+      ui.zodiacAgeCycleEl.textContent = i18n.t("zodiacAgeCycleValue");
+    }
+    ui.zodiacObservationDateEl.textContent = observationDate instanceof Date
+      ? i18n.formatDate(observationDate, { dateStyle: "medium" })
+      : "-";
+
+    if (ui.zodiacAgeSummaryEl) {
+      ui.zodiacAgeSummaryEl.textContent = i18n.t("zodiacAgeSummary", {
+        ageSign: i18n.t(ageSign.nameKey),
+        offset: formatUnsignedDegrees((siderealOffsetRadians * 180) / Math.PI),
+        tropicalSign: i18n.t(tropicalSign.nameKey),
+      });
+    }
+  }
+
   function setSelectedConstellation(name) {
     if (!name) {
       state.selectedName = null;
@@ -291,6 +507,12 @@ export function createConstellationTabController({ i18n, ui, constellationApi, o
     renderMap();
   }
 
+  function setZodiacWheelVisible(visible) {
+    state.zodiacVisible = Boolean(visible);
+    zodiacWheelApi?.setVisible?.(state.zodiacVisible);
+    syncZodiacVisibilityUi();
+  }
+
   function populateSelect() {
     ui.constellationSelectEl.replaceChildren();
     const allOption = document.createElement("option");
@@ -317,14 +539,18 @@ export function createConstellationTabController({ i18n, ui, constellationApi, o
 
   function refreshDynamicState({ force = false } = {}) {
     const currentAngle = constellationApi.getSeasonalPrecessionAngle?.() ?? 0;
+    const currentSiderealOffset = zodiacWheelApi?.getSiderealOffset?.() ?? 0;
     if (!force && !state.isPanelActive) {
       state.lastRenderedAngle = currentAngle;
+      state.lastRenderedSiderealOffset = currentSiderealOffset;
       return;
     }
 
     if (
       !force &&
       state.lastRenderedAngle !== null &&
+      state.lastRenderedSiderealOffset !== null &&
+      getWrappedAngleDeltaMagnitude(currentSiderealOffset, state.lastRenderedSiderealOffset) < PRECESSION_RENDER_THRESHOLD_RAD &&
       getWrappedAngleDeltaMagnitude(currentAngle, state.lastRenderedAngle) < PRECESSION_RENDER_THRESHOLD_RAD
     ) {
       return;
@@ -332,7 +558,9 @@ export function createConstellationTabController({ i18n, ui, constellationApi, o
 
     syncInfoCard();
     renderMap();
+    renderZodiacAgeView();
     state.lastRenderedAngle = currentAngle;
+    state.lastRenderedSiderealOffset = currentSiderealOffset;
   }
 
   function setPanelActive(active) {
@@ -348,9 +576,12 @@ export function createConstellationTabController({ i18n, ui, constellationApi, o
     ui.constellationSelectEl.value = selectedValue;
     syncVisibilityUi();
     syncLineVisibilityUi();
+    syncZodiacVisibilityUi();
+    zodiacWheelApi?.refreshLocalizedUi?.();
     ui.constellationMapEl.setAttribute("aria-label", i18n.t("constellationMapAria"));
     syncInfoCard();
     renderMap();
+    renderZodiacAgeView();
   }
 
   function initialize() {
@@ -365,9 +596,13 @@ export function createConstellationTabController({ i18n, ui, constellationApi, o
     ui.constellationLineVisibilityToggleEl?.addEventListener("change", () => {
       setConstellationLinesVisible(ui.constellationLineVisibilityToggleEl.checked);
     });
+    ui.zodiacWheelToggleEl?.addEventListener("change", () => {
+      setZodiacWheelVisible(ui.zodiacWheelToggleEl.checked);
+    });
     setSelectedConstellation(state.selectedName);
     setConstellationsVisible(state.isVisible);
     setConstellationLinesVisible(state.areLinesVisible);
+    setZodiacWheelVisible(state.zodiacVisible);
     refreshLocalizedUi();
   }
 
@@ -382,5 +617,6 @@ export function createConstellationTabController({ i18n, ui, constellationApi, o
     setConstellationLinesVisible,
     setPanelActive,
     setSelectedConstellation,
+    setZodiacWheelVisible,
   };
 }

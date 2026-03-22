@@ -27,7 +27,10 @@ export function createCameraController({
   cameraState.targetTrackingDistance = cameraState.targetTrackingDistance ?? constants.CAMERA_TRACKING_DEFAULT_DISTANCE;
 
   function clampCamera() {
-    cameraState.targetPhi = Math.min(Math.max(cameraState.targetPhi, 0.3), 1.48);
+    cameraState.targetPhi = Math.min(
+      Math.max(cameraState.targetPhi, constants.CAMERA_FREE_MIN_PHI),
+      constants.CAMERA_FREE_MAX_PHI
+    );
     cameraState.targetRadius = Math.min(
       Math.max(cameraState.targetRadius, constants.CAMERA_TOPDOWN_MIN_RADIUS),
       constants.CAMERA_TOPDOWN_MAX_RADIUS

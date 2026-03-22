@@ -2,6 +2,8 @@
 <html lang="ko">
   
 <head>
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4006284492158024"
+     crossorigin="anonymous"></script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Flat Earth Disc 3D Model</title>
@@ -23,7 +25,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="./styles.css?v=20260321-scale2">
+    <link rel="stylesheet" href="./styles.css?v=20260322-topview-zodiac4">
 </head>
 <body>
   <div class="app-shell">
@@ -88,6 +90,7 @@
       </div>
       <div class="topbar-nav-slot" id="topbar-nav-slot"></div>
       <div class="topbar-right">
+        <div class="topbar-quick-slot" id="topbar-quick-slot"></div>
         <div class="topbar-persistent-actions">
           <button class="button secondary compact-button topbar-action" id="help-open" type="button" data-i18n="helpButtonLabel">Help</button>
           <div class="settings-anchor" id="settings-anchor">
@@ -243,6 +246,10 @@
           <div class="button-row" id="summary-button-row">
             <label class="button primary" for="map-upload" data-i18n="uploadMapButton">Upload Map</label>
             <button class="button secondary" id="reset-camera" type="button" data-i18n="resetCameraButton">Reset Camera</button>
+          </div>
+          <div class="button-row compact camera-preset-row" id="camera-preset-row">
+            <button class="button secondary compact-button" data-camera-preset="top" type="button" data-i18n="cameraPresetTop">Top View</button>
+            <button class="button secondary compact-button" data-camera-preset="angle" type="button" data-i18n="cameraPresetAngle">Angle View</button>
           </div>
         </div>
 
@@ -651,6 +658,7 @@
           <div class="hud-subtabs" data-hud-panel-tabs="constellations">
             <button class="hud-subtab active" data-hud-panel-tab="controls" type="button"><span class="subtab-icon" aria-hidden="true">⋆</span><span data-i18n="hudConstellationsSectionControls">Controls</span></button>
             <button class="hud-subtab" data-hud-panel-tab="info" type="button"><span class="subtab-icon" aria-hidden="true">ℹ</span><span data-i18n="hudConstellationsSectionInfo">Info</span></button>
+            <button class="hud-subtab" data-hud-panel-tab="zodiac" type="button"><span class="subtab-icon" aria-hidden="true">*</span><span data-i18n="hudConstellationsSectionZodiac">Zodiac Age</span></button>
           </div>
           <section class="constellation-panel hud-subpanel active" data-hud-panel-section="controls">
             <p class="orbit-title" data-i18n="constellationMapTitle">Constellation Map</p>
@@ -668,6 +676,14 @@
                 <input id="constellation-line-visibility-toggle" type="checkbox" role="switch">
                 <span class="toggle-switch" aria-hidden="true"></span>
                 <span class="toggle-text" id="constellation-line-visibility-text">Off</span>
+              </label>
+            </div>
+            <div class="sync-row">
+              <span class="sync-title" data-i18n="zodiacWheelTitle">Zodiac Wheel</span>
+              <label class="toggle">
+                <input id="zodiac-wheel-toggle" type="checkbox" role="switch" checked>
+                <span class="toggle-switch" aria-hidden="true"></span>
+                <span class="toggle-text" id="zodiac-wheel-text">On</span>
               </label>
             </div>
             <label class="field" for="constellation-select">
@@ -706,6 +722,37 @@
               <div class="coord-card">
                 <span class="coord-label" data-i18n="constellationStarsLabel">Stars</span>
                 <strong class="coord-value" id="constellation-stars">-</strong>
+              </div>
+            </div>
+          </section>
+          <section class="constellation-panel constellation-zodiac-panel hud-subpanel" data-hud-panel-section="zodiac">
+            <p class="orbit-title" data-i18n="zodiacAgeViewTitle">Zodiac Age View</p>
+            <p class="sync-copy" id="zodiac-age-summary">The current age marker compares the tropical month ring with the sidereal zodiac.</p>
+            <div class="hud-side-home" id="zodiac-age-home">
+              <div class="zodiac-age-view-wrap" id="zodiac-age-view-wrap">
+                <div class="zodiac-age-view" id="zodiac-age-view" role="img" aria-label="Zodiac age wheel"></div>
+              </div>
+            </div>
+            <div class="coord-grid">
+              <div class="coord-card">
+                <span class="coord-label" data-i18n="zodiacCurrentAgeLabel">Current Age</span>
+                <strong class="coord-value" id="zodiac-current-age">-</strong>
+              </div>
+              <div class="coord-card">
+                <span class="coord-label" data-i18n="zodiacCurrentTropicalLabel">Tropical Sign</span>
+                <strong class="coord-value" id="zodiac-current-tropical">-</strong>
+              </div>
+              <div class="coord-card">
+                <span class="coord-label" data-i18n="zodiacSiderealOffsetLabel">Sidereal Offset</span>
+                <strong class="coord-value" id="zodiac-sidereal-offset">-</strong>
+              </div>
+              <div class="coord-card">
+                <span class="coord-label" data-i18n="zodiacAgeCycleLabel">Age Span</span>
+                <strong class="coord-value" id="zodiac-age-cycle">-</strong>
+              </div>
+              <div class="coord-card">
+                <span class="coord-label" data-i18n="zodiacObservationDateLabel">Observation Date</span>
+                <strong class="coord-value" id="zodiac-observation-date">-</strong>
               </div>
             </div>
           </section>
@@ -770,6 +817,6 @@
     </div>
   </div>
 
-    <script type="module" src="./app.js?v=20260320-hudtabs2"></script>
+    <script type="module" src="./app.js?v=20260322-topview-zodiac6"></script>
   </body>
 </html>

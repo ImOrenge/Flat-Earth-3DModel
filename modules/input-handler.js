@@ -30,7 +30,7 @@ export function setupInputHandlers(deps) {
     showSolarEclipseToast,
     resetDarkSunOcclusionMotion,
     darkSunOcclusionState,
-    controlTabButtons, languageToggleEl, i18n, uploadInput, resetButton,
+    controlTabButtons, languageToggleEl, i18n, uploadInput, resetButton, cameraPresetButtons = [],
     exitFirstPersonMode, enterFirstPersonMode, walkerModeEl, resetWalkerButton,
     routeSelectEl, routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl,
     celestialFullTrailEl, routePlaybackButton, routeResetButton, realitySyncEl,
@@ -64,6 +64,27 @@ export function setupInputHandlers(deps) {
   let previousX = 0;
   
   let previousY = 0;
+
+  function applyCameraPreset(preset = "top") {
+    if (walkerState.enabled || renderState.preparing) {
+      exitFirstPersonMode();
+    }
+
+    celestialTrackingCameraApi.clearTracking();
+    cameraState.targetTheta = preset === "angle"
+      ? constants.CAMERA_ANGLED_DEFAULT_THETA
+      : constants.CAMERA_TOPDOWN_EXACT_THETA;
+    cameraState.targetPhi = preset === "angle"
+      ? constants.CAMERA_ANGLED_DEFAULT_PHI
+      : constants.CAMERA_TOPDOWN_EXACT_PHI;
+    cameraState.targetRadius = preset === "angle"
+      ? constants.CAMERA_ANGLED_DEFAULT_RADIUS
+      : constants.CAMERA_TOPDOWN_FULL_RADIUS;
+    cameraState.targetTrackingAzimuth = constants.CAMERA_TRACKING_DEFAULT_AZIMUTH;
+    cameraState.targetTrackingElevation = constants.CAMERA_TRACKING_DEFAULT_ELEVATION;
+    cameraState.targetTrackingDistance = constants.CAMERA_TRACKING_DEFAULT_DISTANCE;
+    cameraApi.clampCamera();
+  }
   
   
   
@@ -231,29 +252,19 @@ export function setupInputHandlers(deps) {
   
   resetButton.addEventListener("click", () => {
   
-    if (walkerState.enabled || renderState.preparing) {
-  
-      exitFirstPersonMode();
-  
-    }
-  
-    celestialTrackingCameraApi.clearTracking();
-  
-    cameraState.targetTheta = -0.55;
-  
-    cameraState.targetPhi = 1.12;
-  
-    cameraState.targetRadius = constants.CAMERA_TOPDOWN_DEFAULT_RADIUS;
-  
-    cameraState.targetTrackingAzimuth = constants.CAMERA_TRACKING_DEFAULT_AZIMUTH;
-  
-    cameraState.targetTrackingElevation = constants.CAMERA_TRACKING_DEFAULT_ELEVATION;
-  
-    cameraState.targetTrackingDistance = constants.CAMERA_TRACKING_DEFAULT_DISTANCE;
-  
-    cameraApi.clampCamera();
+    applyCameraPreset("top");
   
   });
+
+  for (const button of cameraPresetButtons) {
+  
+    button.addEventListener("click", () => {
+  
+      applyCameraPreset(button.dataset.cameraPreset === "angle" ? "angle" : "top");
+  
+    });
+  
+  }
   
   
   
