@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>개인정보처리방침 | Flat Earth Disc</title>
+  <meta
+    name="description"
+    content="Flat Earth Disc 사이트의 개인정보처리방침과 광고 동의, 브라우저 저장소, 업로드 처리 방식에 대한 안내입니다."
+  >
+  <style>
+    :root {
+      --bg: #04111f;
+      --bg-soft: rgba(12, 24, 42, 0.92);
+      --panel: rgba(255, 255, 255, 0.05);
+      --panel-strong: rgba(255, 255, 255, 0.08);
+      --border: rgba(191, 224, 255, 0.18);
+      --text: #eef7ff;
+      --muted: #b7ccdf;
+      --accent: #8fd6ff;
+      --accent-strong: #dff3ff;
+      --shadow: 0 28px 72px rgba(0, 0, 0, 0.36);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      color-scheme: dark;
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top, rgba(102, 177, 255, 0.18), transparent 30%),
+        linear-gradient(180deg, #071522 0%, #04111f 48%, #020912 100%);
+    }
+
+    a {
+      color: var(--accent);
+    }
+
+    .page {
+      width: min(1120px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 32px 0 56px;
+    }
+
+    .hero,
+    .panel,
+    .section {
+      border: 1px solid var(--border);
+      background:
+        radial-gradient(circle at top right, rgba(127, 208, 255, 0.12), transparent 36%),
+        var(--bg-soft);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+    }
+
+    .hero {
+      padding: 28px;
+      border-radius: 28px;
+    }
+
+    .eyebrow {
+      margin: 0 0 10px;
+      color: var(--accent);
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2rem, 4vw, 3.3rem);
+      line-height: 1.02;
+    }
+
+    .hero-copy {
+      max-width: 760px;
+      margin: 14px 0 0;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    .hero-actions,
+    .jump-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .button-link,
+    .jump-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 44px;
+      padding: 0 16px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--accent-strong);
+      text-decoration: none;
+      font-weight: 700;
+    }
+
+    .button-link.primary {
+      background: linear-gradient(135deg, #d8eeff, #7ecbff);
+      color: #06111d;
+      border-color: transparent;
+    }
+
+    .meta-grid,
+    .section-grid,
+    .facts-grid {
+      display: grid;
+      gap: 16px;
+    }
+
+    .meta-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      margin-top: 22px;
+    }
+
+    .panel {
+      padding: 16px 18px;
+      border-radius: 22px;
+    }
+
+    .panel strong,
+    .section h2,
+    .fact-card h3,
+    .storage-table th {
+      color: var(--accent-strong);
+    }
+
+    .panel p,
+    .section p,
+    .section li,
+    .storage-table td {
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    .policies {
+      display: grid;
+      gap: 18px;
+      margin-top: 20px;
+    }
+
+    .section {
+      padding: 24px;
+      border-radius: 28px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+
+    .section-header p {
+      margin: 8px 0 0;
+    }
+
+    .section-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .fact-card {
+      padding: 18px;
+      border-radius: 22px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: var(--panel);
+    }
+
+    .fact-card h3 {
+      margin: 0;
+      font-size: 1rem;
+    }
+
+    .fact-card p,
+    .fact-card ul {
+      margin: 10px 0 0;
+    }
+
+    .fact-card ul {
+      padding-left: 18px;
+    }
+
+    .fact-card li + li {
+      margin-top: 8px;
+    }
+
+    .storage-table {
+      width: 100%;
+      margin-top: 12px;
+      border-collapse: collapse;
+      overflow: hidden;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .storage-table th,
+    .storage-table td {
+      padding: 12px 14px;
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .storage-table tr:last-child th,
+    .storage-table tr:last-child td {
+      border-bottom: 0;
+    }
+
+    code {
+      padding: 0.1em 0.4em;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      color: #eff8ff;
+      font-family: Consolas, "SFMono-Regular", monospace;
+      font-size: 0.92em;
+    }
+
+    .footnote {
+      margin-top: 20px;
+      padding: 16px 18px;
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    @media (max-width: 860px) {
+      .meta-grid,
+      .section-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .page {
+        width: min(1120px, calc(100vw - 24px));
+        padding-top: 20px;
+      }
+
+      .hero,
+      .section {
+        padding: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="hero">
+      <p class="eyebrow">Flat Earth Disc</p>
+      <h1>개인정보처리방침 / Privacy Policy</h1>
+      <p class="hero-copy">
+        이 문서는 <code>flatearth-model.com</code>의 현재 기술 동작을 기준으로 작성되었습니다. 마지막 검토일은
+        <strong>2026년 3월 22일</strong>입니다. 이 사이트에 광고, 동의 수집, 새 외부 서비스, 로그인, 폼 제출 기능이
+        추가되면 이 페이지도 함께 업데이트되어야 합니다.
+      </p>
+      <div class="hero-actions">
+        <a class="button-link primary" href="./index.html">뷰어로 돌아가기</a>
+        <a class="button-link" href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Google 개인정보처리방침</a>
+        <a class="button-link" href="https://policies.google.com/technologies/partner-sites" target="_blank" rel="noopener noreferrer">Google 서비스 데이터 이용 안내</a>
+      </div>
+      <div class="jump-links" aria-label="Language sections">
+        <a class="jump-link" href="#ko-policy">한국어</a>
+        <a class="jump-link" href="#en-policy">English</a>
+      </div>
+      <div class="meta-grid">
+        <article class="panel">
+          <strong>적용 범위</strong>
+          <p>메인 뷰어 <code>index.html</code>과 이 개인정보처리방침 페이지에 적용됩니다.</p>
+        </article>
+        <article class="panel">
+          <strong>핵심 처리</strong>
+          <p>광고 노출, 광고 동의 관리, 브라우저 로컬 저장소, 클라이언트 측 SVG 미리보기 처리.</p>
+        </article>
+        <article class="panel">
+          <strong>중요한 점</strong>
+          <p>이 페이지는 광고 태그나 동의 스크립트를 포함하지 않는 별도 문서로 제공됩니다.</p>
+        </article>
+      </div>
+    </header>
+
+    <main class="policies">
+      <section class="section" id="ko-policy" lang="ko">
+        <div class="section-header">
+          <div>
+            <p class="eyebrow">Korean</p>
+            <h2>한국어 정책</h2>
+            <p>Flat Earth Disc 사이트가 현재 어떤 정보를 어떤 목적으로 처리하는지 요약합니다.</p>
+          </div>
+        </div>
+
+        <div class="section-grid">
+          <article class="fact-card">
+            <h3>1. 사이트가 직접 수집하는 정보</h3>
+            <p>
+              이 사이트는 회원가입, 로그인, 댓글, 주문, 결제, 직접 입력 폼을 제공하지 않습니다. 따라서 이름,
+              이메일, 전화번호 같은 직접 식별 정보를 이 페이지에서 별도로 입력받아 저장하지 않습니다.
+            </p>
+            <p>
+              다만 웹사이트에 접속하면 일반적인 웹 전달 과정에서 호스팅 또는 CDN 제공자가 IP 주소, 브라우저 정보,
+              요청 시간, 리퍼러 같은 접속 로그를 일시적으로 처리할 수 있습니다. 이 정보는 서비스 제공, 보안,
+              장애 대응 목적에 사용될 수 있습니다.
+            </p>
+          </article>
+
+          <article class="fact-card">
+            <h3>2. 브라우저 로컬 저장소</h3>
+            <p>이 사이트는 사용자 환경을 유지하기 위해 브라우저의 <code>localStorage</code>를 사용합니다.</p>
+            <table class="storage-table">
+              <tbody>
+                <tr>
+                  <th scope="row"><code>flat-earth-language</code></th>
+                  <td>언어 설정 유지</td>
+                </tr>
+                <tr>
+                  <th scope="row"><code>flat-earth-layout-mode</code></th>
+                  <td>HUD / Classic 레이아웃 선택 유지</td>
+                </tr>
+                <tr>
+                  <th scope="row"><code>flat-earth-onboarding-v1</code></th>
+                  <td>온보딩 안내를 다시 표시하지 않기 위한 상태 저장</td>
+                </tr>
+                <tr>
+                  <th scope="row"><code>flat-earth-detail-collapsed</code></th>
+                  <td>상세 패널 접힘 상태 유지</td>
+                </tr>
+              </tbody>
+            </table>
+            <p>
+              이 값들은 기본적으로 사용자의 브라우저 안에만 저장되며, 사용자가 사이트 데이터를 지우기 전까지 남아 있을 수 있습니다.
+            </p>
+          </article>
+
+          <article class="fact-card">
+            <h3>3. 업로드한 지도 파일 처리</h3>
+            <p>
+              메인 뷰어는 사용자가 업로드한 SVG 지도 파일을 브라우저 안에서 즉시 미리보기용으로 처리합니다.
+              현재 코드 기준으로 이 업로드는 <code>URL.createObjectURL()</code> 방식으로 로컬에서 처리되며,
+              이 페이지 자체가 해당 파일을 별도 서버로 업로드하도록 구성되어 있지 않습니다.
+            </p>
+          </article>
+
+          <article class="fact-card">
+            <h3>4. 광고 및 동의 관리</h3>
+            <p>
+              메인 뷰어는 Google AdSense 광고 태그를 로드합니다. 사용자의 지역, 브라우저 설정, 동의 상태,
+              Google의 광고 운영 방식에 따라 Google 및 관련 파트너가 쿠키, 로컬 저장소, IP 주소, 기기 또는 브라우저 식별자,
+              대략적 위치 정보, 광고 측정 또는 사기 방지 관련 정보를 처리할 수 있습니다.
+            </p>
+            <p>
+              또한 지원 지역에서는 Google Privacy &amp; Messaging / CMP 메시지가 표시될 수 있으며, 메인 뷰어의
+              설정 패널에서 광고 동의 선택을 다시 열 수 있습니다.
+            </p>
+          </article>
+
+          <article class="fact-card">
+            <h3>5. 외부 서비스 및 외부 요청</h3>
+            <ul>
+              <li>메인 뷰어는 사이트 자체 정적 파일과 JSON 데이터를 불러옵니다.</li>
+              <li>메인 뷰어는 Google Fonts를 사용하므로 글꼴 로딩 과정에서 Google 서버와 연결될 수 있습니다.</li>
+              <li>광고 또는 동의 인터페이스가 로드될 때 Google 관련 도메인과 네트워크 통신이 발생할 수 있습니다.</li>
+            </ul>
+            <p>
+              이러한 요청 과정에서 외부 서비스 제공자는 IP 주소, 브라우저 헤더, 요청 URL, 리퍼러 등의 기술 정보를
+              처리할 수 있습니다.
+            </p>
+          </article>
+
+          <article class="fact-card">
+            <h3>6. 보관 기간</h3>
+            <ul>
+              <li>브라우저 로컬 저장소 값은 사용자가 직접 삭제하거나 사이트가 값을 덮어쓸 때까지 유지될 수 있습니다.</li>
+              <li>업로드한 SVG 미리보기는 현재 브라우저 세션과 탭 컨텍스트에서만 사용됩니다.</li>
+              <li>광고 또는 동의 관련 데이터의 보관 기간은 Google 및 관련 파트너 정책에 따를 수 있습니다.</li>
+              <li>접속 로그 보관 기간은 실제 호스팅/인프라 제공자의 운영 정책에 따라 달라질 수 있습니다.</li>
+            </ul>
+          </article>
+
+          <article class="fact-card">
+            <h3>7. 이용자의 선택권</h3>
+            <ul>
+              <li>브라우저 설정에서 쿠키와 사이트 데이터를 차단하거나 삭제할 수 있습니다.</li>
+              <li>브라우저 개발자 도구 또는 사이트 데이터 삭제 기능으로 <code>localStorage</code> 값을 제거할 수 있습니다.</li>
+              <li>메인 뷰어 설정 패널에서 Google 광고 동의 선택창을 다시 열 수 있습니다.</li>
+              <li>시크릿 모드 또는 별도 프로필을 사용하면 로컬 저장소 분리를 도울 수 있습니다.</li>
+            </ul>
+          </article>
+        </div>
+
+        <div class="footnote">
+          이 문서는 현재 코드베이스에 확인되는 동작을 설명합니다. 추후 분석 스크립트, 로그인, 연락 폼,
+          백엔드 API, 결제, 추가 제3자 서비스가 도입되면 이 정책도 함께 수정되어야 합니다.
+        </div>
+      </section>
+
+      <section class="section" id="en-policy" lang="en">
+        <div class="section-header">
+          <div>
+            <p class="eyebrow">English</p>
+            <h2>English Policy</h2>
+            <p>This section mirrors the same technical behavior summary in English.</p>
+          </div>
+        </div>
+
+        <div class="section-grid">
+          <article class="fact-card">
+            <h3>1. Information collected directly by this site</h3>
+            <p>
+              This site does not currently provide account registration, login, comments, checkout, or direct contact forms.
+              As a result, it does not intentionally ask visitors to submit direct identifiers such as name, email address,
+              or phone number through this page.
+            </p>
+            <p>
+              During ordinary website delivery, the hosting platform or CDN may temporarily process technical access data such as
+              IP address, browser metadata, request time, and referrer for service delivery, security, and troubleshooting.
+            </p>
+          </article>
+
+          <article class="fact-card">
+            <h3>2. Browser local storage</h3>
+            <p>The main viewer uses <code>localStorage</code> to preserve interface preferences.</p>
+            <table class="storage-table">
+              <tbody>
+                <tr>
+                  <th scope="row"><code>flat-earth-language</code></th>
+                  <td>Stores the selected language.</td>
+                </tr>
+                <tr>
+                  <th scope="row"><code>flat-earth-layout-mode</code></th>
+                  <td>Stores the selected HUD or Classic layout.</td>
+                </tr>
+                <tr>
+                  <th scope="row"><code>flat-earth-onboarding-v1</code></th>
+                  <td>Stores whether the onboarding callout has already been dismissed.</td>
+                </tr>
+                <tr>
+                  <th scope="row"><code>flat-earth-detail-collapsed</code></th>
+                  <td>Stores whether the detail panel is collapsed.</td>
+                </tr>
+              </tbody>
+            </table>
+            <p>
+              These values are stored in the visitor's browser and may remain until the visitor clears site data
+              or the site overwrites them.
+            </p>
+          </article>
+
+          <article class="fact-card">
+            <h3>3. Uploaded map file handling</h3>
+            <p>
+              The main viewer lets visitors preview an uploaded SVG map locally in the browser.
+              Based on the current code, that preview uses <code>URL.createObjectURL()</code> and is not intentionally
+              configured to upload the selected file to a separate server endpoint.
+            </p>
+          </article>
+
+          <article class="fact-card">
+            <h3>4. Advertising and consent</h3>
+            <p>
+              The main viewer loads a Google AdSense tag. Depending on region, browser settings, consent choice,
+              and Google's ad-serving flow, Google and related partners may process cookies, local storage values,
+              IP address, browser or device identifiers, approximate location, referrer data, and ad measurement or fraud-prevention data.
+            </p>
+            <p>
+              In supported regions, Google Privacy &amp; Messaging / CMP prompts may also be shown.
+              Visitors can revisit those ad privacy choices from the viewer settings panel.
+            </p>
+          </article>
+
+          <article class="fact-card">
+            <h3>5. External services and requests</h3>
+            <ul>
+              <li>The main viewer loads same-origin static assets and JSON data.</li>
+              <li>The main viewer uses Google Fonts, which may require a network request to Google servers.</li>
+              <li>Google ad or consent interfaces may trigger network requests to Google domains.</li>
+            </ul>
+            <p>
+              Those requests may expose technical data such as IP address, browser headers, requested URL, and referrer
+              to the relevant service provider.
+            </p>
+          </article>
+
+          <article class="fact-card">
+            <h3>6. Retention</h3>
+            <ul>
+              <li>Browser storage persists until the visitor clears it or the site replaces it.</li>
+              <li>Uploaded SVG previews are used in the local browser context for the current session/tab.</li>
+              <li>Advertising and consent data retention may be governed by Google and partner policies.</li>
+              <li>Server-side log retention depends on the actual hosting or infrastructure provider in use.</li>
+            </ul>
+          </article>
+
+          <article class="fact-card">
+            <h3>7. Choices available to visitors</h3>
+            <ul>
+              <li>Visitors can block or delete cookies and site data through browser settings.</li>
+              <li>Visitors can remove <code>localStorage</code> values by clearing site data.</li>
+              <li>Visitors can reopen Google's ad consent choices from the main viewer settings panel.</li>
+              <li>Private browsing or a separate browser profile can help isolate local browser storage.</li>
+            </ul>
+          </article>
+        </div>
+
+        <div class="footnote">
+          This page describes the observable behavior of the current codebase as of March 22, 2026.
+          If the site later adds analytics, accounts, form handling, payments, or additional third-party services,
+          this notice should be updated as well.
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

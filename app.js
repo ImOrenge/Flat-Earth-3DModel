@@ -295,6 +295,7 @@ const topbarUtilitySlotEl = document.getElementById("topbar-utility-slot");
 const settingsAnchorEl = document.getElementById("settings-anchor");
 const settingsToggleButtonEl = document.getElementById("settings-toggle");
 const settingsPopoverEl = document.getElementById("settings-popover");
+const privacyChoicesButtonEl = document.getElementById("privacy-choices-button");
 const detailTabsHomeEl = document.getElementById("detail-tabs-home");
 const detailTabsEl = document.getElementById("detail-tabs");
 const helpOpenButtonEl = document.getElementById("help-open");
@@ -605,6 +606,37 @@ function syncHudStatusChips() {
   setChip(hudSystemChipEl, statusEl.textContent?.trim() || "--");
 }
 
+function setSystemStatusMessage(message) {
+  if (!statusEl || typeof message !== "string" || !message.trim()) {
+    return;
+  }
+
+  statusEl.textContent = message;
+  syncHudStatusChips();
+}
+
+function openGooglePrivacyChoices() {
+  const googleFc = window.googlefc;
+
+  if (!googleFc || !googleFc.callbackQueue || typeof googleFc.callbackQueue.push !== "function") {
+    setSystemStatusMessage(i18n.t("privacyChoicesStatusUnavailable"));
+    return;
+  }
+
+  closeSettingsPanel({ restoreFocus: false });
+  setSystemStatusMessage(i18n.t("privacyChoicesStatusOpening"));
+  googleFc.callbackQueue.push({
+    CONSENT_DATA_READY: () => {
+      if (typeof window.googlefc?.showRevocationMessage === "function") {
+        window.googlefc.showRevocationMessage();
+        return;
+      }
+
+      setSystemStatusMessage(i18n.t("privacyChoicesStatusUnavailable"));
+    }
+  });
+}
+
 function setLayoutMode(layoutMode, { persist = true } = {}) {
   const nextLayoutMode = layoutMode === "classic" ? "classic" : "hud";
   currentLayoutMode = nextLayoutMode;
@@ -877,6 +909,12 @@ for (const button of hudSubtabButtons) {
 settingsToggleButtonEl.addEventListener("click", () => {
   toggleSettingsPanel();
 });
+
+if (privacyChoicesButtonEl) {
+  privacyChoicesButtonEl.addEventListener("click", () => {
+    openGooglePrivacyChoices();
+  });
+}
 
 helpOpenButtonEl.addEventListener("click", () => {
   openHelpModal(helpOpenButtonEl);

@@ -2,6 +2,11 @@
 <html lang="ko">
   
 <head>
+  <script>
+    window.googlefc = window.googlefc || {};
+    window.googlefc.callbackQueue = window.googlefc.callbackQueue || [];
+    window.googlefc.usstatesoptout = window.googlefc.usstatesoptout || {};
+  </script>
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4006284492158024"
      crossorigin="anonymous"></script>
   <meta charset="UTF-8">
@@ -135,6 +140,22 @@
                     </label>
                   </div>
                 </div>
+                <section class="settings-privacy-group overlay-row" aria-labelledby="privacy-choices-title">
+                  <span class="sync-title" id="privacy-choices-title" data-i18n="privacyChoicesTitle">Privacy & consent</span>
+                  <p class="sync-copy subtle" data-i18n="privacyChoicesCopy">
+                    Read the site's privacy policy or reopen Google's consent message for supported regions.
+                  </p>
+                  <div class="settings-privacy-actions">
+                    <a
+                      class="button secondary compact-button settings-privacy-button"
+                      href="./privacy.html"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      data-i18n="privacyPolicyButton"
+                    >Privacy Policy</a>
+                    <button class="button secondary compact-button settings-privacy-button" id="privacy-choices-button" type="button" data-i18n="privacyChoicesButton">Review choices</button>
+                  </div>
+                </section>
               </div>
             </div>
           </div>

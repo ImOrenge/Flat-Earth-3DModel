@@ -520,6 +520,26 @@ code {
   padding: 4px 0;
 }
 
+.settings-privacy-group {
+  display: grid;
+  gap: 0;
+}
+
+.settings-privacy-group .sync-copy {
+  margin-top: 8px;
+}
+
+.settings-privacy-actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.settings-privacy-button {
+  width: 100%;
+  justify-content: center;
+}
+
 .topbar-utility-slot .language-toggle-row {
   margin: 0;
   padding: 10px 14px;
