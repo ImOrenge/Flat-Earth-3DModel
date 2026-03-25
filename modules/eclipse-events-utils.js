@@ -555,7 +555,7 @@ export function getEclipseAlignmentTarget({
   );
   const blendFloor = (() => {
     if (event.kind === "lunar") {
-      return event.type === "penumbral" ? 0.42 : 1;
+      return event.type === "penumbral" ? 0.42 : proximity;
     }
     if (event.kind === "solar") {
       return event.type === "partial" ? 0.8 : 0.88;

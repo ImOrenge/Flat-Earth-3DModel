@@ -2327,15 +2327,17 @@ export function createEclipseController(deps) {
   
     sunGroup.getWorldPosition(tempSunWorldPosition);
     darkSunGroup.getWorldPosition(tempDarkSunWorldPosition);
-  
-    const sunDisc = getProjectedDisc(
-      tempSunWorldPosition,
-      getWorldBodyRadius(sunBody, ORBIT_SUN_SIZE)
+
+    const sunWorldRadius = getWorldBodyRadius(sunBody, ORBIT_SUN_SIZE);
+    const darkSunWorldRadius = getWorldBodyRadius(darkSunBody, ORBIT_DARK_SUN_SIZE);
+    const worldXZDist = Math.hypot(
+      tempSunWorldPosition.x - tempDarkSunWorldPosition.x,
+      tempSunWorldPosition.z - tempDarkSunWorldPosition.z
     );
-    const darkSunDisc = getProjectedDisc(
-      tempDarkSunWorldPosition,
-      getWorldBodyRadius(darkSunBody, ORBIT_DARK_SUN_SIZE)
-    );
+    const worldNormalizedDistance = worldXZDist / Math.max(sunWorldRadius + darkSunWorldRadius, 0.0001);
+
+    const sunDisc = getProjectedDisc(tempSunWorldPosition, sunWorldRadius);
+    const darkSunDisc = getProjectedDisc(tempDarkSunWorldPosition, darkSunWorldRadius);
     renderer.getDrawingBufferSize(tempSolarEclipseViewport);
     const triggerSunDisc = getSolarEclipseTriggerSunDisc(
       sunDisc,
@@ -2388,7 +2390,7 @@ export function createEclipseController(deps) {
     );
     let rawStageKey = "idle";
   
-    if (!visibleInView || normalizedDistance > SOLAR_ECLIPSE_IDLE_DISTANCE_FACTOR) {
+    if (!visibleInView || worldNormalizedDistance > SOLAR_ECLIPSE_IDLE_DISTANCE_FACTOR) {
     } else if (total) {
       rawStageKey = "totality";
     } else if (active) {
@@ -2396,7 +2398,7 @@ export function createEclipseController(deps) {
     } else if (
       approachAligned &&
       !hasVisibleOverlap &&
-      normalizedDistance <= SOLAR_ECLIPSE_APPROACH_DISTANCE_FACTOR
+      worldNormalizedDistance <= SOLAR_ECLIPSE_APPROACH_DISTANCE_FACTOR
     ) {
       rawStageKey = "approach";
     }
@@ -2408,7 +2410,7 @@ export function createEclipseController(deps) {
         direction,
         eclipseTier: eligibility.eclipseTier,
         hasVisibleOverlap,
-        normalizedDistance,
+        normalizedDistance: worldNormalizedDistance,
         total,
         visibleInView
       }).sunLightScale ?? 1,
@@ -3510,14 +3512,16 @@ export function createEclipseController(deps) {
       tempLunarEclipseDarkSunWorldPos.y = tempLunarEclipseMoonWorldPos.y;
     }
 
-    const moonDisc = getProjectedDisc(
-      tempLunarEclipseMoonWorldPos,
-      getWorldBodyRadius(moonBody, ORBIT_MOON_SIZE)
+    const moonWorldRadius = getWorldBodyRadius(moonBody, ORBIT_MOON_SIZE);
+    const darkSunWorldRadiusL = getWorldBodyRadius(darkSunBody, ORBIT_DARK_SUN_SIZE);
+    const lunarWorldXZDist = Math.hypot(
+      tempLunarEclipseMoonWorldPos.x - tempLunarEclipseDarkSunWorldPos.x,
+      tempLunarEclipseMoonWorldPos.z - tempLunarEclipseDarkSunWorldPos.z
     );
-    const darkSunDisc = getProjectedDisc(
-      tempLunarEclipseDarkSunWorldPos,
-      getWorldBodyRadius(darkSunBody, ORBIT_DARK_SUN_SIZE)
-    );
+    const lunarWorldNormalizedDistance = lunarWorldXZDist / Math.max(moonWorldRadius + darkSunWorldRadiusL, 0.0001);
+
+    const moonDisc = getProjectedDisc(tempLunarEclipseMoonWorldPos, moonWorldRadius);
+    const darkSunDisc = getProjectedDisc(tempLunarEclipseDarkSunWorldPos, darkSunWorldRadiusL);
 
     // Only strictly require the moon to be visible. The Dark Sun might still technically cull due to frustum depending on FOV, but it's fine if the moon is visible.
     const visibleInView = moonDisc.visible && moonDisc.radius > 0.00001;
@@ -3584,7 +3588,7 @@ export function createEclipseController(deps) {
     let rawStageKey = "idle";
     const approachAligned = true;
 
-    if (normalizedDistance > SOLAR_ECLIPSE_IDLE_DISTANCE_FACTOR) {
+    if (lunarWorldNormalizedDistance > SOLAR_ECLIPSE_IDLE_DISTANCE_FACTOR) {
     } else if (total) {
       rawStageKey = "totality";
     } else if (active) {
@@ -3593,7 +3597,7 @@ export function createEclipseController(deps) {
       approachAligned &&
       darkSunDiscAvailable &&
       !hasVisibleOverlap &&
-      normalizedDistance <= SOLAR_ECLIPSE_APPROACH_DISTANCE_FACTOR
+      lunarWorldNormalizedDistance <= SOLAR_ECLIPSE_APPROACH_DISTANCE_FACTOR
     ) {
       rawStageKey = "approach";
     }

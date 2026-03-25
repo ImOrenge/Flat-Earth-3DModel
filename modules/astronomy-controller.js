@@ -102,6 +102,9 @@ export function createAstronomyController({
   const DARK_SUN_START_DIRECTION = -1;
   const DARK_SUN_ORBIT_SPEED_FACTOR = 0.72;
   const DARK_SUN_BAND_SPEED_FACTOR = 1.08;
+  const DARK_SUN_MS_PER_ORBIT_FRAME = (
+    (24 * 3600 * 1000) * constants.ORBIT_SUN_SPEED / (2 * Math.PI)
+  );
   const REALITY_ECLIPSE_MIN_ALIGNMENT = constants.REALITY_ECLIPSE_MIN_ALIGNMENT ?? 0.24;
   const REALITY_ECLIPSE_MAX_ALIGNMENT_OFFSET_RADIANS = (
     constants.REALITY_ECLIPSE_MAX_ALIGNMENT_OFFSET_RADIANS ?? (Math.PI * 0.42)
@@ -739,7 +742,7 @@ export function createAstronomyController({
     const corridorProgress = getBodyCorridorProgress(body, centerRadius);
     const macroAngle = source === "demo"
       ? orbitAngleRadians
-      : THREE.MathUtils.degToRad(longitudeDegrees);
+      : -THREE.MathUtils.degToRad(longitudeDegrees);
     const baseHeight = getBodyBaseHeight(body, centerRadius);
 
     tempRadialAxis.set(-Math.cos(macroAngle), 0, Math.sin(macroAngle));
@@ -871,14 +874,14 @@ export function createAstronomyController({
   }
 
   function getRealityBaselineDarkSunState(date) {
-    const elapsedFrames = (date.getTime() - DARK_SUN_REFERENCE_TIME_MS) / (1000 / 60);
-    const darkSunOrbitSpeed = constants.ORBIT_SUN_SPEED * DARK_SUN_ORBIT_SPEED_FACTOR;
-    const orbitAngleRadians = DARK_SUN_START_ANGLE - (elapsedFrames * darkSunOrbitSpeed);
-    const bandStep = getBodyBandProgressStep("darkSun");
-    const totalDelta = bandStep * elapsedFrames;
-    const linearPos = (2 - DARK_SUN_START_PROGRESS + totalDelta) % 2;
-    const progress = linearPos <= 1 ? linearPos : 2 - linearPos;
-    const direction = linearPos <= 1 ? 1 : -1;
+    const sun = getSunSubpoint(date);
+    const moonPhase = getMoonPhase(date);
+    const sunAngleRadians = -THREE.MathUtils.degToRad(sun.longitudeDegrees);
+    const orbitAngleRadians = sunAngleRadians + moonPhase.phaseAngleRadians;
+    const nodeLatDeg = getMoonEclipticLatitudeDegrees(date);
+    const normalizedLat = THREE.MathUtils.clamp(nodeLatDeg / 5.145, -1, 1);
+    const progress = THREE.MathUtils.clamp(0.5 + normalizedLat * 0.38, 0, 1);
+    const direction = normalizedLat >= 0 ? 1 : -1;
 
     return {
       direction,
@@ -941,7 +944,9 @@ export function createAstronomyController({
       progress: THREE.MathUtils.clamp(
         THREE.MathUtils.lerp(
           baselineState.progress,
-          alignment.targetProgress ?? baselineState.progress,
+          (targetAnchorState?.centerRadius != null
+            ? getBodyProgressFromProjectedRadius("darkSun", targetAnchorState.centerRadius)
+            : alignment.targetProgress) ?? baselineState.progress,
           blendFactor
         ),
         0,
@@ -998,11 +1003,9 @@ export function createAstronomyController({
       (targetRenderState.orbitAngleRadians ?? baselineState.orbitAngleRadians) +
       (normalizedPhaseOffset * REALITY_ECLIPSE_MAX_ALIGNMENT_OFFSET_RADIANS)
     );
-    const targetProgress = (
-      targetRenderState.corridorProgress ??
-      targetRenderState.macroProgress ??
-      baselineState.progress
-    );
+    const targetProgress = targetRenderState.centerRadius != null
+      ? getBodyProgressFromProjectedRadius("darkSun", targetRenderState.centerRadius)
+      : (targetRenderState.corridorProgress ?? targetRenderState.macroProgress ?? baselineState.progress);
 
     return {
       direction: normalizedPhaseOffset >= 0 ? 1 : -1,
