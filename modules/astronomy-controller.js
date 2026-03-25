@@ -22,7 +22,18 @@ import {
   getSunHorizontalCoordinates,
   SEASONAL_EVENT_DEFINITIONS
 } from "./astronomy-utils.js?v=20260324-moon-cycle28";
-import { getEclipseAlignmentTarget } from "./eclipse-events-utils.js?v=20260320-reality-eclipse-events1";
+import {
+  createEclipseCatalogFromCsvText,
+  formatEclipseEventLabel,
+  getBuiltInEclipseCatalog,
+  getCatalogEventsForYear,
+  getCatalogStats,
+  getCatalogYears,
+  getClosestCatalogYear,
+  getEclipseAlignmentTarget,
+  getEclipseEventTimeMs,
+  getPreferredCatalogEvent
+} from "./eclipse-events-utils.js?v=20260325-eclipse-selector1";
 
 export function createAstronomyController({
   constants,
@@ -30,6 +41,7 @@ export function createAstronomyController({
   ui,
   magneticFieldApi,
   astronomyState,
+  eclipseSelectionState,
   celestialControlState,
   seasonalMoonState,
   analemmaState,
@@ -113,6 +125,40 @@ export function createAstronomyController({
     equator: 0.5,
     south: 0.5
   };
+  const ECLIPSE_TIME_POINT_VALUES = ["start", "peak", "end"];
+
+  function getEclipseTypeLabel(type = "") {
+    switch (type) {
+      case "annular":
+        return i18n.t("eclipseTypeAnnular");
+      case "hybrid":
+        return i18n.t("eclipseTypeHybrid");
+      case "partial":
+        return i18n.t("eclipseTypePartial");
+      case "penumbral":
+        return i18n.t("eclipseTypePenumbral");
+      case "total":
+        return i18n.t("eclipseTypeTotal");
+      default:
+        return type || "-";
+    }
+  }
+
+  function getEclipseKindLabel(kind = "solar") {
+    return i18n.t(kind === "lunar" ? "eclipseKindLunar" : "eclipseKindSolar");
+  }
+
+  function getEclipseTimePointLabel(timePoint = "peak") {
+    switch (timePoint) {
+      case "start":
+        return i18n.t("eclipseTimePointStart");
+      case "end":
+        return i18n.t("eclipseTimePointEnd");
+      case "peak":
+      default:
+        return i18n.t("eclipseTimePointPeak");
+    }
+  }
 
   function sanitizeSeasonalYear(value) {
     const parsed = Number.parseInt(value, 10);
@@ -867,6 +913,7 @@ export function createAstronomyController({
   } = {}) {
     const alignment = getEclipseAlignmentTarget({
       baselineState,
+      catalog: getRuntimeEclipseCatalog(),
       dateMs: date.getTime(),
       moonRenderState,
       sunRenderState
@@ -1130,6 +1177,368 @@ export function createAstronomyController({
 
   function setObservationInputValue(date) {
     ui.observationTimeEl.value = toDatetimeLocalValue(date);
+  }
+
+  function setSelectOptions(selectEl, options = [], selectedValue = "") {
+    if (!selectEl) {
+      return;
+    }
+
+    const nextOptions = options.map(({ value, label, disabled = false }) => {
+      const option = document.createElement("option");
+      option.value = String(value);
+      option.textContent = label;
+      option.disabled = disabled;
+      return option;
+    });
+
+    selectEl.replaceChildren(...nextOptions);
+    if (nextOptions.length === 0) {
+      selectEl.value = "";
+      return;
+    }
+
+    const resolvedValue = String(selectedValue ?? "");
+    if (nextOptions.some((option) => option.value === resolvedValue)) {
+      selectEl.value = resolvedValue;
+      return;
+    }
+
+    selectEl.value = nextOptions[0].value;
+  }
+
+  function setUploadStatus(tone = "default", key = "eclipseCatalogStatusAwaitingUpload", params = {}) {
+    eclipseSelectionState.uploadStatus = {
+      tone,
+      key,
+      params
+    };
+  }
+
+  function getSelectableEclipseCatalog() {
+    if (eclipseSelectionState.sourceMode === "upload") {
+      return eclipseSelectionState.uploadedCatalog;
+    }
+    return getBuiltInEclipseCatalog();
+  }
+
+  function getRuntimeEclipseCatalog() {
+    if (eclipseSelectionState.sourceMode === "upload" && eclipseSelectionState.uploadedCatalog) {
+      return eclipseSelectionState.uploadedCatalog;
+    }
+    return getBuiltInEclipseCatalog();
+  }
+
+  function reconcileEclipseSelectionState() {
+    const catalog = getSelectableEclipseCatalog();
+    if (!catalog) {
+      eclipseSelectionState.year = "";
+      eclipseSelectionState.eventId = "";
+      eclipseSelectionState.selectedEventMeta = null;
+      return null;
+    }
+
+    const kind = eclipseSelectionState.kind === "lunar" ? "lunar" : "solar";
+    const years = getCatalogYears(catalog, kind);
+    eclipseSelectionState.kind = kind;
+
+    if (years.length === 0) {
+      eclipseSelectionState.year = "";
+      eclipseSelectionState.eventId = "";
+      eclipseSelectionState.selectedEventMeta = null;
+      return null;
+    }
+
+    const year = getClosestCatalogYear(
+      catalog,
+      kind,
+      eclipseSelectionState.year ?? astronomyState.selectedDate.getUTCFullYear()
+    );
+    if (!Number.isFinite(year)) {
+      eclipseSelectionState.year = "";
+      eclipseSelectionState.eventId = "";
+      eclipseSelectionState.selectedEventMeta = null;
+      return null;
+    }
+
+    eclipseSelectionState.year = year;
+    const events = getCatalogEventsForYear(catalog, kind, year);
+    const selectedEvent = getPreferredCatalogEvent(events, eclipseSelectionState.eventId);
+    if (!selectedEvent) {
+      eclipseSelectionState.eventId = "";
+      eclipseSelectionState.selectedEventMeta = null;
+      return null;
+    }
+
+    eclipseSelectionState.eventId = selectedEvent.id;
+    eclipseSelectionState.timePoint = ECLIPSE_TIME_POINT_VALUES.includes(eclipseSelectionState.timePoint)
+      ? eclipseSelectionState.timePoint
+      : "peak";
+
+    const previewMs = getEclipseEventTimeMs(selectedEvent, eclipseSelectionState.timePoint);
+    eclipseSelectionState.selectedEventMeta = Number.isFinite(previewMs)
+      ? {
+        catalog,
+        event: selectedEvent,
+        previewMs,
+        timePoint: eclipseSelectionState.timePoint
+      }
+      : null;
+    return eclipseSelectionState.selectedEventMeta;
+  }
+
+  function syncEclipseCatalogStatusUi() {
+    if (!ui.eclipseCatalogStatusEl) {
+      return;
+    }
+
+    let tone = "default";
+    let messageKey = "eclipseCatalogStatusBuiltIn";
+    let params = {};
+
+    if (eclipseSelectionState.sourceMode === "upload") {
+      tone = eclipseSelectionState.uploadStatus?.tone ?? "default";
+      messageKey = eclipseSelectionState.uploadStatus?.key ?? "eclipseCatalogStatusAwaitingUpload";
+      params = { ...(eclipseSelectionState.uploadStatus?.params ?? {}) };
+      if (params.reasonKey) {
+        params.reason = i18n.t(params.reasonKey);
+        delete params.reasonKey;
+      }
+    } else {
+      params = getCatalogStats(getBuiltInEclipseCatalog());
+    }
+
+    ui.eclipseCatalogStatusEl.textContent = i18n.t(messageKey, params);
+    ui.eclipseCatalogStatusEl.classList.toggle("error", tone === "error");
+  }
+
+  function syncSelectedEclipseDetailUi(selectedMeta = eclipseSelectionState.selectedEventMeta) {
+    const selectedEvent = selectedMeta?.event ?? null;
+    const previewDate = Number.isFinite(selectedMeta?.previewMs)
+      ? new Date(selectedMeta.previewMs)
+      : null;
+    const localTime = previewDate
+      ? i18n.formatDate(previewDate, { dateStyle: "medium", timeStyle: "medium" })
+      : "-";
+    const utcTime = previewDate
+      ? i18n.formatDate(previewDate, { dateStyle: "medium", timeStyle: "medium", timeZone: "UTC" })
+      : "-";
+    const magnitudeParts = [];
+    if (Number.isFinite(selectedEvent?.magnitude)) {
+      magnitudeParts.push(`mag ${selectedEvent.magnitude.toFixed(3)}`);
+    }
+    if (Number.isFinite(selectedEvent?.gamma)) {
+      magnitudeParts.push(`gamma ${selectedEvent.gamma.toFixed(4)}`);
+    }
+
+    if (ui.selectedEclipseKindEl) {
+      ui.selectedEclipseKindEl.textContent = selectedEvent ? getEclipseKindLabel(selectedEvent.kind) : "-";
+    }
+    if (ui.selectedEclipseTypeEl) {
+      ui.selectedEclipseTypeEl.textContent = selectedEvent ? getEclipseTypeLabel(selectedEvent.type) : "-";
+    }
+    if (ui.selectedEclipseLocalEl) {
+      ui.selectedEclipseLocalEl.textContent = localTime;
+    }
+    if (ui.selectedEclipseUtcEl) {
+      ui.selectedEclipseUtcEl.textContent = utcTime;
+    }
+    if (ui.selectedEclipseMagnitudeEl) {
+      ui.selectedEclipseMagnitudeEl.textContent = magnitudeParts.join(" • ") || "-";
+    }
+    if (ui.selectedEclipseSourceEl) {
+      if (ui.selectedEclipseMagnitudeEl) {
+        ui.selectedEclipseMagnitudeEl.textContent = magnitudeParts.join(" / ") || "-";
+      }
+      ui.selectedEclipseSourceEl.textContent = selectedEvent?.sourceId ?? selectedMeta?.catalog?.sourceLabel ?? "-";
+    }
+    if (ui.selectedEclipseSummaryEl) {
+      ui.selectedEclipseSummaryEl.textContent = selectedEvent
+        ? i18n.t("selectedEclipseSummary", {
+          kind: getEclipseKindLabel(selectedEvent.kind),
+          type: getEclipseTypeLabel(selectedEvent.type),
+          timePoint: getEclipseTimePointLabel(selectedMeta.timePoint),
+          localTime,
+          sourceId: selectedEvent.sourceId ?? selectedMeta.catalog?.sourceLabel ?? "-"
+        })
+        : i18n.t("selectedEclipseSummaryEmpty");
+    }
+    if (ui.previewSelectedEclipseButton) {
+      ui.previewSelectedEclipseButton.disabled = !Number.isFinite(selectedMeta?.previewMs);
+    }
+  }
+
+  function syncEclipseSelectorUi() {
+    const selectableCatalog = getSelectableEclipseCatalog();
+    const selectedMeta = reconcileEclipseSelectionState();
+    const years = selectableCatalog
+      ? getCatalogYears(selectableCatalog, eclipseSelectionState.kind)
+      : [];
+    const events = selectableCatalog
+      ? getCatalogEventsForYear(selectableCatalog, eclipseSelectionState.kind, eclipseSelectionState.year)
+      : [];
+    const locale = i18n.getLocale?.() ?? "en-US";
+
+    setSelectOptions(ui.eclipseCatalogSourceEl, [
+      { value: "builtin", label: i18n.t("eclipseDataSourceBuiltIn") },
+      { value: "upload", label: i18n.t("eclipseDataSourceUpload") }
+    ], eclipseSelectionState.sourceMode);
+
+    setSelectOptions(ui.eclipseKindSelectEl, [
+      { value: "solar", label: i18n.t("eclipseKindSolar") },
+      { value: "lunar", label: i18n.t("eclipseKindLunar") }
+    ], eclipseSelectionState.kind);
+
+    setSelectOptions(
+      ui.eclipseYearSelectEl,
+      years.map((year) => ({ value: String(year), label: String(year) })),
+      String(eclipseSelectionState.year ?? "")
+    );
+
+    setSelectOptions(
+      ui.eclipseEventSelectEl,
+      events.map((event) => ({
+        value: event.id,
+        label: formatEclipseEventLabel(event, {
+          locale,
+          kindLabels: {
+            solar: i18n.t("eclipseKindSolar"),
+            lunar: i18n.t("eclipseKindLunar")
+          },
+          typeLabels: {
+            annular: i18n.t("eclipseTypeAnnular"),
+            hybrid: i18n.t("eclipseTypeHybrid"),
+            partial: i18n.t("eclipseTypePartial"),
+            penumbral: i18n.t("eclipseTypePenumbral"),
+            total: i18n.t("eclipseTypeTotal")
+          }
+        })
+      })),
+      eclipseSelectionState.eventId
+    );
+
+    setSelectOptions(ui.eclipseTimePointSelectEl, ECLIPSE_TIME_POINT_VALUES.map((timePoint) => ({
+      value: timePoint,
+      label: getEclipseTimePointLabel(timePoint)
+    })), eclipseSelectionState.timePoint);
+
+    if (ui.eclipseUploadFieldEl) {
+      ui.eclipseUploadFieldEl.hidden = eclipseSelectionState.sourceMode !== "upload";
+    }
+    if (ui.eclipseCatalogUploadEl) {
+      ui.eclipseCatalogUploadEl.disabled = eclipseSelectionState.sourceMode !== "upload";
+    }
+    if (ui.eclipseYearSelectEl) {
+      ui.eclipseYearSelectEl.disabled = years.length === 0;
+    }
+    if (ui.eclipseEventSelectEl) {
+      ui.eclipseEventSelectEl.disabled = events.length === 0;
+    }
+    if (ui.eclipseTimePointSelectEl) {
+      ui.eclipseTimePointSelectEl.disabled = !selectedMeta;
+    }
+
+    syncEclipseCatalogStatusUi();
+    syncSelectedEclipseDetailUi(selectedMeta);
+  }
+
+  function previewSelectedEclipse() {
+    const selectedMeta = reconcileEclipseSelectionState();
+    if (!Number.isFinite(selectedMeta?.previewMs)) {
+      syncEclipseSelectorUi();
+      return false;
+    }
+
+    const nextDate = new Date(selectedMeta.previewMs);
+    setObservationInputValue(nextDate);
+    enableRealityMode({ live: false, date: nextDate });
+    syncAstronomyControls();
+    syncEclipseSelectorUi();
+    return true;
+  }
+
+  function setEclipseCatalogSource(nextSourceMode = "builtin") {
+    eclipseSelectionState.sourceMode = nextSourceMode === "upload" ? "upload" : "builtin";
+    syncEclipseSelectorUi();
+    if (eclipseSelectionState.selectedEventMeta) {
+      previewSelectedEclipse();
+    }
+  }
+
+  function setSelectedEclipseKind(nextKind = "solar") {
+    eclipseSelectionState.kind = nextKind === "lunar" ? "lunar" : "solar";
+    eclipseSelectionState.eventId = "";
+    syncEclipseSelectorUi();
+    if (eclipseSelectionState.selectedEventMeta) {
+      previewSelectedEclipse();
+    }
+  }
+
+  function setSelectedEclipseYear(nextYear) {
+    eclipseSelectionState.year = Number.parseInt(nextYear, 10);
+    eclipseSelectionState.eventId = "";
+    syncEclipseSelectorUi();
+    if (eclipseSelectionState.selectedEventMeta) {
+      previewSelectedEclipse();
+    }
+  }
+
+  function setSelectedEclipseEvent(nextEventId = "") {
+    eclipseSelectionState.eventId = nextEventId;
+    syncEclipseSelectorUi();
+    if (eclipseSelectionState.selectedEventMeta) {
+      previewSelectedEclipse();
+    }
+  }
+
+  function setSelectedEclipseTimePoint(nextTimePoint = "peak") {
+    eclipseSelectionState.timePoint = ECLIPSE_TIME_POINT_VALUES.includes(nextTimePoint) ? nextTimePoint : "peak";
+    syncEclipseSelectorUi();
+    if (eclipseSelectionState.selectedEventMeta) {
+      previewSelectedEclipse();
+    }
+  }
+
+  async function loadEclipseCsv(file) {
+    if (!file) {
+      return false;
+    }
+
+    try {
+      const csvText = await file.text();
+      const { catalog, diagnostics } = createEclipseCatalogFromCsvText(csvText, {
+        sourceLabel: file.name || i18n.t("eclipseDataSourceUpload")
+      });
+      if (!catalog) {
+        setUploadStatus("error", "eclipseCatalogStatusUploadFailed", {
+          fileName: file.name || "upload.csv",
+          reasonKey: diagnostics.totalRows > 0
+            ? "eclipseCsvErrorNoValidRows"
+            : "eclipseCsvErrorEmpty"
+        });
+        syncEclipseSelectorUi();
+        return false;
+      }
+
+      eclipseSelectionState.uploadedCatalog = catalog;
+      eclipseSelectionState.sourceMode = "upload";
+      eclipseSelectionState.year = astronomyState.selectedDate.getUTCFullYear();
+      eclipseSelectionState.eventId = "";
+      setUploadStatus("default", "eclipseCatalogStatusUploadLoaded", {
+        fileName: file.name || "upload.csv",
+        ...getCatalogStats(catalog)
+      });
+      syncEclipseSelectorUi();
+      previewSelectedEclipse();
+      return true;
+    } catch {
+      setUploadStatus("error", "eclipseCatalogStatusUploadFailed", {
+        fileName: file?.name || "upload.csv",
+        reasonKey: "eclipseCsvErrorRead"
+      });
+      syncEclipseSelectorUi();
+      return false;
+    }
   }
 
   function syncCelestialMotionUi() {
@@ -2023,6 +2432,7 @@ export function createAstronomyController({
     resetSunTrail();
     resetMoonTrail();
     refreshAstronomyView(date);
+    syncAstronomyControls();
   }
 
   function disableRealityMode() {
@@ -2037,6 +2447,7 @@ export function createAstronomyController({
     syncAnalemmaUi(astronomyState.selectedDate, true);
     syncSkyAnalemmaUi(astronomyState.selectedDate, true);
     updateOrbitModeUi();
+    syncAstronomyControls();
   }
 
   function refreshLocalizedUi() {
@@ -2044,6 +2455,7 @@ export function createAstronomyController({
     syncDayNightOverlayUi();
     syncAstronomyControls();
     syncSolarEclipseUi(lastSolarEclipseState);
+    syncEclipseSelectorUi();
     syncSeasonalMoonUi();
     syncSeasonalSunUi(true);
     syncAnalemmaUi(activeDate, true);
@@ -2085,6 +2497,8 @@ export function createAstronomyController({
     enableRealityMode({ live: false, date: audit.date });
   }
 
+  syncEclipseSelectorUi();
+
   return {
     applyAstronomySnapshot,
     applyObservationTimeSelection,
@@ -2095,6 +2509,7 @@ export function createAstronomyController({
     getBodyCoilRenderState,
     getCurrentOrbitRadius,
     getDarkSunRenderState,
+    getGeoFromProjectedPosition,
     getMoonBaseHeight,
     getMoonRenderState,
     getSunDisplayHorizontalFromPosition,
@@ -2105,12 +2520,20 @@ export function createAstronomyController({
     refreshTrailsForCurrentMode,
     resetMoonTrail,
     resetSunTrail,
+    loadEclipseCsv,
+    previewSelectedEclipse,
     setObservationInputValue,
+    setEclipseCatalogSource,
+    setSelectedEclipseEvent,
+    setSelectedEclipseKind,
+    setSelectedEclipseTimePoint,
+    setSelectedEclipseYear,
     updateAstronomyUi,
     syncAstronomyControls,
     syncAnalemmaUi,
     syncSkyAnalemmaUi,
     syncDayNightOverlayUi,
+    syncEclipseSelectorUi,
     syncSolarEclipseUi,
     syncSeasonalMoonUi,
     syncSeasonalSunUi,

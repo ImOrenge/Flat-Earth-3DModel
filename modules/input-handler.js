@@ -35,6 +35,8 @@ export function setupInputHandlers(deps) {
     routeSelectEl, routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl,
     celestialFullTrailEl, routePlaybackButton, routeResetButton, realitySyncEl,
     realityLiveEl, observationTimeEl, observationMinusHourButton, observationPlusHourButton,
+    eclipseCatalogSourceEl, eclipseCatalogUploadEl, eclipseKindSelectEl, eclipseYearSelectEl,
+    eclipseEventSelectEl, eclipseTimePointSelectEl, previewSelectedEclipseButton,
     observationMinusMinuteButton, observationPlusMinuteButton, applyObservationTimeButton, setCurrentTimeButton,
     dayNightOverlayEl, dayNightState, getGeoFromProjectedPosition, orbitSun,
     analemmaOverlayEl, analemmaState, magneticFieldOverlayEl, magneticFieldState,
@@ -600,6 +602,50 @@ export function setupInputHandlers(deps) {
     astronomyApi.enableRealityMode({ live: true, date: new Date() });
   
   });
+
+  if (eclipseCatalogSourceEl) {
+    eclipseCatalogSourceEl.addEventListener("change", () => {
+      astronomyApi.setEclipseCatalogSource(eclipseCatalogSourceEl.value);
+    });
+  }
+
+  if (eclipseCatalogUploadEl) {
+    eclipseCatalogUploadEl.addEventListener("change", async (event) => {
+      const file = event.target.files?.[0] ?? null;
+      await astronomyApi.loadEclipseCsv(file);
+      event.target.value = "";
+    });
+  }
+
+  if (eclipseKindSelectEl) {
+    eclipseKindSelectEl.addEventListener("change", () => {
+      astronomyApi.setSelectedEclipseKind(eclipseKindSelectEl.value);
+    });
+  }
+
+  if (eclipseYearSelectEl) {
+    eclipseYearSelectEl.addEventListener("change", () => {
+      astronomyApi.setSelectedEclipseYear(eclipseYearSelectEl.value);
+    });
+  }
+
+  if (eclipseEventSelectEl) {
+    eclipseEventSelectEl.addEventListener("change", () => {
+      astronomyApi.setSelectedEclipseEvent(eclipseEventSelectEl.value);
+    });
+  }
+
+  if (eclipseTimePointSelectEl) {
+    eclipseTimePointSelectEl.addEventListener("change", () => {
+      astronomyApi.setSelectedEclipseTimePoint(eclipseTimePointSelectEl.value);
+    });
+  }
+
+  if (previewSelectedEclipseButton) {
+    previewSelectedEclipseButton.addEventListener("click", () => {
+      astronomyApi.previewSelectedEclipse();
+    });
+  }
   
   
   
