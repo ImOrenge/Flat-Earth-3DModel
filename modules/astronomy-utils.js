@@ -18,10 +18,10 @@ const TROPICAL_TO_SIDEREAL_DEGREES_PER_MS = (
   (EARTH_PRECESSION_ARCSECONDS_PER_YEAR / 3600) /
   (365.2422 * DAY_MS)
 );
-const SYNODIC_MONTH_DAYS = 29.530588853;
-const REFERENCE_NEW_MOON_JULIAN_DATE = 2451550.1;
-const MOON_PHASE_STEP_COUNT = 16;
-const MOON_PHASE_STEP_DEGREES = FULL_CIRCLE_DEGREES / MOON_PHASE_STEP_COUNT;
+export const MOON_PHASE_CYCLE_DAYS = 28;
+export const REFERENCE_NEW_MOON_JULIAN_DATE = 2451550.1;
+export const MOON_PHASE_STEP_COUNT = 28;
+export const MOON_PHASE_STEP_DEGREES = FULL_CIRCLE_DEGREES / MOON_PHASE_STEP_COUNT;
 export const LOCAL_LIGHT_HORIZON_OFFSET_DEGREES = 22;
 const SEASONAL_PRECESSION_PHASE_BY_KEY = {
   springEquinox: 0,
@@ -32,21 +32,33 @@ const SEASONAL_PRECESSION_PHASE_BY_KEY = {
 const seasonalEventMomentsCache = new Map();
 const MOON_PHASE_LABEL_KEYS = [
   "moonPhaseNew",
-  "moonPhaseEarlyWaxingCrescent",
-  "moonPhaseWaxingCrescent",
-  "moonPhaseLateWaxingCrescent",
+  "moonPhaseWaxingCrescent1",
+  "moonPhaseWaxingCrescent2",
+  "moonPhaseWaxingCrescent3",
+  "moonPhaseWaxingCrescent4",
+  "moonPhaseWaxingCrescent5",
+  "moonPhaseWaxingCrescent6",
   "moonPhaseFirstQuarter",
-  "moonPhaseEarlyWaxingGibbous",
-  "moonPhaseWaxingGibbous",
-  "moonPhaseLateWaxingGibbous",
+  "moonPhaseWaxingGibbous1",
+  "moonPhaseWaxingGibbous2",
+  "moonPhaseWaxingGibbous3",
+  "moonPhaseWaxingGibbous4",
+  "moonPhaseWaxingGibbous5",
+  "moonPhaseWaxingGibbous6",
   "moonPhaseFull",
-  "moonPhaseEarlyWaningGibbous",
-  "moonPhaseWaningGibbous",
-  "moonPhaseLateWaningGibbous",
+  "moonPhaseWaningGibbous1",
+  "moonPhaseWaningGibbous2",
+  "moonPhaseWaningGibbous3",
+  "moonPhaseWaningGibbous4",
+  "moonPhaseWaningGibbous5",
+  "moonPhaseWaningGibbous6",
   "moonPhaseLastQuarter",
-  "moonPhaseEarlyWaningCrescent",
-  "moonPhaseWaningCrescent",
-  "moonPhaseLateWaningCrescent"
+  "moonPhaseWaningCrescent1",
+  "moonPhaseWaningCrescent2",
+  "moonPhaseWaningCrescent3",
+  "moonPhaseWaningCrescent4",
+  "moonPhaseWaningCrescent5",
+  "moonPhaseWaningCrescent6"
 ];
 
 export const SEASONAL_EVENT_DEFINITIONS = [
@@ -182,7 +194,7 @@ export function getMoonPhaseFromProgress(phaseProgressValue) {
 
 export function getMoonPhase(date) {
   const julianDate = getJulianDate(date);
-  const phaseProgress = (julianDate - REFERENCE_NEW_MOON_JULIAN_DATE) / SYNODIC_MONTH_DAYS;
+  const phaseProgress = (julianDate - REFERENCE_NEW_MOON_JULIAN_DATE) / MOON_PHASE_CYCLE_DAYS;
   return getMoonPhaseFromProgress(phaseProgress);
 }
 

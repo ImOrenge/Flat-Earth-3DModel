@@ -10,22 +10,22 @@ import {
   getSeasonalPrecessionAngle,
   getSiderealZodiacOffsetRadians,
   getSolarAltitudeFactor,
-} from "./modules/astronomy-utils.js?v=20260320-reality-eclipse-sync1";
-import { createAstronomyController } from "./modules/astronomy-controller.js?v=20260320-reality-eclipse-sync2";
+} from "./modules/astronomy-utils.js?v=20260324-moon-cycle28";
+import { createAstronomyController } from "./modules/astronomy-controller.js?v=20260324-moon-cycle28";
 import { createCameraController } from "./modules/camera-controller.js?v=20260322-topview-zodiac2";
 import { createCelestialTrackingCameraController } from "./modules/celestial-tracking-camera-controller.js?v=20260320-constellation-precession1";
-import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js?v=20260322-fp-sun1";
-import { createI18n } from "./modules/i18n.js?v=20260322-topview-zodiac6";
-import { createMagneticFieldController } from "./modules/magnetic-field-controller.js?v=20260314-magnetic-pinecone3";
+import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js?v=20260324-moon-cycle28";
+import { createI18n } from "./modules/i18n.js?v=20260324-moon-cycle28";
+import { createMagneticFieldController } from "./modules/magnetic-field-controller.js?v=20260324-no-aurora1";
 import { createRouteSimulationController } from "./modules/route-simulation-controller.js";
 import { createTextureManager } from "./modules/texture-manager.js?v=20260311-gpu-daynight";
-import { createWalkerController } from "./modules/walker-controller.js?v=20260312-darksun-eclipse1";
+import { createWalkerController } from "./modules/walker-controller.js?v=20260324-moon-cycle28";
 
 import * as constants from "./modules/constants.js?v=20260322-topview-zodiac4";
-import { createEclipseController } from "./modules/eclipse-controller.js?v=20260320-reality-eclipse-sync2";
-import { createCelestialVisualsController } from "./modules/celestial-visuals-controller.js?v=20260322-fp-sun1";
+import { createEclipseController } from "./modules/eclipse-controller.js?v=20260324-moon-cycle28";
+import { createCelestialVisualsController } from "./modules/celestial-visuals-controller.js?v=20260324-moon-disc-rotation1";
 import { createConstellationTabController } from "./modules/constellation-tab-controller.js?v=20260322-topview-zodiac6";
-import { setupInputHandlers } from "./modules/input-handler.js?v=20260322-topview-zodiac4";
+import { setupInputHandlers } from "./modules/input-handler.js?v=20260324-no-aurora1";
 import { createRocketController, SPACEPORTS } from "./modules/rocket-controller.js?v=20260319-parabola";
 const {
   DEFAULT_MAP_PATH,
@@ -987,7 +987,7 @@ function setControlTab(tabKey) {
   constellationTabApi?.setPanelActive(tabKey === "constellations");
 }
 
-import { setupScene } from "./modules/scene-setup.js?v=20260322-topview-zodiac4";
+import { setupScene } from "./modules/scene-setup.js?v=20260324-moon-disc-rotation1";
 import { createConstellations } from "./modules/constellation-setup.js?v=20260320-constellation-precession1";
 import { createZodiacWheel } from "./modules/zodiac-wheel.js?v=20260322-topview-zodiac2";
 const {

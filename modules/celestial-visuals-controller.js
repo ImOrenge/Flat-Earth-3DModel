@@ -1,5 +1,5 @@
 import * as THREE from "../vendor/three.module.js";
-import { createSolarEclipseState } from "./astronomy-utils.js?v=20260320-reality-eclipse-sync1";
+import { createSolarEclipseState } from "./astronomy-utils.js?v=20260324-moon-cycle28";
 
 export function createCelestialVisualsController(deps) {
   const {
@@ -477,8 +477,8 @@ export function createCelestialVisualsController(deps) {
     const lunarEclipseMaskViewport = snapshot?.lunarEclipseMaskViewport ?? null;
     const moonLatitudeDegrees = snapshot?.moon?.latitudeDegrees ?? 0;
     const flipLatitudeRange = Math.max(MOON_TEXTURE_FLIP_LATITUDE_RANGE, 0.0001);
-    const southBandThreshold = -(flipLatitudeRange / 3);
-    const surfaceTextureRotationRadians = moonLatitudeDegrees <= southBandThreshold ? Math.PI : 0;
+    const southProgress = THREE.MathUtils.clamp(-moonLatitudeDegrees / flipLatitudeRange, 0, 1);
+    const moonDiscRotationRadians = THREE.MathUtils.smootherstep(southProgress, 0, 1) * Math.PI;
   
     return {
       aureoleOpacity: (
@@ -509,7 +509,7 @@ export function createCelestialVisualsController(deps) {
       lunarEclipseMaskSoftnessPx,
       lunarEclipseMaskViewport,
       eclipseWarmth,
-      surfaceTextureRotationRadians,
+      moonDiscRotationRadians,
       shadowAlpha: THREE.MathUtils.lerp(0.12, 0.012, Math.max(shadowCoverage, terminatorPresence)),
       warmFringeOpacity: (
         ORBIT_MOON_WARM_FRINGE_OPACITY *
@@ -536,7 +536,7 @@ export function createCelestialVisualsController(deps) {
       eclipseMaskRadius: moonRenderState.lunarEclipseMaskRadius,
       eclipseMaskSoftnessPx: moonRenderState.lunarEclipseMaskSoftnessPx,
       eclipseMaskViewport: moonRenderState.lunarEclipseMaskViewport,
-      surfaceTextureRotationRadians: moonRenderState.surfaceTextureRotationRadians
+      moonDiscRotationRadians: moonRenderState.moonDiscRotationRadians
     });
   }
   

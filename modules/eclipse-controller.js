@@ -1,5 +1,10 @@
 import * as THREE from "../vendor/three.module.js";
-import { createSolarEclipseState, createLunarEclipseState } from "./astronomy-utils.js?v=20260320-reality-eclipse-sync1";
+import {
+  createSolarEclipseState,
+  createLunarEclipseState,
+  MOON_PHASE_CYCLE_DAYS,
+  REFERENCE_NEW_MOON_JULIAN_DATE
+} from "./astronomy-utils.js?v=20260324-moon-cycle28";
 
 export function createEclipseController(deps) {
   const {
@@ -3676,11 +3681,9 @@ export function createEclipseController(deps) {
     const sourceDate = activeSnapshot?.date ?? new Date();
     
     const DAY_MS = 86400000;
-    const SYNODIC_MONTH_DAYS = 29.530588853;
     const currentJulianDate = (sourceDate.getTime() / DAY_MS) + 2440587.5;
-    const REFERENCE_NEW_MOON_JULIAN_DATE = 2451550.1;
     
-    const phaseProgress = (currentJulianDate - REFERENCE_NEW_MOON_JULIAN_DATE) / SYNODIC_MONTH_DAYS;
+    const phaseProgress = (currentJulianDate - REFERENCE_NEW_MOON_JULIAN_DATE) / MOON_PHASE_CYCLE_DAYS;
     let cycles = Math.floor(phaseProgress);
     let fractionalPhase = phaseProgress - cycles;
     
@@ -3690,7 +3693,7 @@ export function createEclipseController(deps) {
       cycles += 1;
     }
     
-    const targetJulianDate = REFERENCE_NEW_MOON_JULIAN_DATE + (cycles + targetFractionalPhase) * SYNODIC_MONTH_DAYS;
+    const targetJulianDate = REFERENCE_NEW_MOON_JULIAN_DATE + (cycles + targetFractionalPhase) * MOON_PHASE_CYCLE_DAYS;
     const targetDateMs = (targetJulianDate - 2440587.5) * DAY_MS;
     
     simulationState.demoPhaseDateMs = targetDateMs;

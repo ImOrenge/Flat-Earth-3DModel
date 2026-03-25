@@ -610,7 +610,7 @@ export function setupScene({ canvas }) {
       eclipseMaskViewport: new THREE.Vector2(1, 1),
       surfaceTexture: existingPhaseState.surfaceTexture ?? null,
       surfaceTextureEnabled: existingPhaseState.surfaceTexture ? 1 : 0,
-      surfaceTextureRotationRadians: existingPhaseState.surfaceTextureRotationRadians ?? 0
+      moonDiscRotationRadians: existingPhaseState.moonDiscRotationRadians ?? 0
     };
   
     material.onBeforeCompile = (shader) => {
@@ -628,7 +628,7 @@ export function setupScene({ canvas }) {
       shader.uniforms.moonEclipseMaskViewport = { value: moonPhaseState.eclipseMaskViewport };
       shader.uniforms.moonSurfaceMap = { value: moonPhaseState.surfaceTexture };
       shader.uniforms.moonSurfaceMapEnabled = { value: moonPhaseState.surfaceTextureEnabled };
-      shader.uniforms.moonSurfaceTextureRotationRadians = { value: moonPhaseState.surfaceTextureRotationRadians };
+      shader.uniforms.moonDiscRotationRadians = { value: moonPhaseState.moonDiscRotationRadians };
       material.userData.phaseShader = shader;
   
       shader.vertexShader = shader.vertexShader
@@ -661,7 +661,7 @@ export function setupScene({ canvas }) {
   uniform vec2 moonEclipseMaskViewport;
   uniform sampler2D moonSurfaceMap;
   uniform float moonSurfaceMapEnabled;
-  uniform float moonSurfaceTextureRotationRadians;
+  uniform float moonDiscRotationRadians;
 
   vec2 rotateMoonDiscPoint(vec2 point, float angle) {
     float s = sin(angle);
@@ -675,8 +675,10 @@ export function setupScene({ canvas }) {
         .replace(
           "#include <opaque_fragment>",
           `vec3 moonViewNormal = normalize(vMoonViewNormal);
+  vec2 rotatedMoonDiscPoint = rotateMoonDiscPoint(moonViewNormal.xy, moonDiscRotationRadians);
+  vec3 moonDiscNormal = normalize(vec3(rotatedMoonDiscPoint, moonViewNormal.z));
   if (moonSurfaceMapEnabled > 0.5 && moonViewNormal.z > 0.0) {
-    vec2 moonDiscPoint = rotateMoonDiscPoint(moonViewNormal.xy, moonSurfaceTextureRotationRadians);
+    vec2 moonDiscPoint = rotatedMoonDiscPoint;
     vec2 moonSurfaceUv = vec2(
       (moonDiscPoint.x * 0.5) + 0.5,
       (moonDiscPoint.y * 0.5) + 0.5
@@ -688,7 +690,7 @@ export function setupScene({ canvas }) {
   float phaseSin = sqrt(max(0.0, 1.0 - (phaseCos * phaseCos)));
   float phaseDirection = mix(-1.0, 1.0, moonWaxing);
   vec3 phaseLightDirection = normalize(vec3(phaseDirection * phaseSin, 0.0, phaseCos));
-  float phaseDot = dot(moonViewNormal, phaseLightDirection);
+  float phaseDot = dot(moonDiscNormal, phaseLightDirection);
   float phaseMask = smoothstep(-0.004, 0.02, phaseDot);
   phaseMask = mix(phaseMask, 1.0, max(phaseCos, 0.0));
   vec3 moonSurfaceColor = diffuseColor.rgb;
@@ -763,7 +765,7 @@ export function setupScene({ canvas }) {
         );
     };
   
-    material.customProgramCacheKey = () => "moon-phase-v7";
+    material.customProgramCacheKey = () => "moon-phase-v8";
   }
   
   function setMoonMaterialPhase(material, {
@@ -778,7 +780,7 @@ export function setupScene({ canvas }) {
     eclipseMaskRadius = 0,
     eclipseMaskSoftnessPx = 32,
     eclipseMaskViewport = null,
-    surfaceTextureRotationRadians = null
+    moonDiscRotationRadians = null
   }) {
     const phaseState = material.userData.moonPhaseState ?? {
       coolGlowStrength: 0,
@@ -794,7 +796,7 @@ export function setupScene({ canvas }) {
       eclipseMaskViewport: new THREE.Vector2(1, 1),
       surfaceTexture: null,
       surfaceTextureEnabled: 0,
-      surfaceTextureRotationRadians: 0
+      moonDiscRotationRadians: 0
     };
     
     if (eclipseMaskCenterNdc) phaseState.eclipseMaskCenterNdc.copy(eclipseMaskCenterNdc);
@@ -809,8 +811,8 @@ export function setupScene({ canvas }) {
     phaseState.lunarEclipseShadowStrength = THREE.MathUtils.clamp(lunarEclipseShadowStrength, 0, 1);
     phaseState.shadowAlpha = THREE.MathUtils.clamp(shadowAlpha, 0.01, 1);
     phaseState.waxing = waxing ? 1 : 0;
-    if (Number.isFinite(surfaceTextureRotationRadians)) {
-      phaseState.surfaceTextureRotationRadians = THREE.MathUtils.clamp(surfaceTextureRotationRadians, 0, Math.PI);
+    if (Number.isFinite(moonDiscRotationRadians)) {
+      phaseState.moonDiscRotationRadians = THREE.MathUtils.clamp(moonDiscRotationRadians, 0, Math.PI);
     }
     material.userData.moonPhaseState = phaseState;
   
@@ -828,7 +830,7 @@ export function setupScene({ canvas }) {
       material.userData.phaseShader.uniforms.moonEclipseMaskViewport.value.copy(phaseState.eclipseMaskViewport);
       material.userData.phaseShader.uniforms.moonSurfaceMap.value = phaseState.surfaceTexture;
       material.userData.phaseShader.uniforms.moonSurfaceMapEnabled.value = phaseState.surfaceTextureEnabled;
-      material.userData.phaseShader.uniforms.moonSurfaceTextureRotationRadians.value = phaseState.surfaceTextureRotationRadians;
+      material.userData.phaseShader.uniforms.moonDiscRotationRadians.value = phaseState.moonDiscRotationRadians;
     }
   }
   
@@ -1525,7 +1527,7 @@ export function setupScene({ canvas }) {
       eclipseMaskViewport: new THREE.Vector2(1, 1),
       surfaceTexture: null,
       surfaceTextureEnabled: 0,
-      surfaceTextureRotationRadians: 0
+      moonDiscRotationRadians: 0
     };
     phaseState.surfaceTexture = texture;
     phaseState.surfaceTextureEnabled = texture ? 1 : 0;

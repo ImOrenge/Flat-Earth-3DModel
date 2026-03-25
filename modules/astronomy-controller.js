@@ -11,6 +11,7 @@ import {
   createSolarEclipseState,
   getAstronomySnapshot as buildAstronomySnapshot,
   getMoonEclipticLatitudeDegrees,
+  MOON_PHASE_CYCLE_DAYS,
   getMoonPhase,
   getMoonSubpoint,
   getSunSubpoint,
@@ -20,7 +21,7 @@ import {
   getMoonHorizontalCoordinates,
   getSunHorizontalCoordinates,
   SEASONAL_EVENT_DEFINITIONS
-} from "./astronomy-utils.js?v=20260320-reality-eclipse-sync1";
+} from "./astronomy-utils.js?v=20260324-moon-cycle28";
 import { getEclipseAlignmentTarget } from "./eclipse-events-utils.js?v=20260320-reality-eclipse-events1";
 
 export function createAstronomyController({
@@ -89,7 +90,6 @@ export function createAstronomyController({
   const DARK_SUN_START_DIRECTION = -1;
   const DARK_SUN_ORBIT_SPEED_FACTOR = 0.72;
   const DARK_SUN_BAND_SPEED_FACTOR = 1.08;
-  const SYNODIC_MONTH_DAYS = 29.530588853;
   const REALITY_ECLIPSE_MIN_ALIGNMENT = constants.REALITY_ECLIPSE_MIN_ALIGNMENT ?? 0.24;
   const REALITY_ECLIPSE_MAX_ALIGNMENT_OFFSET_RADIANS = (
     constants.REALITY_ECLIPSE_MAX_ALIGNMENT_OFFSET_RADIANS ?? (Math.PI * 0.42)
@@ -788,8 +788,8 @@ export function createAstronomyController({
     const phaseProgress = THREE.MathUtils.euclideanModulo(moonPhase?.phaseProgress ?? 0, 1);
     const phaseDeltaToNew = getWrappedPhaseDelta(phaseProgress, 0);
     const phaseDeltaToFull = getWrappedPhaseDelta(phaseProgress, 0.5);
-    const signedDaysToNew = phaseDeltaToNew * SYNODIC_MONTH_DAYS;
-    const signedDaysToFull = phaseDeltaToFull * SYNODIC_MONTH_DAYS;
+    const signedDaysToNew = phaseDeltaToNew * MOON_PHASE_CYCLE_DAYS;
+    const signedDaysToFull = phaseDeltaToFull * MOON_PHASE_CYCLE_DAYS;
     const solarPhaseFactor = getPhaseWindowFactor(
       signedDaysToNew,
       REALITY_SOLAR_ECLIPSE_PHASE_WINDOW_DAYS
