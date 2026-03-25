@@ -104,6 +104,40 @@ def test_builtin_lunar_timepoints_update_preview(page: Page, server_url: str):
     assert len({start_value, peak_value, end_value}) == 3
     assert page.locator("#reality-sync").is_checked()
     assert not page.locator("#reality-live").is_checked()
+    page.wait_for_function(
+        "() => Boolean(window.__E2E_SNAPSHOT?.activeLunarEclipseData)"
+    )
+    snapshot = page.evaluate("window.__E2E_SNAPSHOT")
+    assert snapshot["activeLunarEclipseData"]["visibleInView"] is True
+
+
+def test_lunar_peak_phase_uses_real_full_moon_geometry(page: Page, server_url: str):
+    page.goto(server_url)
+    page.locator("#scene").wait_for(state="attached")
+    phase_data = page.evaluate(
+        """
+        async () => {
+          const mod = await import('./modules/astronomy-utils.js?v=20260324-moon-cycle28');
+          const readPhase = (iso) => {
+            const phase = mod.getMoonPhase(new Date(iso));
+            return {
+              illuminationFraction: phase.illuminationFraction,
+              labelKey: phase.labelKey,
+              phaseProgress: phase.phaseProgress,
+            };
+          };
+          return {
+            march: readPhase('2026-03-03T11:34:52Z'),
+            august: readPhase('2026-08-28T04:14:04Z'),
+          };
+        }
+        """
+    )
+
+    for entry in (phase_data["march"], phase_data["august"]):
+        assert abs(entry["phaseProgress"] - 0.5) < 0.03
+        assert entry["illuminationFraction"] >= 0.98
+        assert entry["labelKey"] == "moonPhaseFull"
 
 
 def test_valid_csv_upload_replaces_catalog_options(page: Page, server_url: str):
@@ -219,3 +253,40 @@ def test_existing_eclipse_staging_buttons_still_toggle_dark_sun_lock(page: Page,
 
     page.locator("#stage-pre-lunar-eclipse").click()
     assert page.evaluate("window.__simulationState.darkSunStageAltitudeLock") is False
+
+
+def test_stage_pre_lunar_eclipse_uses_selected_event_start_window(page: Page, server_url: str):
+    open_eclipse_panel(page, server_url)
+
+    page.locator("#eclipse-kind-select").select_option("lunar")
+    page.locator("#eclipse-year-select").select_option("2026")
+    page.locator("#eclipse-event-select").select_option("LE-09708")
+
+    page.locator("#stage-pre-lunar-eclipse").click()
+    page.wait_for_function(
+        "() => Boolean(window.__simulationState?.darkSunLunarStageLock) && Boolean(window.__E2E_SNAPSHOT?.activeLunarEclipseData)"
+    )
+    stage_state = page.evaluate(
+        """
+        () => ({
+          darkSunBandProgress: window.__simulationState.darkSunBandProgress,
+          darkSunLunarStageLock: window.__simulationState.darkSunLunarStageLock,
+          demoPhaseDateMs: window.__simulationState.demoPhaseDateMs,
+          eclipse: window.__E2E_SNAPSHOT?.activeLunarEclipseData ?? null,
+          moonBandProgress: window.__simulationState.moonBandProgress,
+          snapshotDateIso: window.__E2E_SNAPSHOT?.dateIso ?? null,
+        })
+        """
+    )
+
+    expected_stage_start_ms = 1772526334000
+    event_start_ms = 1772527534000
+    assert stage_state["darkSunLunarStageLock"] is True
+    assert abs(stage_state["demoPhaseDateMs"] - expected_stage_start_ms) < 120000
+    assert stage_state["demoPhaseDateMs"] < event_start_ms
+    assert abs(stage_state["darkSunBandProgress"] - stage_state["moonBandProgress"]) < 1e-4
+    snapshot_date_ms = page.evaluate("Date.parse(window.__E2E_SNAPSHOT?.dateIso)")
+    assert abs(snapshot_date_ms - expected_stage_start_ms) < 120000
+    assert snapshot_date_ms < event_start_ms
+    assert stage_state["eclipse"] is not None
+    assert stage_state["eclipse"]["stageKey"] == "approach"

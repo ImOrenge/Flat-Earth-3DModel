@@ -1,10 +1,12 @@
 import * as THREE from "../vendor/three.module.js";
 import {
   createSolarEclipseState,
-  createLunarEclipseState,
-  MOON_PHASE_CYCLE_DAYS,
-  REFERENCE_NEW_MOON_JULIAN_DATE
+  createLunarEclipseState
 } from "./astronomy-utils.js?v=20260324-moon-cycle28";
+import {
+  getActiveEclipseEvent,
+  getCatalogEventsByKind
+} from "./eclipse-events-utils.js?v=20260325-eclipse-selector1";
 
 export function createEclipseController(deps) {
   const {
@@ -3139,6 +3141,7 @@ export function createEclipseController(deps) {
   const LUNAR_STAGE_TOTALITY_SHARE = 0.24;
   const LUNAR_STAGE_EGRESS_SHARE   = 0.18;
   const LUNAR_STAGE_COMPLETE_SHARE = 0.20;
+  const LUNAR_STAGE_PREVIEW_LEAD_MS = 20 * 60 * 1000;
 
   function getLunarStageContactOffsetRadians() {
     const bodyRadiusSum = (
@@ -3333,6 +3336,38 @@ export function createEclipseController(deps) {
     return SOLAR_ECLIPSE_COMPLETE_SLOW_FACTOR;
   }
 
+  function getPreferredLunarStageEventMeta(sourceDate = new Date()) {
+    const selectedMeta = astronomyApi.getSelectedEclipseMeta?.() ?? null;
+    if (selectedMeta?.event?.kind === "lunar") {
+      return selectedMeta;
+    }
+
+    const catalog = astronomyApi.getRuntimeEclipseCatalog?.();
+    const sourceDateMs = sourceDate.getTime();
+    const activeEvent = getActiveEclipseEvent(sourceDateMs, "lunar", catalog);
+    if (activeEvent) {
+      return {
+        catalog,
+        event: activeEvent,
+        previewMs: activeEvent.startMs,
+        timePoint: "start"
+      };
+    }
+
+    const lunarEvents = getCatalogEventsByKind("lunar", catalog);
+    const nextEvent = lunarEvents.find((event) => event.endMs >= sourceDateMs) ?? lunarEvents[0] ?? null;
+    if (!nextEvent) {
+      return null;
+    }
+
+    return {
+      catalog,
+      event: nextEvent,
+      previewMs: nextEvent.startMs,
+      timePoint: "start"
+    };
+  }
+
   function evaluateLunarEclipse(snapshot) {
     if (window.__E2E_DEBUG_LUNAR) console.log("LUNAR_EVAL_ENTERED", !!snapshot);
 
@@ -3358,9 +3393,16 @@ export function createEclipseController(deps) {
     // Lunar eclipse (blood moon) only occurs during a full moon.
     // illuminationFraction peaks at 1.0 on a full moon (phaseProgress ~0.5).
     // Allow a tolerance window of ±~2 days (illumination > 0.85).
+    const activeLunarEvent = Number.isFinite(snapshot?.date?.getTime?.())
+      ? getActiveEclipseEvent(
+        snapshot.date.getTime(),
+        "lunar",
+        astronomyApi.getRuntimeEclipseCatalog?.()
+      )
+      : null;
     const moonIllumination = snapshot.moonPhase?.illuminationFraction ?? 1;
     const isNearFullMoon = moonIllumination >= 0.85;
-    if (!isNearFullMoon) {
+    if (!activeLunarEvent && !isNearFullMoon) {
       return decayLunarEclipseVisuals(snapshot);
     }
 
@@ -3679,23 +3721,13 @@ export function createEclipseController(deps) {
 
     const activeSnapshot = getCurrentUiSnapshot();
     const sourceDate = activeSnapshot?.date ?? new Date();
-    
-    const DAY_MS = 86400000;
-    const currentJulianDate = (sourceDate.getTime() / DAY_MS) + 2440587.5;
-    
-    const phaseProgress = (currentJulianDate - REFERENCE_NEW_MOON_JULIAN_DATE) / MOON_PHASE_CYCLE_DAYS;
-    let cycles = Math.floor(phaseProgress);
-    let fractionalPhase = phaseProgress - cycles;
-    
-    // Target 0.496 so the moon is just about to become Full, and the eclipse starts.
-    const targetFractionalPhase = 0.496;
-    if (fractionalPhase > targetFractionalPhase) {
-      cycles += 1;
+    const stageEventMeta = getPreferredLunarStageEventMeta(sourceDate);
+    const stageEvent = stageEventMeta?.event ?? null;
+    if (!Number.isFinite(stageEvent?.startMs)) {
+      return;
     }
-    
-    const targetJulianDate = REFERENCE_NEW_MOON_JULIAN_DATE + (cycles + targetFractionalPhase) * MOON_PHASE_CYCLE_DAYS;
-    const targetDateMs = (targetJulianDate - 2440587.5) * DAY_MS;
-    
+    const targetDateMs = stageEvent.startMs - LUNAR_STAGE_PREVIEW_LEAD_MS;
+
     simulationState.demoPhaseDateMs = targetDateMs;
     setDemoMoonOrbitOffsetFromPhase(targetDateMs);
     setDemoSeasonPhaseFromDate(targetDateMs);

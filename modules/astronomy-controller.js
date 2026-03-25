@@ -11,8 +11,8 @@ import {
   createSolarEclipseState,
   getAstronomySnapshot as buildAstronomySnapshot,
   getMoonEclipticLatitudeDegrees,
-  MOON_PHASE_CYCLE_DAYS,
   getMoonPhase,
+  getSignedMoonPhaseOffsetDays,
   getMoonSubpoint,
   getSunSubpoint,
   getSeasonalEventMoments,
@@ -773,10 +773,6 @@ export function createAstronomyController({
     };
   }
 
-  function getWrappedPhaseDelta(phaseProgress = 0, targetPhase = 0) {
-    return THREE.MathUtils.euclideanModulo((phaseProgress - targetPhase) + 0.5, 1) - 0.5;
-  }
-
   function getPhaseWindowFactor(distanceDays = 0, windowDays = 1) {
     return THREE.MathUtils.clamp(
       1 - (Math.abs(distanceDays) / Math.max(windowDays, 0.0001)),
@@ -830,12 +826,8 @@ export function createAstronomyController({
   }
 
   function getRealityEclipseAlignmentState(date) {
-    const moonPhase = getMoonPhase(date);
-    const phaseProgress = THREE.MathUtils.euclideanModulo(moonPhase?.phaseProgress ?? 0, 1);
-    const phaseDeltaToNew = getWrappedPhaseDelta(phaseProgress, 0);
-    const phaseDeltaToFull = getWrappedPhaseDelta(phaseProgress, 0.5);
-    const signedDaysToNew = phaseDeltaToNew * MOON_PHASE_CYCLE_DAYS;
-    const signedDaysToFull = phaseDeltaToFull * MOON_PHASE_CYCLE_DAYS;
+    const signedDaysToNew = getSignedMoonPhaseOffsetDays(date, 0);
+    const signedDaysToFull = getSignedMoonPhaseOffsetDays(date, 0.5);
     const solarPhaseFactor = getPhaseWindowFactor(
       signedDaysToNew,
       REALITY_SOLAR_ECLIPSE_PHASE_WINDOW_DAYS
@@ -1227,6 +1219,10 @@ export function createAstronomyController({
       return eclipseSelectionState.uploadedCatalog;
     }
     return getBuiltInEclipseCatalog();
+  }
+
+  function getSelectedEclipseMeta() {
+    return reconcileEclipseSelectionState();
   }
 
   function reconcileEclipseSelectionState() {
@@ -2510,6 +2506,8 @@ export function createAstronomyController({
     getCurrentOrbitRadius,
     getDarkSunRenderState,
     getGeoFromProjectedPosition,
+    getRuntimeEclipseCatalog,
+    getSelectedEclipseMeta,
     getMoonBaseHeight,
     getMoonRenderState,
     getSunDisplayHorizontalFromPosition,

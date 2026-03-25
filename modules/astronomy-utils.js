@@ -18,7 +18,8 @@ const TROPICAL_TO_SIDEREAL_DEGREES_PER_MS = (
   (EARTH_PRECESSION_ARCSECONDS_PER_YEAR / 3600) /
   (365.2422 * DAY_MS)
 );
-export const MOON_PHASE_CYCLE_DAYS = 28;
+export const SYNODIC_MONTH_DAYS = 29.530588853;
+export const MOON_PHASE_CYCLE_DAYS = SYNODIC_MONTH_DAYS;
 export const REFERENCE_NEW_MOON_JULIAN_DATE = 2451550.1;
 export const MOON_PHASE_STEP_COUNT = 28;
 export const MOON_PHASE_STEP_DEGREES = FULL_CIRCLE_DEGREES / MOON_PHASE_STEP_COUNT;
@@ -192,10 +193,27 @@ export function getMoonPhaseFromProgress(phaseProgressValue) {
   };
 }
 
+function getWrappedPhaseDelta(phaseProgress = 0, targetPhase = 0) {
+  return THREE.MathUtils.euclideanModulo((phaseProgress - targetPhase) + 0.5, 1) - 0.5;
+}
+
 export function getMoonPhase(date) {
-  const julianDate = getJulianDate(date);
-  const phaseProgress = (julianDate - REFERENCE_NEW_MOON_JULIAN_DATE) / MOON_PHASE_CYCLE_DAYS;
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return getMoonPhaseFromProgress(0);
+  }
+  const sun = getSunEquatorialPosition(date);
+  const moon = getMoonEquatorialPosition(date);
+  const phaseAngleRadians = THREE.MathUtils.euclideanModulo(
+    moon.eclipticLongitude - sun.eclipticLongitude,
+    FULL_CIRCLE_RADIANS
+  );
+  const phaseProgress = phaseAngleRadians / FULL_CIRCLE_RADIANS;
   return getMoonPhaseFromProgress(phaseProgress);
+}
+
+export function getSignedMoonPhaseOffsetDays(date, targetPhaseProgress = 0) {
+  const phaseProgress = getMoonPhase(date).phaseProgress ?? 0;
+  return getWrappedPhaseDelta(phaseProgress, targetPhaseProgress) * SYNODIC_MONTH_DAYS;
 }
 
 export function getSunSubpoint(date) {
