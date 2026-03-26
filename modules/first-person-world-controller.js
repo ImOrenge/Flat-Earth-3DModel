@@ -1,5 +1,5 @@
 import * as THREE from "../vendor/three.module.js";
-import { getDisplayLocalSolarAltitudeDegreesFromModel } from "./astronomy-utils.js?v=20260322-fp-sun1";
+import { getDisplayLocalSolarAltitudeDegreesFromModel } from "./astronomy-utils.js?v=20260324-moon-cycle28";
 
 const DEFAULT_FOG_COLOR = new THREE.Color(0x06101d);
 

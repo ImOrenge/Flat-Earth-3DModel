@@ -10,22 +10,22 @@ import {
   getSeasonalPrecessionAngle,
   getSiderealZodiacOffsetRadians,
   getSolarAltitudeFactor,
-} from "./modules/astronomy-utils.js?v=20260320-reality-eclipse-sync1";
-import { createAstronomyController } from "./modules/astronomy-controller.js?v=20260320-reality-eclipse-sync2";
+} from "./modules/astronomy-utils.js?v=20260324-moon-cycle28";
+import { createAstronomyController } from "./modules/astronomy-controller.js?v=20260325-eclipse-selector1";
 import { createCameraController } from "./modules/camera-controller.js?v=20260322-topview-zodiac2";
 import { createCelestialTrackingCameraController } from "./modules/celestial-tracking-camera-controller.js?v=20260320-constellation-precession1";
-import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js?v=20260322-fp-sun1";
-import { createI18n } from "./modules/i18n.js?v=20260322-topview-zodiac6";
-import { createMagneticFieldController } from "./modules/magnetic-field-controller.js?v=20260314-magnetic-pinecone3";
+import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js?v=20260324-moon-cycle28";
+import { createI18n } from "./modules/i18n.js?v=20260325-eclipse-selector1";
+import { createMagneticFieldController } from "./modules/magnetic-field-controller.js?v=20260324-no-aurora1";
 import { createRouteSimulationController } from "./modules/route-simulation-controller.js";
 import { createTextureManager } from "./modules/texture-manager.js?v=20260311-gpu-daynight";
-import { createWalkerController } from "./modules/walker-controller.js?v=20260312-darksun-eclipse1";
+import { createWalkerController } from "./modules/walker-controller.js?v=20260324-moon-cycle28";
 
 import * as constants from "./modules/constants.js?v=20260322-topview-zodiac4";
-import { createEclipseController } from "./modules/eclipse-controller.js?v=20260320-reality-eclipse-sync2";
-import { createCelestialVisualsController } from "./modules/celestial-visuals-controller.js?v=20260322-fp-sun1";
+import { createEclipseController } from "./modules/eclipse-controller.js?v=20260324-moon-cycle28";
+import { createCelestialVisualsController } from "./modules/celestial-visuals-controller.js?v=20260324-moon-disc-rotation1";
 import { createConstellationTabController } from "./modules/constellation-tab-controller.js?v=20260322-topview-zodiac6";
-import { setupInputHandlers } from "./modules/input-handler.js?v=20260322-topview-zodiac4";
+import { setupInputHandlers } from "./modules/input-handler.js?v=20260325-eclipse-selector1";
 import { createRocketController, SPACEPORTS } from "./modules/rocket-controller.js?v=20260319-parabola";
 const {
   DEFAULT_MAP_PATH,
@@ -357,6 +357,22 @@ const moonPhasePanelEl = document.getElementById("moon-phase-panel");
 const solarEclipsePanelHomeEl = document.getElementById("solar-eclipse-panel-home");
 const solarEclipsePanelSlotEl = document.getElementById("solar-eclipse-panel-slot");
 const solarEclipsePanelEl = document.getElementById("solar-eclipse-panel");
+const eclipseCatalogSourceEl = document.getElementById("eclipse-catalog-source");
+const eclipseUploadFieldEl = document.getElementById("eclipse-upload-field");
+const eclipseCatalogUploadEl = document.getElementById("eclipse-catalog-upload");
+const eclipseCatalogStatusEl = document.getElementById("eclipse-catalog-status");
+const eclipseKindSelectEl = document.getElementById("eclipse-kind-select");
+const eclipseYearSelectEl = document.getElementById("eclipse-year-select");
+const eclipseEventSelectEl = document.getElementById("eclipse-event-select");
+const eclipseTimePointSelectEl = document.getElementById("eclipse-timepoint-select");
+const selectedEclipseKindEl = document.getElementById("selected-eclipse-kind");
+const selectedEclipseTypeEl = document.getElementById("selected-eclipse-type");
+const selectedEclipseLocalEl = document.getElementById("selected-eclipse-local");
+const selectedEclipseUtcEl = document.getElementById("selected-eclipse-utc");
+const selectedEclipseMagnitudeEl = document.getElementById("selected-eclipse-magnitude");
+const selectedEclipseSourceEl = document.getElementById("selected-eclipse-source");
+const selectedEclipseSummaryEl = document.getElementById("selected-eclipse-summary");
+const previewSelectedEclipseButton = document.getElementById("preview-selected-eclipse");
 const dayNightOverlayEl = document.getElementById("day-night-overlay");
 const dayNightSummaryEl = document.getElementById("day-night-summary");
 const analemmaOverlayEl = document.getElementById("analemma-overlay");
@@ -987,7 +1003,7 @@ function setControlTab(tabKey) {
   constellationTabApi?.setPanelActive(tabKey === "constellations");
 }
 
-import { setupScene } from "./modules/scene-setup.js?v=20260322-topview-zodiac4";
+import { setupScene } from "./modules/scene-setup.js?v=20260324-moon-disc-rotation1";
 import { createConstellations } from "./modules/constellation-setup.js?v=20260320-constellation-precession1";
 import { createZodiacWheel } from "./modules/zodiac-wheel.js?v=20260322-topview-zodiac2";
 const {
@@ -1181,6 +1197,20 @@ const astronomyState = {
   lastTrailRebuildMs: 0,
   lastInputSyncMs: 0
 };
+const eclipseSelectionState = {
+  sourceMode: "builtin",
+  kind: "solar",
+  year: astronomyState.selectedDate.getUTCFullYear(),
+  eventId: "",
+  timePoint: "peak",
+  uploadedCatalog: null,
+  uploadStatus: {
+    tone: "default",
+    key: "eclipseCatalogStatusAwaitingUpload",
+    params: {}
+  },
+  selectedEventMeta: null
+};
 const celestialControlState = {
   trailLengthFactor: CELESTIAL_TRAIL_LENGTH_DEFAULT_PERCENT / 100,
   speedMultiplier: CELESTIAL_SPEED_DEFAULT,
@@ -1277,6 +1307,14 @@ const ui = {
   dayNightSummaryEl,
   darkSunDebugEl,
   darkSunDebugSummaryEl,
+  eclipseCatalogSourceEl,
+  eclipseCatalogStatusEl,
+  eclipseCatalogUploadEl,
+  eclipseEventSelectEl,
+  eclipseKindSelectEl,
+  eclipseTimePointSelectEl,
+  eclipseUploadFieldEl,
+  eclipseYearSelectEl,
   firstPersonHorizonEl,
   firstPersonOverlayEl,
   magneticFieldOverlayEl,
@@ -1298,11 +1336,19 @@ const ui = {
   seasonalMoonAnchorEl,
   seasonalMoonDriftEl,
   seasonalMoonSummaryEl,
+  selectedEclipseKindEl,
+  selectedEclipseLocalEl,
+  selectedEclipseMagnitudeEl,
+  selectedEclipseSourceEl,
+  selectedEclipseSummaryEl,
+  selectedEclipseTypeEl,
+  selectedEclipseUtcEl,
   stagePreEclipseBtn: document.getElementById("stage-pre-eclipse"),
   stagePreLunarEclipseBtn: document.getElementById("stage-pre-lunar-eclipse"),
   seasonalSunGridEl,
   seasonalSunSummaryEl,
   seasonalYearEl,
+  previewSelectedEclipseButton,
   solarEclipseCoverageEl,
   solarEclipseLightEl,
   solarEclipseStageEl,
@@ -1374,6 +1420,7 @@ astronomyApi = createAstronomyController({
   ui,
   magneticFieldApi,
   astronomyState,
+  eclipseSelectionState,
   celestialControlState,
   seasonalMoonState,
   analemmaState,
@@ -1736,6 +1783,8 @@ const rocketApi = createRocketController({
     routeSelectEl, routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl,
     celestialFullTrailEl, routePlaybackButton, routeResetButton, realitySyncEl,
     realityLiveEl, observationTimeEl, observationMinusHourButton, observationPlusHourButton,
+    eclipseCatalogSourceEl, eclipseCatalogUploadEl, eclipseKindSelectEl, eclipseYearSelectEl,
+    eclipseEventSelectEl, eclipseTimePointSelectEl, previewSelectedEclipseButton,
     observationMinusMinuteButton, observationPlusMinuteButton, applyObservationTimeButton, setCurrentTimeButton,
     dayNightOverlayEl, dayNightState, getGeoFromProjectedPosition: astronomyApi.getGeoFromProjectedPosition, orbitSun,
     analemmaOverlayEl, analemmaState, magneticFieldOverlayEl, magneticFieldState,

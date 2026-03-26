@@ -1,5 +1,12 @@
 import * as THREE from "../vendor/three.module.js";
-import { createSolarEclipseState, createLunarEclipseState } from "./astronomy-utils.js?v=20260320-reality-eclipse-sync1";
+import {
+  createSolarEclipseState,
+  createLunarEclipseState
+} from "./astronomy-utils.js?v=20260324-moon-cycle28";
+import {
+  getActiveEclipseEvent,
+  getCatalogEventsByKind
+} from "./eclipse-events-utils.js?v=20260325-eclipse-selector1";
 
 export function createEclipseController(deps) {
   const {
@@ -2320,15 +2327,17 @@ export function createEclipseController(deps) {
   
     sunGroup.getWorldPosition(tempSunWorldPosition);
     darkSunGroup.getWorldPosition(tempDarkSunWorldPosition);
-  
-    const sunDisc = getProjectedDisc(
-      tempSunWorldPosition,
-      getWorldBodyRadius(sunBody, ORBIT_SUN_SIZE)
+
+    const sunWorldRadius = getWorldBodyRadius(sunBody, ORBIT_SUN_SIZE);
+    const darkSunWorldRadius = getWorldBodyRadius(darkSunBody, ORBIT_DARK_SUN_SIZE);
+    const worldXZDist = Math.hypot(
+      tempSunWorldPosition.x - tempDarkSunWorldPosition.x,
+      tempSunWorldPosition.z - tempDarkSunWorldPosition.z
     );
-    const darkSunDisc = getProjectedDisc(
-      tempDarkSunWorldPosition,
-      getWorldBodyRadius(darkSunBody, ORBIT_DARK_SUN_SIZE)
-    );
+    const worldNormalizedDistance = worldXZDist / Math.max(sunWorldRadius + darkSunWorldRadius, 0.0001);
+
+    const sunDisc = getProjectedDisc(tempSunWorldPosition, sunWorldRadius);
+    const darkSunDisc = getProjectedDisc(tempDarkSunWorldPosition, darkSunWorldRadius);
     renderer.getDrawingBufferSize(tempSolarEclipseViewport);
     const triggerSunDisc = getSolarEclipseTriggerSunDisc(
       sunDisc,
@@ -2381,7 +2390,7 @@ export function createEclipseController(deps) {
     );
     let rawStageKey = "idle";
   
-    if (!visibleInView || normalizedDistance > SOLAR_ECLIPSE_IDLE_DISTANCE_FACTOR) {
+    if (!visibleInView || worldNormalizedDistance > SOLAR_ECLIPSE_IDLE_DISTANCE_FACTOR) {
     } else if (total) {
       rawStageKey = "totality";
     } else if (active) {
@@ -2389,7 +2398,7 @@ export function createEclipseController(deps) {
     } else if (
       approachAligned &&
       !hasVisibleOverlap &&
-      normalizedDistance <= SOLAR_ECLIPSE_APPROACH_DISTANCE_FACTOR
+      worldNormalizedDistance <= SOLAR_ECLIPSE_APPROACH_DISTANCE_FACTOR
     ) {
       rawStageKey = "approach";
     }
@@ -2401,7 +2410,7 @@ export function createEclipseController(deps) {
         direction,
         eclipseTier: eligibility.eclipseTier,
         hasVisibleOverlap,
-        normalizedDistance,
+        normalizedDistance: worldNormalizedDistance,
         total,
         visibleInView
       }).sunLightScale ?? 1,
@@ -3134,6 +3143,7 @@ export function createEclipseController(deps) {
   const LUNAR_STAGE_TOTALITY_SHARE = 0.24;
   const LUNAR_STAGE_EGRESS_SHARE   = 0.18;
   const LUNAR_STAGE_COMPLETE_SHARE = 0.20;
+  const LUNAR_STAGE_PREVIEW_LEAD_MS = 20 * 60 * 1000;
 
   function getLunarStageContactOffsetRadians() {
     const bodyRadiusSum = (
@@ -3328,6 +3338,38 @@ export function createEclipseController(deps) {
     return SOLAR_ECLIPSE_COMPLETE_SLOW_FACTOR;
   }
 
+  function getPreferredLunarStageEventMeta(sourceDate = new Date()) {
+    const selectedMeta = astronomyApi.getSelectedEclipseMeta?.() ?? null;
+    if (selectedMeta?.event?.kind === "lunar") {
+      return selectedMeta;
+    }
+
+    const catalog = astronomyApi.getRuntimeEclipseCatalog?.();
+    const sourceDateMs = sourceDate.getTime();
+    const activeEvent = getActiveEclipseEvent(sourceDateMs, "lunar", catalog);
+    if (activeEvent) {
+      return {
+        catalog,
+        event: activeEvent,
+        previewMs: activeEvent.startMs,
+        timePoint: "start"
+      };
+    }
+
+    const lunarEvents = getCatalogEventsByKind("lunar", catalog);
+    const nextEvent = lunarEvents.find((event) => event.endMs >= sourceDateMs) ?? lunarEvents[0] ?? null;
+    if (!nextEvent) {
+      return null;
+    }
+
+    return {
+      catalog,
+      event: nextEvent,
+      previewMs: nextEvent.startMs,
+      timePoint: "start"
+    };
+  }
+
   function evaluateLunarEclipse(snapshot) {
     if (window.__E2E_DEBUG_LUNAR) console.log("LUNAR_EVAL_ENTERED", !!snapshot);
 
@@ -3353,9 +3395,16 @@ export function createEclipseController(deps) {
     // Lunar eclipse (blood moon) only occurs during a full moon.
     // illuminationFraction peaks at 1.0 on a full moon (phaseProgress ~0.5).
     // Allow a tolerance window of ±~2 days (illumination > 0.85).
+    const activeLunarEvent = Number.isFinite(snapshot?.date?.getTime?.())
+      ? getActiveEclipseEvent(
+        snapshot.date.getTime(),
+        "lunar",
+        astronomyApi.getRuntimeEclipseCatalog?.()
+      )
+      : null;
     const moonIllumination = snapshot.moonPhase?.illuminationFraction ?? 1;
     const isNearFullMoon = moonIllumination >= 0.85;
-    if (!isNearFullMoon) {
+    if (!activeLunarEvent && !isNearFullMoon) {
       return decayLunarEclipseVisuals(snapshot);
     }
 
@@ -3463,14 +3512,16 @@ export function createEclipseController(deps) {
       tempLunarEclipseDarkSunWorldPos.y = tempLunarEclipseMoonWorldPos.y;
     }
 
-    const moonDisc = getProjectedDisc(
-      tempLunarEclipseMoonWorldPos,
-      getWorldBodyRadius(moonBody, ORBIT_MOON_SIZE)
+    const moonWorldRadius = getWorldBodyRadius(moonBody, ORBIT_MOON_SIZE);
+    const darkSunWorldRadiusL = getWorldBodyRadius(darkSunBody, ORBIT_DARK_SUN_SIZE);
+    const lunarWorldXZDist = Math.hypot(
+      tempLunarEclipseMoonWorldPos.x - tempLunarEclipseDarkSunWorldPos.x,
+      tempLunarEclipseMoonWorldPos.z - tempLunarEclipseDarkSunWorldPos.z
     );
-    const darkSunDisc = getProjectedDisc(
-      tempLunarEclipseDarkSunWorldPos,
-      getWorldBodyRadius(darkSunBody, ORBIT_DARK_SUN_SIZE)
-    );
+    const lunarWorldNormalizedDistance = lunarWorldXZDist / Math.max(moonWorldRadius + darkSunWorldRadiusL, 0.0001);
+
+    const moonDisc = getProjectedDisc(tempLunarEclipseMoonWorldPos, moonWorldRadius);
+    const darkSunDisc = getProjectedDisc(tempLunarEclipseDarkSunWorldPos, darkSunWorldRadiusL);
 
     // Only strictly require the moon to be visible. The Dark Sun might still technically cull due to frustum depending on FOV, but it's fine if the moon is visible.
     const visibleInView = moonDisc.visible && moonDisc.radius > 0.00001;
@@ -3537,7 +3588,7 @@ export function createEclipseController(deps) {
     let rawStageKey = "idle";
     const approachAligned = true;
 
-    if (normalizedDistance > SOLAR_ECLIPSE_IDLE_DISTANCE_FACTOR) {
+    if (lunarWorldNormalizedDistance > SOLAR_ECLIPSE_IDLE_DISTANCE_FACTOR) {
     } else if (total) {
       rawStageKey = "totality";
     } else if (active) {
@@ -3546,7 +3597,7 @@ export function createEclipseController(deps) {
       approachAligned &&
       darkSunDiscAvailable &&
       !hasVisibleOverlap &&
-      normalizedDistance <= SOLAR_ECLIPSE_APPROACH_DISTANCE_FACTOR
+      lunarWorldNormalizedDistance <= SOLAR_ECLIPSE_APPROACH_DISTANCE_FACTOR
     ) {
       rawStageKey = "approach";
     }
@@ -3674,25 +3725,13 @@ export function createEclipseController(deps) {
 
     const activeSnapshot = getCurrentUiSnapshot();
     const sourceDate = activeSnapshot?.date ?? new Date();
-    
-    const DAY_MS = 86400000;
-    const SYNODIC_MONTH_DAYS = 29.530588853;
-    const currentJulianDate = (sourceDate.getTime() / DAY_MS) + 2440587.5;
-    const REFERENCE_NEW_MOON_JULIAN_DATE = 2451550.1;
-    
-    const phaseProgress = (currentJulianDate - REFERENCE_NEW_MOON_JULIAN_DATE) / SYNODIC_MONTH_DAYS;
-    let cycles = Math.floor(phaseProgress);
-    let fractionalPhase = phaseProgress - cycles;
-    
-    // Target 0.496 so the moon is just about to become Full, and the eclipse starts.
-    const targetFractionalPhase = 0.496;
-    if (fractionalPhase > targetFractionalPhase) {
-      cycles += 1;
+    const stageEventMeta = getPreferredLunarStageEventMeta(sourceDate);
+    const stageEvent = stageEventMeta?.event ?? null;
+    if (!Number.isFinite(stageEvent?.startMs)) {
+      return;
     }
-    
-    const targetJulianDate = REFERENCE_NEW_MOON_JULIAN_DATE + (cycles + targetFractionalPhase) * SYNODIC_MONTH_DAYS;
-    const targetDateMs = (targetJulianDate - 2440587.5) * DAY_MS;
-    
+    const targetDateMs = stageEvent.startMs - LUNAR_STAGE_PREVIEW_LEAD_MS;
+
     simulationState.demoPhaseDateMs = targetDateMs;
     setDemoMoonOrbitOffsetFromPhase(targetDateMs);
     setDemoSeasonPhaseFromDate(targetDateMs);

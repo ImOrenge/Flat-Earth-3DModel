@@ -20,8 +20,19 @@ import {
   getMoonHorizontalCoordinates,
   getSunHorizontalCoordinates,
   SEASONAL_EVENT_DEFINITIONS
-} from "./astronomy-utils.js?v=20260320-reality-eclipse-sync1";
-import { getEclipseAlignmentTarget } from "./eclipse-events-utils.js?v=20260320-reality-eclipse-events1";
+} from "./astronomy-utils.js?v=20260324-moon-cycle28";
+import {
+  createEclipseCatalogFromCsvText,
+  formatEclipseEventLabel,
+  getBuiltInEclipseCatalog,
+  getCatalogEventsForYear,
+  getCatalogStats,
+  getCatalogYears,
+  getClosestCatalogYear,
+  getEclipseAlignmentTarget,
+  getEclipseEventTimeMs,
+  getPreferredCatalogEvent
+} from "./eclipse-events-utils.js?v=20260325-eclipse-selector1";
 
 export function createAstronomyController({
   constants,
@@ -29,6 +40,7 @@ export function createAstronomyController({
   ui,
   magneticFieldApi,
   astronomyState,
+  eclipseSelectionState,
   celestialControlState,
   seasonalMoonState,
   analemmaState,
@@ -89,22 +101,8 @@ export function createAstronomyController({
   const DARK_SUN_START_DIRECTION = -1;
   const DARK_SUN_ORBIT_SPEED_FACTOR = 0.72;
   const DARK_SUN_BAND_SPEED_FACTOR = 1.08;
-  const SYNODIC_MONTH_DAYS = 29.530588853;
-  const REALITY_ECLIPSE_MIN_ALIGNMENT = constants.REALITY_ECLIPSE_MIN_ALIGNMENT ?? 0.24;
-  const REALITY_ECLIPSE_MAX_ALIGNMENT_OFFSET_RADIANS = (
-    constants.REALITY_ECLIPSE_MAX_ALIGNMENT_OFFSET_RADIANS ?? (Math.PI * 0.42)
-  );
-  const REALITY_SOLAR_ECLIPSE_PHASE_WINDOW_DAYS = (
-    constants.REALITY_SOLAR_ECLIPSE_PHASE_WINDOW_DAYS ?? 1.6
-  );
-  const REALITY_LUNAR_ECLIPSE_PHASE_WINDOW_DAYS = (
-    constants.REALITY_LUNAR_ECLIPSE_PHASE_WINDOW_DAYS ?? 1.8
-  );
-  const REALITY_SOLAR_ECLIPSE_NODE_LIMIT_DEGREES = (
-    constants.REALITY_SOLAR_ECLIPSE_NODE_LIMIT_DEGREES ?? 1.55
-  );
-  const REALITY_LUNAR_ECLIPSE_NODE_LIMIT_DEGREES = (
-    constants.REALITY_LUNAR_ECLIPSE_NODE_LIMIT_DEGREES ?? 1.2
+  const DARK_SUN_MS_PER_ORBIT_FRAME = (
+    (24 * 3600 * 1000) * constants.ORBIT_SUN_SPEED / (2 * Math.PI)
   );
   let lastSeasonalSunKey = "";
   let lastSolarEclipseState = createSolarEclipseState();
@@ -113,6 +111,40 @@ export function createAstronomyController({
     equator: 0.5,
     south: 0.5
   };
+  const ECLIPSE_TIME_POINT_VALUES = ["start", "peak", "end"];
+
+  function getEclipseTypeLabel(type = "") {
+    switch (type) {
+      case "annular":
+        return i18n.t("eclipseTypeAnnular");
+      case "hybrid":
+        return i18n.t("eclipseTypeHybrid");
+      case "partial":
+        return i18n.t("eclipseTypePartial");
+      case "penumbral":
+        return i18n.t("eclipseTypePenumbral");
+      case "total":
+        return i18n.t("eclipseTypeTotal");
+      default:
+        return type || "-";
+    }
+  }
+
+  function getEclipseKindLabel(kind = "solar") {
+    return i18n.t(kind === "lunar" ? "eclipseKindLunar" : "eclipseKindSolar");
+  }
+
+  function getEclipseTimePointLabel(timePoint = "peak") {
+    switch (timePoint) {
+      case "start":
+        return i18n.t("eclipseTimePointStart");
+      case "end":
+        return i18n.t("eclipseTimePointEnd");
+      case "peak":
+      default:
+        return i18n.t("eclipseTimePointPeak");
+    }
+  }
 
   function sanitizeSeasonalYear(value) {
     const parsed = Number.parseInt(value, 10);
@@ -693,7 +725,7 @@ export function createAstronomyController({
     const corridorProgress = getBodyCorridorProgress(body, centerRadius);
     const macroAngle = source === "demo"
       ? orbitAngleRadians
-      : THREE.MathUtils.degToRad(longitudeDegrees);
+      : -THREE.MathUtils.degToRad(longitudeDegrees);
     const baseHeight = getBodyBaseHeight(body, centerRadius);
 
     tempRadialAxis.set(-Math.cos(macroAngle), 0, Math.sin(macroAngle));
@@ -725,18 +757,6 @@ export function createAstronomyController({
         planarZ
       )
     };
-  }
-
-  function getWrappedPhaseDelta(phaseProgress = 0, targetPhase = 0) {
-    return THREE.MathUtils.euclideanModulo((phaseProgress - targetPhase) + 0.5, 1) - 0.5;
-  }
-
-  function getPhaseWindowFactor(distanceDays = 0, windowDays = 1) {
-    return THREE.MathUtils.clamp(
-      1 - (Math.abs(distanceDays) / Math.max(windowDays, 0.0001)),
-      0,
-      1
-    );
   }
 
   function getShortestAngleDeltaRadians(fromAngle = 0, toAngle = 0) {
@@ -783,70 +803,53 @@ export function createAstronomyController({
     });
   }
 
-  function getRealityEclipseAlignmentState(date) {
+  // 사로스 궤도: 교점 근접도 × 위상 가중치로 태양/달 물리 위치를 직접 보간.
+  // progress 매핑을 거치지 않으므로 corridor·height 불일치가 원천 차단됨.
+  function getDarkSunSarosOrbit(date, { sunRenderState = null, moonRenderState = null } = {}) {
+    const sun = getSunSubpoint(date);
     const moonPhase = getMoonPhase(date);
-    const phaseProgress = THREE.MathUtils.euclideanModulo(moonPhase?.phaseProgress ?? 0, 1);
-    const phaseDeltaToNew = getWrappedPhaseDelta(phaseProgress, 0);
-    const phaseDeltaToFull = getWrappedPhaseDelta(phaseProgress, 0.5);
-    const signedDaysToNew = phaseDeltaToNew * SYNODIC_MONTH_DAYS;
-    const signedDaysToFull = phaseDeltaToFull * SYNODIC_MONTH_DAYS;
-    const solarPhaseFactor = getPhaseWindowFactor(
-      signedDaysToNew,
-      REALITY_SOLAR_ECLIPSE_PHASE_WINDOW_DAYS
-    );
-    const lunarPhaseFactor = getPhaseWindowFactor(
-      signedDaysToFull,
-      REALITY_LUNAR_ECLIPSE_PHASE_WINDOW_DAYS
-    );
-    const nodeLatitudeDegrees = Math.abs(getMoonEclipticLatitudeDegrees(date));
-    const solarNodeFactor = THREE.MathUtils.clamp(
-      1 - (nodeLatitudeDegrees / Math.max(REALITY_SOLAR_ECLIPSE_NODE_LIMIT_DEGREES, 0.0001)),
-      0,
-      1
-    );
-    const lunarNodeFactor = THREE.MathUtils.clamp(
-      1 - (nodeLatitudeDegrees / Math.max(REALITY_LUNAR_ECLIPSE_NODE_LIMIT_DEGREES, 0.0001)),
-      0,
-      1
-    );
-    const solarStrength = Math.pow(solarPhaseFactor, 1.2) * Math.pow(solarNodeFactor, 1.35);
-    const lunarStrength = Math.pow(lunarPhaseFactor, 1.1) * Math.pow(lunarNodeFactor, 1.3);
-    let mode = "none";
-    let strength = 0;
+    const sunAngleRadians = -THREE.MathUtils.degToRad(sun.longitudeDegrees);
+    const orbitAngleRadians = sunAngleRadians + moonPhase.phaseAngleRadians;
 
-    if (solarStrength >= REALITY_ECLIPSE_MIN_ALIGNMENT && solarStrength >= (lunarStrength * 1.05)) {
-      mode = "solar";
-      strength = solarStrength;
-    } else if (lunarStrength >= REALITY_ECLIPSE_MIN_ALIGNMENT) {
-      mode = "lunar";
-      strength = lunarStrength;
+    // 교점 근접도 (황위도 0° = 1.0, 5.145° = 0.0)
+    const nodeLatDeg = getMoonEclipticLatitudeDegrees(date);
+    const nodeProximity = 1 - Math.abs(THREE.MathUtils.clamp(nodeLatDeg / 5.145, -1, 1));
+    const direction = nodeLatDeg >= 0 ? 1 : -1;
+
+    // 위상 가중치: 삭(신월) = solarWeight, 망(보름) = lunarWeight
+    const cosPhase = Math.cos(moonPhase.phaseAngleRadians);
+    const solarWeight = nodeProximity * Math.pow(Math.max(0, cosPhase), 2);
+    const lunarWeight = nodeProximity * Math.pow(Math.max(0, -cosPhase), 2);
+    const totalWeight = solarWeight + lunarWeight;
+
+    // 중립 위치: 태양 corridor 중간, 태양 높이
+    const darkSunCorridor = getBodyCorridorRange("darkSun");
+    const neutralRadius = THREE.MathUtils.lerp(darkSunCorridor.min, darkSunCorridor.max, 0.5);
+    const neutralHeight = getSunOrbitHeight(neutralRadius);
+
+    if (totalWeight <= 0.0001) {
+      return { direction, orbitAngleRadians, centerRadius: neutralRadius, coilHeight: neutralHeight };
     }
 
-    return {
-      lunarStrength,
-      mode,
-      signedDaysToFull,
-      signedDaysToNew,
-      solarStrength,
-      strength
-    };
-  }
+    // 태양/달 render state에서 물리 위치 직접 참조
+    const resolvedSunState = sunRenderState ?? getRealitySunRenderStateAtDate(date);
+    const resolvedMoonState = moonRenderState ?? getRealityMoonRenderStateAtDate(date);
 
-  function getRealityBaselineDarkSunState(date) {
-    const elapsedFrames = (date.getTime() - DARK_SUN_REFERENCE_TIME_MS) / (1000 / 60);
-    const darkSunOrbitSpeed = constants.ORBIT_SUN_SPEED * DARK_SUN_ORBIT_SPEED_FACTOR;
-    const orbitAngleRadians = DARK_SUN_START_ANGLE - (elapsedFrames * darkSunOrbitSpeed);
-    const bandStep = getBodyBandProgressStep("darkSun");
-    const totalDelta = bandStep * elapsedFrames;
-    const linearPos = (2 - DARK_SUN_START_PROGRESS + totalDelta) % 2;
-    const progress = linearPos <= 1 ? linearPos : 2 - linearPos;
-    const direction = linearPos <= 1 ? 1 : -1;
+    const solarRadius = resolvedSunState?.centerRadius ?? neutralRadius;
+    const lunarRadius = resolvedMoonState?.centerRadius ?? neutralRadius;
+    const solarHeight = resolvedSunState?.coilHeight ?? neutralHeight;
+    const lunarHeight = resolvedMoonState?.coilHeight ?? neutralHeight;
+
+    // 가중 평균 → 중립에서 블렌드
+    const blendedRadius = (solarWeight * solarRadius + lunarWeight * lunarRadius) / totalWeight;
+    const blendedHeight = (solarWeight * solarHeight + lunarWeight * lunarHeight) / totalWeight;
+    const blendFactor = THREE.MathUtils.clamp(totalWeight / 0.25, 0, 1);
 
     return {
       direction,
       orbitAngleRadians,
-      orbitMode: "auto",
-      progress
+      centerRadius: THREE.MathUtils.lerp(neutralRadius, blendedRadius, blendFactor),
+      coilHeight: THREE.MathUtils.lerp(neutralHeight, blendedHeight, blendFactor)
     };
   }
 
@@ -860,13 +863,18 @@ export function createAstronomyController({
     return Math.max(2 * Math.asin(contactRatio), 0.0005);
   }
 
-  function getEventAnchoredDarkSunState(date, {
-    baselineState,
+  // 카탈로그 이벤트 앵커링: sarosOrbit 위에 NASA 이벤트 타이밍을 블렌드
+  function getEventAnchoredDarkSunOrbit(date, {
+    sarosOrbit,
     moonRenderState = null,
     sunRenderState = null
   } = {}) {
     const alignment = getEclipseAlignmentTarget({
-      baselineState,
+      baselineState: {
+        orbitAngleRadians: sarosOrbit.orbitAngleRadians,
+        progress: getBodyCorridorProgress("darkSun", sarosOrbit.centerRadius)
+      },
+      catalog: getRuntimeEclipseCatalog(),
       dateMs: date.getTime(),
       moonRenderState,
       sunRenderState
@@ -877,108 +885,39 @@ export function createAstronomyController({
     }
 
     const targetAnchorState = alignment.mode === "solar" ? sunRenderState : moonRenderState;
-    let targetOrbitAngle = alignment.targetOrbitAngleRadians ?? baselineState.orbitAngleRadians;
+    let targetOrbitAngle = alignment.targetOrbitAngleRadians ?? sarosOrbit.orbitAngleRadians;
     const eventType = alignment.eventMeta?.type ?? "";
+
+    // partial/total: 접촉 각도 클램핑
     if (targetAnchorState && (eventType === "partial" || eventType === "total")) {
-      const anchorOrbitAngle = targetAnchorState.orbitAngleRadians ?? baselineState.orbitAngleRadians;
+      const anchorOrbitAngle = targetAnchorState.orbitAngleRadians ?? sarosOrbit.orbitAngleRadians;
       const maxContactOffset = getDarkSunEventContactOffsetRadians(alignment.mode, targetAnchorState);
       const rawOffset = getShortestAngleDeltaRadians(anchorOrbitAngle, targetOrbitAngle);
-      const overlapScale = eventType === "total" ? 0.35 : 0.78;
-      const overlapLimit = maxContactOffset * overlapScale;
-      const clampedOffset = THREE.MathUtils.clamp(rawOffset, -overlapLimit, overlapLimit);
-      targetOrbitAngle = anchorOrbitAngle + clampedOffset;
+      const overlapScale = (eventType === "total" && alignment.mode === "lunar") ? 0 : 0.35;
+      const overlapLimit = maxContactOffset * (eventType === "total" ? overlapScale : 0.78);
+      targetOrbitAngle = anchorOrbitAngle + THREE.MathUtils.clamp(rawOffset, -overlapLimit, overlapLimit);
     }
 
     const blendFactor = THREE.MathUtils.clamp(alignment.blendFactor ?? 0, 0, 1);
+    const targetRadius = targetAnchorState?.centerRadius ?? sarosOrbit.centerRadius;
+    const targetHeight = targetAnchorState?.coilHeight ?? sarosOrbit.coilHeight;
+
     return {
-      direction: alignment.direction ?? baselineState.direction,
+      direction: alignment.direction ?? sarosOrbit.direction,
       eventMeta: alignment.eventMeta ?? null,
-      orbitAngleRadians: lerpAngleRadians(
-        baselineState.orbitAngleRadians,
-        targetOrbitAngle,
-        blendFactor
-      ),
-      orbitMode: "auto",
-      progress: THREE.MathUtils.clamp(
-        THREE.MathUtils.lerp(
-          baselineState.progress,
-          alignment.targetProgress ?? baselineState.progress,
-          blendFactor
-        ),
-        0,
-        1
-      )
+      orbitAngleRadians: lerpAngleRadians(sarosOrbit.orbitAngleRadians, targetOrbitAngle, blendFactor),
+      centerRadius: THREE.MathUtils.lerp(sarosOrbit.centerRadius, targetRadius, blendFactor),
+      coilHeight: THREE.MathUtils.lerp(sarosOrbit.coilHeight, targetHeight, blendFactor)
     };
   }
 
-  function getRealityDarkSunState(date, { sunRenderState = null, moonRenderState = null } = {}) {
-    const baselineState = getRealityBaselineDarkSunState(date);
-    const eventAnchoredState = getEventAnchoredDarkSunState(date, {
-      baselineState,
+  function getRealityDarkSunOrbit(date, { sunRenderState = null, moonRenderState = null } = {}) {
+    const sarosOrbit = getDarkSunSarosOrbit(date, { sunRenderState, moonRenderState });
+    return getEventAnchoredDarkSunOrbit(date, {
+      sarosOrbit,
       moonRenderState,
       sunRenderState
-    });
-    if (eventAnchoredState) {
-      return eventAnchoredState;
-    }
-    const eclipseAlignment = getRealityEclipseAlignmentState(date);
-
-    if (eclipseAlignment.mode === "none") {
-      return baselineState;
-    }
-
-    const modeConfig = eclipseAlignment.mode === "solar"
-      ? {
-        signedDays: eclipseAlignment.signedDaysToNew,
-        windowDays: REALITY_SOLAR_ECLIPSE_PHASE_WINDOW_DAYS
-      }
-      : {
-        signedDays: eclipseAlignment.signedDaysToFull,
-        windowDays: REALITY_LUNAR_ECLIPSE_PHASE_WINDOW_DAYS
-      };
-    const targetRenderState = eclipseAlignment.mode === "solar"
-      ? (sunRenderState ?? getRealitySunRenderStateAtDate(date))
-      : (moonRenderState ?? getRealityMoonRenderStateAtDate(date));
-
-    if (!targetRenderState) {
-      return baselineState;
-    }
-
-    const blendFactor = THREE.MathUtils.clamp(
-      (eclipseAlignment.strength - REALITY_ECLIPSE_MIN_ALIGNMENT) /
-      Math.max(1 - REALITY_ECLIPSE_MIN_ALIGNMENT, 0.0001),
-      0,
-      1
-    );
-    const normalizedPhaseOffset = THREE.MathUtils.clamp(
-      modeConfig.signedDays / Math.max(modeConfig.windowDays, 0.0001),
-      -1,
-      1
-    );
-    const targetOrbitAngle = (
-      (targetRenderState.orbitAngleRadians ?? baselineState.orbitAngleRadians) +
-      (normalizedPhaseOffset * REALITY_ECLIPSE_MAX_ALIGNMENT_OFFSET_RADIANS)
-    );
-    const targetProgress = (
-      targetRenderState.corridorProgress ??
-      targetRenderState.macroProgress ??
-      baselineState.progress
-    );
-
-    return {
-      direction: normalizedPhaseOffset >= 0 ? 1 : -1,
-      orbitAngleRadians: lerpAngleRadians(
-        baselineState.orbitAngleRadians,
-        targetOrbitAngle,
-        blendFactor
-      ),
-      orbitMode: "auto",
-      progress: THREE.MathUtils.clamp(
-        THREE.MathUtils.lerp(baselineState.progress, targetProgress, blendFactor),
-        0,
-        1
-      )
-    };
+    }) ?? sarosOrbit;
   }
 
   function getDarkSunRenderState({
@@ -996,31 +935,38 @@ export function createAstronomyController({
     useExplicitOrbit = true,
     orbitMode = source === "demo" ? simulationState.orbitMode : "auto"
   } = {}) {
-    // Demo keeps explicit orbit. Reality derives dark sun from real sun/moon cycle sync.
-    const darkSunState = source === "demo"
-      ? {
-        // Demo mode: use explicit state from simulationState (independent orbit)
-        direction,
+    if (source === "demo") {
+      // Demo: explicit independent orbit
+      const renderState = getBodyCoilRenderState({
+        body: "darkSun",
         orbitAngleRadians,
         orbitMode,
-        progress
-      }
-      : getRealityDarkSunState(date, {
-        moonRenderState,
-        sunRenderState
+        progress,
+        source: "demo"
       });
+      return { ...renderState, direction, orbitAngleRadians, orbitMode };
+    }
+
+    // Reality: Saros-based physical interpolation — directly blend sun/moon positions.
+    // No progress→corridor mapping; centerRadius and coilHeight come straight from orbit.
+    const orbit = getRealityDarkSunOrbit(date, { moonRenderState, sunRenderState });
+    const orbitProgress = getBodyCorridorProgress("darkSun", orbit.centerRadius);
     const renderState = getBodyCoilRenderState({
       body: "darkSun",
-      orbitAngleRadians: darkSunState.orbitAngleRadians,
-      orbitMode: darkSunState.orbitMode,
-      progress: darkSunState.progress,
-      source: "demo"
+      orbitAngleRadians: orbit.orbitAngleRadians,
+      orbitMode: "auto",
+      progress: orbitProgress,
+      source: "demo"  // use explicit progress, not projectedRadius
     });
+
+    // Override position height with physically blended coilHeight from saros/catalog orbit
     return {
       ...renderState,
-      direction: darkSunState.direction,
-      orbitAngleRadians: darkSunState.orbitAngleRadians,
-      orbitMode: darkSunState.orbitMode
+      coilHeight: orbit.coilHeight,
+      direction: orbit.direction,
+      orbitAngleRadians: orbit.orbitAngleRadians,
+      orbitMode: "auto",
+      position: new THREE.Vector3(renderState.position.x, orbit.coilHeight, renderState.position.z)
     };
   }
 
@@ -1130,6 +1076,372 @@ export function createAstronomyController({
 
   function setObservationInputValue(date) {
     ui.observationTimeEl.value = toDatetimeLocalValue(date);
+  }
+
+  function setSelectOptions(selectEl, options = [], selectedValue = "") {
+    if (!selectEl) {
+      return;
+    }
+
+    const nextOptions = options.map(({ value, label, disabled = false }) => {
+      const option = document.createElement("option");
+      option.value = String(value);
+      option.textContent = label;
+      option.disabled = disabled;
+      return option;
+    });
+
+    selectEl.replaceChildren(...nextOptions);
+    if (nextOptions.length === 0) {
+      selectEl.value = "";
+      return;
+    }
+
+    const resolvedValue = String(selectedValue ?? "");
+    if (nextOptions.some((option) => option.value === resolvedValue)) {
+      selectEl.value = resolvedValue;
+      return;
+    }
+
+    selectEl.value = nextOptions[0].value;
+  }
+
+  function setUploadStatus(tone = "default", key = "eclipseCatalogStatusAwaitingUpload", params = {}) {
+    eclipseSelectionState.uploadStatus = {
+      tone,
+      key,
+      params
+    };
+  }
+
+  function getSelectableEclipseCatalog() {
+    if (eclipseSelectionState.sourceMode === "upload") {
+      return eclipseSelectionState.uploadedCatalog;
+    }
+    return getBuiltInEclipseCatalog();
+  }
+
+  function getRuntimeEclipseCatalog() {
+    if (eclipseSelectionState.sourceMode === "upload" && eclipseSelectionState.uploadedCatalog) {
+      return eclipseSelectionState.uploadedCatalog;
+    }
+    return getBuiltInEclipseCatalog();
+  }
+
+  function getSelectedEclipseMeta() {
+    return reconcileEclipseSelectionState();
+  }
+
+  function reconcileEclipseSelectionState() {
+    const catalog = getSelectableEclipseCatalog();
+    if (!catalog) {
+      eclipseSelectionState.year = "";
+      eclipseSelectionState.eventId = "";
+      eclipseSelectionState.selectedEventMeta = null;
+      return null;
+    }
+
+    const kind = eclipseSelectionState.kind === "lunar" ? "lunar" : "solar";
+    const years = getCatalogYears(catalog, kind);
+    eclipseSelectionState.kind = kind;
+
+    if (years.length === 0) {
+      eclipseSelectionState.year = "";
+      eclipseSelectionState.eventId = "";
+      eclipseSelectionState.selectedEventMeta = null;
+      return null;
+    }
+
+    const year = getClosestCatalogYear(
+      catalog,
+      kind,
+      eclipseSelectionState.year ?? astronomyState.selectedDate.getUTCFullYear()
+    );
+    if (!Number.isFinite(year)) {
+      eclipseSelectionState.year = "";
+      eclipseSelectionState.eventId = "";
+      eclipseSelectionState.selectedEventMeta = null;
+      return null;
+    }
+
+    eclipseSelectionState.year = year;
+    const events = getCatalogEventsForYear(catalog, kind, year);
+    const selectedEvent = getPreferredCatalogEvent(events, eclipseSelectionState.eventId);
+    if (!selectedEvent) {
+      eclipseSelectionState.eventId = "";
+      eclipseSelectionState.selectedEventMeta = null;
+      return null;
+    }
+
+    eclipseSelectionState.eventId = selectedEvent.id;
+    eclipseSelectionState.timePoint = ECLIPSE_TIME_POINT_VALUES.includes(eclipseSelectionState.timePoint)
+      ? eclipseSelectionState.timePoint
+      : "peak";
+
+    const previewMs = getEclipseEventTimeMs(selectedEvent, eclipseSelectionState.timePoint);
+    eclipseSelectionState.selectedEventMeta = Number.isFinite(previewMs)
+      ? {
+        catalog,
+        event: selectedEvent,
+        previewMs,
+        timePoint: eclipseSelectionState.timePoint
+      }
+      : null;
+    return eclipseSelectionState.selectedEventMeta;
+  }
+
+  function syncEclipseCatalogStatusUi() {
+    if (!ui.eclipseCatalogStatusEl) {
+      return;
+    }
+
+    let tone = "default";
+    let messageKey = "eclipseCatalogStatusBuiltIn";
+    let params = {};
+
+    if (eclipseSelectionState.sourceMode === "upload") {
+      tone = eclipseSelectionState.uploadStatus?.tone ?? "default";
+      messageKey = eclipseSelectionState.uploadStatus?.key ?? "eclipseCatalogStatusAwaitingUpload";
+      params = { ...(eclipseSelectionState.uploadStatus?.params ?? {}) };
+      if (params.reasonKey) {
+        params.reason = i18n.t(params.reasonKey);
+        delete params.reasonKey;
+      }
+    } else {
+      params = getCatalogStats(getBuiltInEclipseCatalog());
+    }
+
+    ui.eclipseCatalogStatusEl.textContent = i18n.t(messageKey, params);
+    ui.eclipseCatalogStatusEl.classList.toggle("error", tone === "error");
+  }
+
+  function syncSelectedEclipseDetailUi(selectedMeta = eclipseSelectionState.selectedEventMeta) {
+    const selectedEvent = selectedMeta?.event ?? null;
+    const previewDate = Number.isFinite(selectedMeta?.previewMs)
+      ? new Date(selectedMeta.previewMs)
+      : null;
+    const localTime = previewDate
+      ? i18n.formatDate(previewDate, { dateStyle: "medium", timeStyle: "medium" })
+      : "-";
+    const utcTime = previewDate
+      ? i18n.formatDate(previewDate, { dateStyle: "medium", timeStyle: "medium", timeZone: "UTC" })
+      : "-";
+    const magnitudeParts = [];
+    if (Number.isFinite(selectedEvent?.magnitude)) {
+      magnitudeParts.push(`mag ${selectedEvent.magnitude.toFixed(3)}`);
+    }
+    if (Number.isFinite(selectedEvent?.gamma)) {
+      magnitudeParts.push(`gamma ${selectedEvent.gamma.toFixed(4)}`);
+    }
+
+    if (ui.selectedEclipseKindEl) {
+      ui.selectedEclipseKindEl.textContent = selectedEvent ? getEclipseKindLabel(selectedEvent.kind) : "-";
+    }
+    if (ui.selectedEclipseTypeEl) {
+      ui.selectedEclipseTypeEl.textContent = selectedEvent ? getEclipseTypeLabel(selectedEvent.type) : "-";
+    }
+    if (ui.selectedEclipseLocalEl) {
+      ui.selectedEclipseLocalEl.textContent = localTime;
+    }
+    if (ui.selectedEclipseUtcEl) {
+      ui.selectedEclipseUtcEl.textContent = utcTime;
+    }
+    if (ui.selectedEclipseMagnitudeEl) {
+      ui.selectedEclipseMagnitudeEl.textContent = magnitudeParts.join(" • ") || "-";
+    }
+    if (ui.selectedEclipseSourceEl) {
+      if (ui.selectedEclipseMagnitudeEl) {
+        ui.selectedEclipseMagnitudeEl.textContent = magnitudeParts.join(" / ") || "-";
+      }
+      ui.selectedEclipseSourceEl.textContent = selectedEvent?.sourceId ?? selectedMeta?.catalog?.sourceLabel ?? "-";
+    }
+    if (ui.selectedEclipseSummaryEl) {
+      ui.selectedEclipseSummaryEl.textContent = selectedEvent
+        ? i18n.t("selectedEclipseSummary", {
+          kind: getEclipseKindLabel(selectedEvent.kind),
+          type: getEclipseTypeLabel(selectedEvent.type),
+          timePoint: getEclipseTimePointLabel(selectedMeta.timePoint),
+          localTime,
+          sourceId: selectedEvent.sourceId ?? selectedMeta.catalog?.sourceLabel ?? "-"
+        })
+        : i18n.t("selectedEclipseSummaryEmpty");
+    }
+    if (ui.previewSelectedEclipseButton) {
+      ui.previewSelectedEclipseButton.disabled = !Number.isFinite(selectedMeta?.previewMs);
+    }
+  }
+
+  function syncEclipseSelectorUi() {
+    const selectableCatalog = getSelectableEclipseCatalog();
+    const selectedMeta = reconcileEclipseSelectionState();
+    const years = selectableCatalog
+      ? getCatalogYears(selectableCatalog, eclipseSelectionState.kind)
+      : [];
+    const events = selectableCatalog
+      ? getCatalogEventsForYear(selectableCatalog, eclipseSelectionState.kind, eclipseSelectionState.year)
+      : [];
+    const locale = i18n.getLocale?.() ?? "en-US";
+
+    setSelectOptions(ui.eclipseCatalogSourceEl, [
+      { value: "builtin", label: i18n.t("eclipseDataSourceBuiltIn") },
+      { value: "upload", label: i18n.t("eclipseDataSourceUpload") }
+    ], eclipseSelectionState.sourceMode);
+
+    setSelectOptions(ui.eclipseKindSelectEl, [
+      { value: "solar", label: i18n.t("eclipseKindSolar") },
+      { value: "lunar", label: i18n.t("eclipseKindLunar") }
+    ], eclipseSelectionState.kind);
+
+    setSelectOptions(
+      ui.eclipseYearSelectEl,
+      years.map((year) => ({ value: String(year), label: String(year) })),
+      String(eclipseSelectionState.year ?? "")
+    );
+
+    setSelectOptions(
+      ui.eclipseEventSelectEl,
+      events.map((event) => ({
+        value: event.id,
+        label: formatEclipseEventLabel(event, {
+          locale,
+          kindLabels: {
+            solar: i18n.t("eclipseKindSolar"),
+            lunar: i18n.t("eclipseKindLunar")
+          },
+          typeLabels: {
+            annular: i18n.t("eclipseTypeAnnular"),
+            hybrid: i18n.t("eclipseTypeHybrid"),
+            partial: i18n.t("eclipseTypePartial"),
+            penumbral: i18n.t("eclipseTypePenumbral"),
+            total: i18n.t("eclipseTypeTotal")
+          }
+        })
+      })),
+      eclipseSelectionState.eventId
+    );
+
+    setSelectOptions(ui.eclipseTimePointSelectEl, ECLIPSE_TIME_POINT_VALUES.map((timePoint) => ({
+      value: timePoint,
+      label: getEclipseTimePointLabel(timePoint)
+    })), eclipseSelectionState.timePoint);
+
+    if (ui.eclipseUploadFieldEl) {
+      ui.eclipseUploadFieldEl.hidden = eclipseSelectionState.sourceMode !== "upload";
+    }
+    if (ui.eclipseCatalogUploadEl) {
+      ui.eclipseCatalogUploadEl.disabled = eclipseSelectionState.sourceMode !== "upload";
+    }
+    if (ui.eclipseYearSelectEl) {
+      ui.eclipseYearSelectEl.disabled = years.length === 0;
+    }
+    if (ui.eclipseEventSelectEl) {
+      ui.eclipseEventSelectEl.disabled = events.length === 0;
+    }
+    if (ui.eclipseTimePointSelectEl) {
+      ui.eclipseTimePointSelectEl.disabled = !selectedMeta;
+    }
+
+    syncEclipseCatalogStatusUi();
+    syncSelectedEclipseDetailUi(selectedMeta);
+  }
+
+  function previewSelectedEclipse() {
+    const selectedMeta = reconcileEclipseSelectionState();
+    if (!Number.isFinite(selectedMeta?.previewMs)) {
+      syncEclipseSelectorUi();
+      return false;
+    }
+
+    const nextDate = new Date(selectedMeta.previewMs);
+    setObservationInputValue(nextDate);
+    enableRealityMode({ live: false, date: nextDate });
+    syncAstronomyControls();
+    syncEclipseSelectorUi();
+    return true;
+  }
+
+  function setEclipseCatalogSource(nextSourceMode = "builtin") {
+    eclipseSelectionState.sourceMode = nextSourceMode === "upload" ? "upload" : "builtin";
+    syncEclipseSelectorUi();
+    if (eclipseSelectionState.selectedEventMeta) {
+      previewSelectedEclipse();
+    }
+  }
+
+  function setSelectedEclipseKind(nextKind = "solar") {
+    eclipseSelectionState.kind = nextKind === "lunar" ? "lunar" : "solar";
+    eclipseSelectionState.eventId = "";
+    syncEclipseSelectorUi();
+    if (eclipseSelectionState.selectedEventMeta) {
+      previewSelectedEclipse();
+    }
+  }
+
+  function setSelectedEclipseYear(nextYear) {
+    eclipseSelectionState.year = Number.parseInt(nextYear, 10);
+    eclipseSelectionState.eventId = "";
+    syncEclipseSelectorUi();
+    if (eclipseSelectionState.selectedEventMeta) {
+      previewSelectedEclipse();
+    }
+  }
+
+  function setSelectedEclipseEvent(nextEventId = "") {
+    eclipseSelectionState.eventId = nextEventId;
+    syncEclipseSelectorUi();
+    if (eclipseSelectionState.selectedEventMeta) {
+      previewSelectedEclipse();
+    }
+  }
+
+  function setSelectedEclipseTimePoint(nextTimePoint = "peak") {
+    eclipseSelectionState.timePoint = ECLIPSE_TIME_POINT_VALUES.includes(nextTimePoint) ? nextTimePoint : "peak";
+    syncEclipseSelectorUi();
+    if (eclipseSelectionState.selectedEventMeta) {
+      previewSelectedEclipse();
+    }
+  }
+
+  async function loadEclipseCsv(file) {
+    if (!file) {
+      return false;
+    }
+
+    try {
+      const csvText = await file.text();
+      const { catalog, diagnostics } = createEclipseCatalogFromCsvText(csvText, {
+        sourceLabel: file.name || i18n.t("eclipseDataSourceUpload")
+      });
+      if (!catalog) {
+        setUploadStatus("error", "eclipseCatalogStatusUploadFailed", {
+          fileName: file.name || "upload.csv",
+          reasonKey: diagnostics.totalRows > 0
+            ? "eclipseCsvErrorNoValidRows"
+            : "eclipseCsvErrorEmpty"
+        });
+        syncEclipseSelectorUi();
+        return false;
+      }
+
+      eclipseSelectionState.uploadedCatalog = catalog;
+      eclipseSelectionState.sourceMode = "upload";
+      eclipseSelectionState.year = astronomyState.selectedDate.getUTCFullYear();
+      eclipseSelectionState.eventId = "";
+      setUploadStatus("default", "eclipseCatalogStatusUploadLoaded", {
+        fileName: file.name || "upload.csv",
+        ...getCatalogStats(catalog)
+      });
+      syncEclipseSelectorUi();
+      previewSelectedEclipse();
+      return true;
+    } catch {
+      setUploadStatus("error", "eclipseCatalogStatusUploadFailed", {
+        fileName: file?.name || "upload.csv",
+        reasonKey: "eclipseCsvErrorRead"
+      });
+      syncEclipseSelectorUi();
+      return false;
+    }
   }
 
   function syncCelestialMotionUi() {
@@ -2023,6 +2335,7 @@ export function createAstronomyController({
     resetSunTrail();
     resetMoonTrail();
     refreshAstronomyView(date);
+    syncAstronomyControls();
   }
 
   function disableRealityMode() {
@@ -2037,6 +2350,7 @@ export function createAstronomyController({
     syncAnalemmaUi(astronomyState.selectedDate, true);
     syncSkyAnalemmaUi(astronomyState.selectedDate, true);
     updateOrbitModeUi();
+    syncAstronomyControls();
   }
 
   function refreshLocalizedUi() {
@@ -2044,6 +2358,7 @@ export function createAstronomyController({
     syncDayNightOverlayUi();
     syncAstronomyControls();
     syncSolarEclipseUi(lastSolarEclipseState);
+    syncEclipseSelectorUi();
     syncSeasonalMoonUi();
     syncSeasonalSunUi(true);
     syncAnalemmaUi(activeDate, true);
@@ -2085,6 +2400,8 @@ export function createAstronomyController({
     enableRealityMode({ live: false, date: audit.date });
   }
 
+  syncEclipseSelectorUi();
+
   return {
     applyAstronomySnapshot,
     applyObservationTimeSelection,
@@ -2095,6 +2412,9 @@ export function createAstronomyController({
     getBodyCoilRenderState,
     getCurrentOrbitRadius,
     getDarkSunRenderState,
+    getGeoFromProjectedPosition,
+    getRuntimeEclipseCatalog,
+    getSelectedEclipseMeta,
     getMoonBaseHeight,
     getMoonRenderState,
     getSunDisplayHorizontalFromPosition,
@@ -2105,12 +2425,20 @@ export function createAstronomyController({
     refreshTrailsForCurrentMode,
     resetMoonTrail,
     resetSunTrail,
+    loadEclipseCsv,
+    previewSelectedEclipse,
     setObservationInputValue,
+    setEclipseCatalogSource,
+    setSelectedEclipseEvent,
+    setSelectedEclipseKind,
+    setSelectedEclipseTimePoint,
+    setSelectedEclipseYear,
     updateAstronomyUi,
     syncAstronomyControls,
     syncAnalemmaUi,
     syncSkyAnalemmaUi,
     syncDayNightOverlayUi,
+    syncEclipseSelectorUi,
     syncSolarEclipseUi,
     syncSeasonalMoonUi,
     syncSeasonalSunUi,

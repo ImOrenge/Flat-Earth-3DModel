@@ -30,7 +30,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="./styles.css?v=20260322-topview-zodiac4">
+    <link rel="stylesheet" href="./styles.css?v=20260325-eclipse-selector1">
 </head>
 <body>
   <div class="app-shell">
@@ -386,7 +386,7 @@
               <section class="moon-phase-panel" id="moon-phase-panel">
                 <p class="orbit-title" data-i18n="moonPhasePanelTitle">Moon Phase Wheel</p>
                 <p class="sync-copy subtle moon-phase-copy" data-i18n="moonPhasePanelCopy">
-                  The same 360deg / 16-step phase value drives this chart and the rendered moon.
+                  The same 360deg / 28-day cycle value drives this chart and the rendered moon.
                 </p>
                 <div class="moon-phase-visual">
                   <img
@@ -403,15 +403,15 @@
                 <div class="coord-grid moon-phase-grid">
                   <div class="coord-card">
                     <span class="coord-label" data-i18n="moonPhaseCurrentLabel">Current Phase</span>
-                    <strong class="coord-value" id="moon-phase-label">Full Moon</strong>
+                    <strong class="coord-value" id="moon-phase-label">New Moon</strong>
                   </div>
                   <div class="coord-card">
                     <span class="coord-label" data-i18n="moonPhaseDegreesLabel">Phase Angle</span>
                     <strong class="coord-value" id="moon-phase-degrees">0.0deg</strong>
                   </div>
                   <div class="coord-card">
-                    <span class="coord-label" data-i18n="moonPhaseStepLabel">Chart Step</span>
-                    <strong class="coord-value" id="moon-phase-step">1 / 16</strong>
+                    <span class="coord-label" data-i18n="moonPhaseStepLabel">Cycle Day</span>
+                    <strong class="coord-value" id="moon-phase-step">1 / 28</strong>
                   </div>
                   <div class="coord-card">
                     <span class="coord-label" data-i18n="moonPhaseDirectionLabel">Cycle Direction</span>
@@ -429,6 +429,70 @@
             </p>
             <div class="hud-panel-home" id="solar-eclipse-panel-home">
               <section class="sun-audit-panel" id="solar-eclipse-panel">
+                <div class="eclipse-selector-panel">
+                  <p class="orbit-title" data-i18n="eclipseSelectorTitle">Eclipse Event Selector</p>
+                  <div class="eclipse-selector-grid">
+                    <label class="field" for="eclipse-catalog-source">
+                      <span class="field-label" data-i18n="eclipseDataSourceLabel">Data Source</span>
+                      <select class="select-input" id="eclipse-catalog-source"></select>
+                    </label>
+                    <label class="field" for="eclipse-kind-select">
+                      <span class="field-label" data-i18n="eclipseKindLabel">Eclipse Type</span>
+                      <select class="select-input" id="eclipse-kind-select"></select>
+                    </label>
+                    <label class="field" for="eclipse-year-select">
+                      <span class="field-label" data-i18n="eclipseYearLabel">Year</span>
+                      <select class="select-input" id="eclipse-year-select"></select>
+                    </label>
+                    <label class="field" for="eclipse-event-select">
+                      <span class="field-label" data-i18n="eclipseEventLabel">Event</span>
+                      <select class="select-input" id="eclipse-event-select"></select>
+                    </label>
+                    <label class="field" for="eclipse-timepoint-select">
+                      <span class="field-label" data-i18n="eclipseTimePointLabel">Moment</span>
+                      <select class="select-input" id="eclipse-timepoint-select"></select>
+                    </label>
+                  </div>
+                  <label class="field eclipse-upload-field" id="eclipse-upload-field" for="eclipse-catalog-upload" hidden>
+                    <span class="field-label" data-i18n="eclipseUploadLabel">Upload CSV</span>
+                    <input class="file-input" id="eclipse-catalog-upload" type="file" accept=".csv,text/csv">
+                  </label>
+                  <p class="sync-copy subtle" id="eclipse-catalog-status">
+                    Built-in NASA eclipse catalog is active.
+                  </p>
+                  <div class="coord-grid eclipse-selected-grid">
+                    <div class="coord-card">
+                      <span class="coord-label" data-i18n="eclipseDetailKind">Kind</span>
+                      <strong class="coord-value" id="selected-eclipse-kind">-</strong>
+                    </div>
+                    <div class="coord-card">
+                      <span class="coord-label" data-i18n="eclipseDetailType">Type</span>
+                      <strong class="coord-value" id="selected-eclipse-type">-</strong>
+                    </div>
+                    <div class="coord-card">
+                      <span class="coord-label" data-i18n="eclipseDetailLocalTime">Local Time</span>
+                      <strong class="coord-value" id="selected-eclipse-local">-</strong>
+                    </div>
+                    <div class="coord-card">
+                      <span class="coord-label" data-i18n="eclipseDetailUtcTime">UTC Time</span>
+                      <strong class="coord-value" id="selected-eclipse-utc">-</strong>
+                    </div>
+                    <div class="coord-card">
+                      <span class="coord-label" data-i18n="eclipseDetailMagnitude">Magnitude / Gamma</span>
+                      <strong class="coord-value" id="selected-eclipse-magnitude">-</strong>
+                    </div>
+                    <div class="coord-card">
+                      <span class="coord-label" data-i18n="eclipseDetailSource">Source</span>
+                      <strong class="coord-value" id="selected-eclipse-source">-</strong>
+                    </div>
+                  </div>
+                  <p class="sync-copy" id="selected-eclipse-summary">
+                    Select an eclipse event to jump the observation clock to that moment.
+                  </p>
+                  <div class="button-row compact">
+                    <button class="button secondary compact-button" id="preview-selected-eclipse" type="button" data-i18n="previewSelectedEclipseButton">Preview Selected Eclipse</button>
+                  </div>
+                </div>
                 <p class="orbit-title" data-i18n="solarEclipseTitle">Solar Eclipse</p>
                 <div class="coord-grid">
                   <div class="coord-card">
@@ -838,6 +902,6 @@
     </div>
   </div>
 
-    <script type="module" src="./app.js?v=20260322-topview-zodiac6"></script>
+    <script type="module" src="./app.js?v=20260325-eclipse-selector1"></script>
   </body>
 </html>

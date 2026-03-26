@@ -33,12 +33,24 @@ export function createMagneticFieldController({
   const domeClearance = scaleDimension(0.1);
   const outerMargin = scaleDimension(0.18);
   const maxPlanarRadius = constants.RIM_INNER_RADIUS - outerMargin;
-  const torusHoleRadius = constants.DISC_RADIUS * ((90 - ARCTIC_CIRCLE_LATITUDE) / 180);
-  const torusOuterRadius = constants.DISC_RADIUS * 1.12;
+  const torusHoleRadius = constants.DISC_RADIUS * ((90 - ARCTIC_CIRCLE_LATITUDE) / 180) * 0.94;
+  const torusOuterRadius = maxPlanarRadius * 0.99;
   const torusCenterRadius = (torusHoleRadius + torusOuterRadius) * 0.5;
-  const torusMinorRadius = (torusOuterRadius - torusHoleRadius) * 0.53;
-  const torusVerticalRadius = torusMinorRadius * 1.618033988749895; // 황금비 토러스 단면
-  const torusCenterY = scaleDimension(0.38);
+  const torusMinorRadius = (torusOuterRadius - torusHoleRadius) * 0.47;
+  const torusVerticalRadius = torusMinorRadius * 1.12; // Re-expand the torus while keeping it below the dome.
+  const torusCenterY = constants.POLARIS_HEIGHT - torusVerticalRadius;
+  const magneticFieldTorusConfigs = [
+    {
+      centerY: torusCenterY,
+      spiralDirection: 1,
+      parityOffset: 0
+    },
+    {
+      centerY: -torusCenterY,
+      spiralDirection: -1,
+      parityOffset: 1
+    }
+  ];
   const secondaryCoilBottomRadius = scaleDimension(0.08);
   const secondaryCoilTopRadius = scaleDimension(0.34);
   const coilStartY = surfaceHeight + scaleDimension(0.04);
@@ -62,11 +74,12 @@ export function createMagneticFieldController({
       yEnd: secondaryCoilTopY - scaleDimension(0.18)
     }
   };
-  const magneticFieldLineCount = (
+  const magneticFieldLinesPerTorus = (
     MAGNETIC_FIELD_MERIDIAN_LOOP_COUNT +
     MAGNETIC_FIELD_RING_LOOP_COUNT +
     MAGNETIC_FIELD_SPIRAL_LOOP_COUNT
   );
+  const magneticFieldLineCount = magneticFieldLinesPerTorus * magneticFieldTorusConfigs.length;
 
   const magneticFieldGroup = new THREE.Group();
   const magneticAxisGroup = new THREE.Group();
@@ -169,12 +182,12 @@ export function createMagneticFieldController({
     return getDomeAlignedHeight(0) - scaleDimension(0.06);
   }
 
-  function createToroidalPoint(angleRadians, profileRadians) {
+  function createToroidalPoint(angleRadians, profileRadians, fieldConfig) {
     const clampedProfile = THREE.MathUtils.euclideanModulo(profileRadians, Math.PI * 2);
     const radius = torusCenterRadius + (torusMinorRadius * Math.cos(clampedProfile));
     return new THREE.Vector3(
       -Math.cos(angleRadians) * radius,
-      torusCenterY + (torusVerticalRadius * Math.sin(clampedProfile)),
+      fieldConfig.centerY + (torusVerticalRadius * Math.sin(clampedProfile)),
       Math.sin(angleRadians) * radius
     );
   }
@@ -196,17 +209,26 @@ export function createMagneticFieldController({
     return upperHalf ? baseProfile : ((Math.PI * 2) - baseProfile);
   }
 
-  function getPineconeSpiralProfile(angleRadians, phaseOffset) {
-    const primaryWave = Math.sin((angleRadians * MAGNETIC_FIELD_SPIRAL_PRIMARY_WAVE_FREQUENCY) + phaseOffset);
+  function getPineconeSpiralProfile(angleRadians, phaseOffset, spiralDirection = 1) {
+    const directedAngle = angleRadians * spiralDirection;
+    const primaryWave = Math.sin((directedAngle * MAGNETIC_FIELD_SPIRAL_PRIMARY_WAVE_FREQUENCY) + phaseOffset);
     const secondaryWave = Math.sin(
-      (angleRadians * MAGNETIC_FIELD_SPIRAL_SECONDARY_WAVE_FREQUENCY) - (phaseOffset * 0.5)
+      (directedAngle * MAGNETIC_FIELD_SPIRAL_SECONDARY_WAVE_FREQUENCY) - (phaseOffset * 0.5)
     );
     return (
       phaseOffset +
-      (angleRadians * MAGNETIC_FIELD_SPIRAL_TURNS) +
+      (directedAngle * MAGNETIC_FIELD_SPIRAL_TURNS) +
       (primaryWave * MAGNETIC_FIELD_SPIRAL_PRIMARY_WAVE_AMPLITUDE) +
       (secondaryWave * MAGNETIC_FIELD_SPIRAL_SECONDARY_WAVE_AMPLITUDE)
     );
+  }
+
+  function createPineconeSpiralSample(angleRadians, phaseOffset, fieldConfig) {
+    const profileRadians = getPineconeSpiralProfile(angleRadians, phaseOffset, fieldConfig.spiralDirection);
+    return {
+      point: createToroidalPoint(angleRadians, profileRadians, fieldConfig),
+      profileRadians
+    };
   }
 
   function addFieldLine({
@@ -251,8 +273,8 @@ export function createMagneticFieldController({
     magneticFieldGroup.add(line);
   }
 
-  function buildToroidalFieldLines() {
-    let lineIndex = 0;
+  function buildToroidalFieldLines(fieldConfig, startingLineIndex = 0) {
+    let lineIndex = startingLineIndex;
 
     for (let meridianIndex = 0; meridianIndex < MAGNETIC_FIELD_MERIDIAN_LOOP_COUNT; meridianIndex += 1) {
       const angleRadians = meridianIndex * MAGNETIC_FIELD_RADIAL_GUIDE_STEP;
@@ -260,17 +282,17 @@ export function createMagneticFieldController({
       addFieldLine({
         lineIndex,
         lineFamilyValue: 0,
-        lineParityValue: meridianIndex % 2,
+        lineParityValue: (meridianIndex + fieldConfig.parityOffset) % 2,
         lineEmphasisValue,
         pointFactory(segmentProgress, segmentIndex) {
           if (segmentIndex === MAGNETIC_FIELD_SEGMENTS) {
             return {
-              point: createToroidalPoint(angleRadians, 0),
+              point: createToroidalPoint(angleRadians, 0, fieldConfig),
               fallbackAngle: angleRadians
             };
           }
           return {
-            point: createToroidalPoint(angleRadians, segmentProgress * Math.PI * 2),
+            point: createToroidalPoint(angleRadians, segmentProgress * Math.PI * 2, fieldConfig),
             fallbackAngle: angleRadians
           };
         }
@@ -290,18 +312,18 @@ export function createMagneticFieldController({
         addFieldLine({
           lineIndex,
           lineFamilyValue: 1,
-          lineParityValue: (guideIndex + profileIndex) % 2,
+          lineParityValue: (guideIndex + profileIndex + fieldConfig.parityOffset) % 2,
           lineEmphasisValue,
           pointFactory(segmentProgress, segmentIndex) {
             const angleRadians = segmentProgress * Math.PI * 2;
             if (segmentIndex === MAGNETIC_FIELD_SEGMENTS) {
               return {
-                point: createToroidalPoint(0, profileRadians),
+                point: createToroidalPoint(0, profileRadians, fieldConfig),
                 fallbackAngle: 0
               };
             }
             return {
-              point: createToroidalPoint(angleRadians, profileRadians),
+              point: createToroidalPoint(angleRadians, profileRadians, fieldConfig),
               fallbackAngle: angleRadians
             };
           }
@@ -313,7 +335,7 @@ export function createMagneticFieldController({
     return lineIndex;
   }
 
-  function buildSpiralOverlayLines(startingLineIndex = 0) {
+  function buildSpiralOverlayLines(fieldConfig, startingLineIndex = 0) {
     let lineIndex = startingLineIndex;
 
     for (let spiralIndex = 0; spiralIndex < MAGNETIC_FIELD_SPIRAL_LOOP_COUNT; spiralIndex += 1) {
@@ -323,22 +345,16 @@ export function createMagneticFieldController({
       addFieldLine({
         lineIndex,
         lineFamilyValue: spiralIndex % 2,
-        lineParityValue: spiralIndex % 2,
+        lineParityValue: (spiralIndex + fieldConfig.parityOffset) % 2,
         lineEmphasisValue,
         renderOrderValue: 19,
         pointFactory(segmentProgress, segmentIndex) {
-          const angleRadians = segmentProgress * Math.PI * 2;
-          if (segmentIndex === MAGNETIC_FIELD_SEGMENTS) {
-            return {
-              point: createToroidalPoint(0, getPineconeSpiralProfile(0, phaseOffset)),
-              fallbackAngle: 0
-            };
-          }
+          const angleRadians = segmentIndex === MAGNETIC_FIELD_SEGMENTS
+            ? 0
+            : (segmentProgress * Math.PI * 2);
+          const spiralSample = createPineconeSpiralSample(angleRadians, phaseOffset, fieldConfig);
           return {
-            point: createToroidalPoint(
-              angleRadians,
-              getPineconeSpiralProfile(angleRadians, phaseOffset)
-            ),
+            point: spiralSample.point,
             fallbackAngle: angleRadians
           };
         }
@@ -373,9 +389,9 @@ export function createMagneticFieldController({
   }
 
   function syncVisibility() {
-    const visible = magneticFieldState.enabled && !walkerState.enabled;
-    magneticFieldGroup.visible = visible;
-    magneticAxisGroup.visible = visible;
+    const fieldVisible = magneticFieldState.enabled && !walkerState.enabled;
+    magneticFieldGroup.visible = fieldVisible;
+    magneticAxisGroup.visible = fieldVisible;
   }
 
   function syncUi() {
@@ -395,12 +411,16 @@ export function createMagneticFieldController({
   }
 
   function update(timeMs) {
-    lineMaterial.uniforms.uTime.value = timeMs * 0.001;
+    const timeSeconds = timeMs * 0.001;
+    lineMaterial.uniforms.uTime.value = timeSeconds;
     syncVisibility();
   }
 
-  const spiralLineIndex = buildToroidalFieldLines();
-  buildSpiralOverlayLines(spiralLineIndex);
+  let lineIndex = 0;
+  magneticFieldTorusConfigs.forEach((fieldConfig) => {
+    lineIndex = buildToroidalFieldLines(fieldConfig, lineIndex);
+    lineIndex = buildSpiralOverlayLines(fieldConfig, lineIndex);
+  });
   scalableStage.add(magneticFieldGroup);
   scalableStage.add(magneticAxisGroup);
   syncUi();

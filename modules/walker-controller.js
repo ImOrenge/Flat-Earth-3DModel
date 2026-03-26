@@ -2,7 +2,7 @@ import * as THREE from "../vendor/three.module.js";
 import {
   getDisplayLocalSolarAltitudeDegreesFromModel,
   getLocalLightSummaryFromAltitude,
-} from "./astronomy-utils.js?v=20260312-darksun-eclipse1";
+} from "./astronomy-utils.js?v=20260324-moon-cycle28";
 import {
   formatGeoPair,
   getGeoFromProjectedPosition,
