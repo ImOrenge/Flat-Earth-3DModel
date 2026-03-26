@@ -66,11 +66,6 @@ export function createEclipseController(deps) {
     renderer,
     observerDarkSunRim,
     exitFirstPersonMode,
-    realitySyncEl,
-    realityLiveEl,
-    setDemoMoonOrbitOffsetFromPhase,
-    setDemoSeasonPhaseFromDate,
-    syncDemoMoonOrbitToSun,
     updateSunVisualEffects
   } = deps;
 
@@ -175,6 +170,9 @@ export function createEclipseController(deps) {
     toastShownForCurrentEvent: false,
     toastStateLabelKey: "lunarEclipseStatePartial"
   };
+  function isAcceleratedRealityMode() {
+    return !astronomyState.enabled && simulationState.useRealityTimelineInDemo !== false;
+  }
   const solarEclipsePresentationMaskState = {
     maskCenterNdc: new THREE.Vector2(),
     maskRadius: 0,
@@ -687,12 +685,30 @@ export function createEclipseController(deps) {
   }
   
   function getCurrentUiSnapshot() {
-    if (astronomyState.enabled) {
-      const observationDate = astronomyState.live ? new Date() : astronomyState.selectedDate;
+    if (astronomyState.enabled || isAcceleratedRealityMode()) {
+      const observationDate = astronomyState.enabled
+        ? (astronomyState.live ? new Date() : astronomyState.selectedDate)
+        : new Date(
+          Number.isFinite(simulationState.simulatedDateMs)
+            ? simulationState.simulatedDateMs
+            : (
+              Number.isFinite(simulationState.demoPhaseDateMs)
+                ? simulationState.demoPhaseDateMs
+                : astronomyState.selectedDate.getTime()
+            )
+        );
       return astronomyApi.getAstronomySnapshot(observationDate);
     }
-  
-    const demoPhaseDate = new Date(simulationState.demoPhaseDateMs);
+
+    const demoPhaseDate = new Date(
+      Number.isFinite(simulationState.simulatedDateMs)
+        ? simulationState.simulatedDateMs
+        : (
+          Number.isFinite(simulationState.demoPhaseDateMs)
+            ? simulationState.demoPhaseDateMs
+            : astronomyState.selectedDate.getTime()
+        )
+    );
     const sunRenderState = astronomyApi.getSunRenderState({
       orbitAngleRadians: simulationState.orbitSunAngle,
       orbitMode: simulationState.orbitMode,
@@ -792,7 +808,7 @@ export function createEclipseController(deps) {
   }
   
   function predictUpcomingSolarEclipseWindowStartFrameCount(frameCount = SOLAR_ECLIPSE_SLOW_LOOKAHEAD_FRAMES) {
-    if (astronomyState.enabled || !astronomyApi) {
+    if (astronomyState.enabled || isAcceleratedRealityMode() || !astronomyApi) {
       return Number.POSITIVE_INFINITY;
     }
   
@@ -936,7 +952,7 @@ export function createEclipseController(deps) {
   }
   
   function updateSolarEclipseAnimationPacing(deltaSeconds = 0) {
-    const targetFactor = astronomyState.enabled
+    const targetFactor = astronomyState.enabled || isAcceleratedRealityMode()
       ? 1
       : getSolarEclipseAnimationTargetFactor(solarEclipseEventState.currentState);
     const blend = THREE.MathUtils.clamp(
@@ -963,6 +979,7 @@ export function createEclipseController(deps) {
       ? 0
       : (
         !astronomyState.enabled &&
+        !isAcceleratedRealityMode() &&
         nextSolarEclipse.eclipseTier !== SOLAR_ECLIPSE_TIER_NONE
           ? predictUpcomingSolarEclipseWindowStartFrameCount(SOLAR_ECLIPSE_SLOW_LOOKAHEAD_FRAMES)
           : Number.POSITIVE_INFINITY
@@ -2639,7 +2656,7 @@ export function createEclipseController(deps) {
   }
   
   function inferStageSunBandDirection(sourceDate, currentSunRenderState) {
-    if (!astronomyState.enabled || !sourceDate || !astronomyApi) {
+    if ((!astronomyState.enabled && !isAcceleratedRealityMode()) || !sourceDate || !astronomyApi) {
       return simulationState.sunBandDirection ?? 1;
     }
   
@@ -2992,24 +3009,27 @@ export function createEclipseController(deps) {
       exitFirstPersonMode();
     }
   
-    if (astronomyState.enabled) {
-      realitySyncEl.checked = false;
-      realityLiveEl.checked = false;
-      astronomyApi.disableRealityMode();
-    }
-  
     celestialTrackingCameraApi.setTarget("sun");
     cameraApi.updateCamera();
   
     const activeSnapshot = getCurrentUiSnapshot();
-    const sourceDate = activeSnapshot?.date ?? new Date();
-    const activeSunRenderState = activeSnapshot?.sunRenderState ?? null;
-    const activeDarkSunRenderState = activeSnapshot?.darkSunRenderState ?? null;
+    const selectedMeta = astronomyApi.getSelectedEclipseMeta?.() ?? null;
+    const selectedEventStartMs = selectedMeta?.event?.startMs;
+    const sourceDate = Number.isFinite(selectedEventStartMs)
+      ? new Date(selectedEventStartMs - (20 * 60 * 1000))
+      : (activeSnapshot?.date ?? new Date());
+    if (astronomyState.enabled) {
+      astronomyApi.enableRealityMode({ live: false, date: sourceDate });
+    } else {
+      astronomyApi.setAcceleratedTimelineAnchor(sourceDate, { live: false });
+    }
+    const sourceSnapshot = astronomyApi.getAstronomySnapshot(sourceDate);
+    const activeSunRenderState = sourceSnapshot?.sunRenderState ?? activeSnapshot?.sunRenderState ?? null;
+    const activeDarkSunRenderState = sourceSnapshot?.darkSunRenderState ?? activeSnapshot?.darkSunRenderState ?? null;
+    const activeMoonRenderState = sourceSnapshot?.moonRenderState ?? activeSnapshot?.moonRenderState ?? null;
     const sunAngleRadians = activeSunRenderState?.orbitAngleRadians ?? Math.atan2(orbitSun.position.z, -orbitSun.position.x);
     const sunProgress = activeSunRenderState?.corridorProgress ?? activeSunRenderState?.macroProgress ?? simulationState.sunBandProgress ?? 0.5;
-    const sunDirection = astronomyState.enabled
-      ? inferStageSunBandDirection(sourceDate, activeSunRenderState)
-      : (simulationState.sunBandDirection ?? 1);
+    const sunDirection = inferStageSunBandDirection(sourceDate, activeSunRenderState);
     const phaseOffsetRadians = Number.isFinite(activeDarkSunRenderState?.orbitAngleRadians)
       ? (
         activeDarkSunRenderState.orbitAngleRadians +
@@ -3075,17 +3095,25 @@ export function createEclipseController(deps) {
       ? targetDarkSunRenderState.orbitAngleRadians
       : (targetSunAngleRadians + constants.DARK_SUN_STAGE_START_OFFSET_RADIANS);
   
-    simulationState.demoPhaseDateMs = sourceDate.getTime();
+    simulationState.simulatedDateMs = sourceDate.getTime();
+    simulationState.timelineAnchorDateMs = simulationState.simulatedDateMs;
+    simulationState.timelineAnchorNowMs = performance.now();
+    simulationState.demoPhaseDateMs = simulationState.simulatedDateMs;
+    simulationState.demoAnchorSimMs = simulationState.timelineAnchorDateMs;
+    simulationState.demoAnchorRealMs = simulationState.timelineAnchorNowMs;
     simulationState.orbitMode = "auto";
     resetDarkSunStageState();
     simulationState.darkSunStageAltitudeLock = true;
     simulationState.darkSunStageHasEclipsed = false;
-    setDemoMoonOrbitOffsetFromPhase(simulationState.demoPhaseDateMs);
-    setDemoSeasonPhaseFromDate(simulationState.demoPhaseDateMs);
     simulationState.orbitSunAngle = targetSunAngleRadians;
     simulationState.sunBandProgress = targetSunProgress;
     simulationState.sunBandDirection = targetSunDirection;
-    syncDemoMoonOrbitToSun();
+    simulationState.orbitMoonAngle = activeMoonRenderState?.orbitAngleRadians ?? simulationState.orbitMoonAngle;
+    simulationState.moonBandProgress = THREE.MathUtils.clamp(
+      activeMoonRenderState?.corridorProgress ?? activeMoonRenderState?.macroProgress ?? simulationState.moonBandProgress ?? 0.5,
+      0,
+      1
+    );
     // Dark sun angle set to pre-contact position
     simulationState.orbitDarkSunAngle = preContactDarkSunAngle;
     simulationState.darkSunBandProgress = targetSunProgress;
@@ -3502,7 +3530,7 @@ export function createEclipseController(deps) {
     // World-space position formula: x = -cos(orbitAngle)*R, z = sin(orbitAngle)*R
     // → worldAngle = atan2(z, x) = π - orbitAngle
     // → ΔworldAngle = -ΔorbitAngle
-    if (!astronomyState.enabled) {
+    if (!astronomyState.enabled && !isAcceleratedRealityMode()) {
       const moonRadiusXZ = Math.hypot(tempLunarEclipseMoonWorldPos.x, tempLunarEclipseMoonWorldPos.z);
       const moonWorldAngleXZ = Math.atan2(tempLunarEclipseMoonWorldPos.z, tempLunarEclipseMoonWorldPos.x);
       const orbitAngleDiff = (darkSunOrbitAngleForDebug ?? 0) - (moonOrbitAngleForDebug ?? 0);
@@ -3713,12 +3741,6 @@ export function createEclipseController(deps) {
       exitFirstPersonMode();
     }
 
-    if (astronomyState.enabled) {
-      realitySyncEl.checked = false;
-      realityLiveEl.checked = false;
-      astronomyApi.disableRealityMode();
-    }
-
     celestialTrackingCameraApi.setTarget("moon");
     cameraApi.updateCamera();
     resetDarkSunStageState();
@@ -3731,16 +3753,33 @@ export function createEclipseController(deps) {
       return;
     }
     const targetDateMs = stageEvent.startMs - LUNAR_STAGE_PREVIEW_LEAD_MS;
-
-    simulationState.demoPhaseDateMs = targetDateMs;
-    setDemoMoonOrbitOffsetFromPhase(targetDateMs);
-    setDemoSeasonPhaseFromDate(targetDateMs);
-    syncDemoMoonOrbitToSun();
-    
-    astronomyApi.updateMoonOrbit({
-      orbitMode: simulationState.orbitMode,
-      progress: simulationState.moonBandProgress
-    });
+    const targetDate = new Date(targetDateMs);
+    if (astronomyState.enabled) {
+      astronomyApi.enableRealityMode({ live: false, date: targetDate });
+    } else {
+      astronomyApi.setAcceleratedTimelineAnchor(targetDate, { live: false });
+    }
+    const targetSnapshot = astronomyApi.getAstronomySnapshot(targetDate);
+    simulationState.simulatedDateMs = targetDateMs;
+    simulationState.timelineAnchorDateMs = targetDateMs;
+    simulationState.timelineAnchorNowMs = performance.now();
+    simulationState.demoPhaseDateMs = simulationState.simulatedDateMs;
+    simulationState.demoAnchorSimMs = simulationState.timelineAnchorDateMs;
+    simulationState.demoAnchorRealMs = simulationState.timelineAnchorNowMs;
+    simulationState.orbitSunAngle = targetSnapshot.sunRenderState?.orbitAngleRadians ?? simulationState.orbitSunAngle;
+    simulationState.orbitMoonAngle = targetSnapshot.moonRenderState?.orbitAngleRadians ?? simulationState.orbitMoonAngle;
+    simulationState.sunBandProgress = THREE.MathUtils.clamp(
+      targetSnapshot.sunRenderState?.corridorProgress ?? targetSnapshot.sunRenderState?.macroProgress ?? simulationState.sunBandProgress ?? 0.5,
+      0,
+      1
+    );
+    simulationState.moonBandProgress = THREE.MathUtils.clamp(
+      targetSnapshot.moonRenderState?.corridorProgress ?? targetSnapshot.moonRenderState?.macroProgress ?? simulationState.moonBandProgress ?? 0.5,
+      0,
+      1
+    );
+    orbitSun.position.copy(targetSnapshot.sunRenderPosition ?? targetSnapshot.sunPosition);
+    orbitMoon.position.copy(targetSnapshot.moonRenderPosition ?? targetSnapshot.moonPosition);
 
     // Activate the staged lunar eclipse system:
     // Drive the dark sun through 5 keyframe stages relative to the moon's orbit.

@@ -238,18 +238,14 @@ export function createConstellationTabController({
 
   function getZodiacViewState() {
     const seasonalAngleRadians = zodiacWheelApi?.getSeasonalAngle?.() ?? 0;
-    const ageOffsetRadians = zodiacWheelApi?.getAgeOffset?.() ?? zodiacWheelApi?.getSiderealOffset?.() ?? 0;
+    const ageOffsetRadians = zodiacWheelApi?.getAgeOffset?.() ?? 0;
     const tropicalSignIndex = getTropicalSignIndex(seasonalAngleRadians);
     const ageSignIndex = zodiacWheelApi?.getAgeSignIndex?.() ?? getAgeSignIndexFromAgeOffset(ageOffsetRadians);
-    const observationDate = getObservationDate?.() ?? null;
     return {
       ageSign: ZODIAC_SIGNS[ageSignIndex],
-      ageSignIndex,
-      observationDate,
       seasonalAngleRadians,
       ageOffsetRadians,
       tropicalSign: ZODIAC_SIGNS[tropicalSignIndex],
-      tropicalSignIndex,
     };
   }
 
@@ -374,13 +370,13 @@ export function createConstellationTabController({
 
     const {
       ageSign,
-      ageSignIndex,
-      observationDate,
       seasonalAngleRadians,
       ageOffsetRadians,
       tropicalSign,
-      tropicalSignIndex,
     } = getZodiacViewState();
+    const ageSignIndex = ZODIAC_SIGNS.findIndex((sign) => sign.key === ageSign.key);
+    const tropicalSignIndex = ZODIAC_SIGNS.findIndex((sign) => sign.key === tropicalSign.key);
+    const observationDate = getObservationDate?.() ?? null;
     const fontFamily = getWheelLabelFontFamily(i18n);
     const markerAngle = seasonalAngleRadians;
     const parts = [];
@@ -538,8 +534,8 @@ export function createConstellationTabController({
   }
 
   function refreshDynamicState({ force = false } = {}) {
-    const currentAngle = constellationApi.getSeasonalEclipticAngle?.() ?? constellationApi.getSeasonalPrecessionAngle?.() ?? 0;
-    const currentAgeOffset = zodiacWheelApi?.getAgeOffset?.() ?? zodiacWheelApi?.getSiderealOffset?.() ?? 0;
+    const currentAngle = constellationApi.getSeasonalEclipticAngle?.() ?? 0;
+    const currentAgeOffset = zodiacWheelApi?.getAgeOffset?.() ?? 0;
     if (!force && !state.isPanelActive) {
       state.lastRenderedAngle = currentAngle;
       state.lastRenderedAgeOffset = currentAgeOffset;

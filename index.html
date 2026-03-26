@@ -342,7 +342,7 @@
                   <label class="toggle">
                     <input id="reality-sync" type="checkbox" role="switch" checked>
                     <span class="toggle-switch" aria-hidden="true"></span>
-                    <span class="toggle-text" data-i18n="toggleOn">On</span>
+                    <span class="toggle-text" id="reality-sync-toggle-text" data-i18n="toggleOn">On</span>
                   </label>
                 </div>
                 <div class="sync-row">
@@ -636,12 +636,21 @@
               <strong class="route-speed-value" id="celestial-trail-length-value">100%</strong>
             </div>
             <label class="field" for="celestial-speed">
-              <span class="field-label" data-i18n="celestialSpeedLabel">Demo Orbit Speed</span>
-              <input class="slider-input" id="celestial-speed" type="range" min="0" max="5" step="0.1" value="0.5">
+              <span class="field-label" data-i18n="celestialSpeedLabel">Accelerated Reality Speed</span>
+              <input class="slider-input" id="celestial-speed" type="range" min="0" max="60" step="0.1" value="1">
             </label>
             <div class="sync-row celestial-value-row">
-              <span class="sync-title" data-i18n="celestialSpeedValueTitle">Demo Speed</span>
-              <strong class="route-speed-value" id="celestial-speed-value">0.5x</strong>
+              <span class="sync-title" data-i18n="celestialSpeedValueTitle">Time Scale</span>
+              <strong class="route-speed-value" id="celestial-speed-value">1x</strong>
+            </div>
+            <div class="sync-row celestial-value-row">
+              <span class="sync-title" data-i18n="celestialSpeedPresetTitle">Speed Presets</span>
+            </div>
+            <div class="orbit-mode-grid celestial-speed-presets" role="group" aria-label="Speed presets">
+              <button class="orbit-mode" data-celestial-speed-preset="0" type="button">0x</button>
+              <button class="orbit-mode active" data-celestial-speed-preset="1" type="button">1x</button>
+              <button class="orbit-mode" data-celestial-speed-preset="5" type="button">5x</button>
+              <button class="orbit-mode" data-celestial-speed-preset="60" type="button">60x</button>
             </div>
             <div class="sync-row overlay-row">
               <span class="sync-title" data-i18n="celestialFullTrailTitle">Full Orbit Path</span>
@@ -652,7 +661,7 @@
               </label>
             </div>
             <p class="sync-copy subtle" id="celestial-motion-summary">
-              Demo speed scales both celestial bodies, while the full path overlays one complete orbit.
+              Accelerated reality mode advances celestial time from the chosen anchor while using the same orbit path as reality sync.
             </p>
           </section>
 

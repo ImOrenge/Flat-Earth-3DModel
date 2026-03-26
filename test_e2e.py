@@ -69,6 +69,34 @@ def upload_csv_via_dom(page: Page, file_name: str, csv_text: str) -> None:
     )
 
 
+def set_range_value(page: Page, selector: str, value: float) -> None:
+    page.eval_on_selector(
+        selector,
+        """(el, nextValue) => {
+          el.value = String(nextValue);
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+        }""",
+        value,
+    )
+
+
+def set_checkbox_value(page: Page, selector: str, checked: bool) -> None:
+    page.eval_on_selector(
+        selector,
+        """(el, nextChecked) => {
+          el.checked = Boolean(nextChecked);
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+        }""",
+        checked,
+    )
+
+
+def wrapped_delta(a: float, b: float) -> float:
+    import math
+
+    return math.atan2(math.sin(b - a), math.cos(b - a))
+
+
 def test_builtin_solar_eclipse_selection_updates_observation_time(page: Page, server_url: str):
     open_eclipse_panel(page, server_url)
 
@@ -290,3 +318,156 @@ def test_stage_pre_lunar_eclipse_uses_selected_event_start_window(page: Page, se
     assert snapshot_date_ms < event_start_ms
     assert stage_state["eclipse"] is not None
     assert stage_state["eclipse"]["stageKey"] == "approach"
+
+
+def test_accelerated_mode_preserves_solar_orbit_direction_sign(page: Page, server_url: str):
+    page.goto(server_url)
+    page.locator("#scene").wait_for(state="attached")
+
+    page.wait_for_timeout(900)
+    sun_on_start = page.evaluate("window.__simulationState.orbitSunAngle")
+    page.wait_for_timeout(900)
+    sun_on_end = page.evaluate("window.__simulationState.orbitSunAngle")
+    delta_on = wrapped_delta(sun_on_start, sun_on_end)
+
+    set_checkbox_value(page, "#reality-sync", False)
+    set_range_value(page, "#celestial-speed", 1.0)
+    page.wait_for_timeout(900)
+    sun_off_start = page.evaluate("window.__simulationState.orbitSunAngle")
+    page.wait_for_timeout(900)
+    sun_off_end = page.evaluate("window.__simulationState.orbitSunAngle")
+    delta_off = wrapped_delta(sun_off_start, sun_off_end)
+
+    assert abs(delta_on) > 1e-6
+    assert abs(delta_off) > 1e-6
+    assert delta_on * delta_off > 0
+
+
+def test_accelerated_mode_speed_multiplier_and_pause(page: Page, server_url: str):
+    page.goto(server_url)
+    page.locator("#scene").wait_for(state="attached")
+
+    if page.locator("#reality-live").is_checked():
+      set_checkbox_value(page, "#reality-live", False)
+    page.locator("#observation-time").fill("2026-01-15T12:00")
+    page.locator("#apply-observation-time").click()
+    set_checkbox_value(page, "#reality-sync", False)
+    page.locator("[data-hud-panel-tab='orbit']").click()
+
+    set_range_value(page, "#celestial-speed", 1.0)
+    page.wait_for_timeout(150)
+    t1_start = page.evaluate("Date.parse(window.__E2E_SNAPSHOT?.dateIso)")
+    page.wait_for_timeout(700)
+    t1_end = page.evaluate("Date.parse(window.__E2E_SNAPSHOT?.dateIso)")
+    delta_1x = t1_end - t1_start
+
+    page.locator("[data-celestial-speed-preset='5']").click()
+    page.wait_for_timeout(150)
+    t5_start = page.evaluate("Date.parse(window.__E2E_SNAPSHOT?.dateIso)")
+    page.wait_for_timeout(700)
+    t5_end = page.evaluate("Date.parse(window.__E2E_SNAPSHOT?.dateIso)")
+    delta_5x = t5_end - t5_start
+
+    page.locator("[data-celestial-speed-preset='0']").click()
+    page.wait_for_timeout(150)
+    t0_start = page.evaluate("Date.parse(window.__E2E_SNAPSHOT?.dateIso)")
+    page.wait_for_timeout(700)
+    t0_end = page.evaluate("Date.parse(window.__E2E_SNAPSHOT?.dateIso)")
+    delta_0x = t0_end - t0_start
+
+    assert delta_1x > 200
+    assert delta_5x > delta_1x * 3.0
+    assert abs(delta_0x) < 120
+
+
+def test_accelerated_mode_orbit_pose_advances_with_time(page: Page, server_url: str):
+    page.goto(server_url)
+    page.locator("#scene").wait_for(state="attached")
+
+    if page.locator("#reality-live").is_checked():
+      set_checkbox_value(page, "#reality-live", False)
+    page.locator("#observation-time").fill("2026-01-15T12:00")
+    page.locator("#apply-observation-time").click()
+    set_checkbox_value(page, "#reality-sync", False)
+    set_range_value(page, "#celestial-speed", 5.0)
+
+    page.wait_for_timeout(180)
+    start = page.evaluate(
+        """() => ({
+          angle: window.__E2E_SNAPSHOT?.sunAngle ?? 0,
+          pos: window.__E2E_SNAPSHOT?.sunPos ?? { x: 0, z: 0 }
+        })"""
+    )
+    page.wait_for_timeout(2000)
+    end = page.evaluate(
+        """() => ({
+          angle: window.__E2E_SNAPSHOT?.sunAngle ?? 0,
+          pos: window.__E2E_SNAPSHOT?.sunPos ?? { x: 0, z: 0 }
+        })"""
+    )
+
+    angle_delta = abs(wrapped_delta(start["angle"], end["angle"]))
+    position_delta = ((end["pos"]["x"] - start["pos"]["x"]) ** 2 + (end["pos"]["z"] - start["pos"]["z"]) ** 2) ** 0.5
+    assert angle_delta > 1e-6
+    assert position_delta > 1e-4
+
+
+def test_accelerated_mode_orbit_buttons_are_paused_like_reality_sync(page: Page, server_url: str):
+    page.goto(server_url)
+    page.locator("#scene").wait_for(state="attached")
+
+    if page.locator("#reality-live").is_checked():
+      set_checkbox_value(page, "#reality-live", False)
+    page.locator("#observation-time").fill("2026-08-13T02:47")
+    page.locator("#apply-observation-time").click()
+    page.locator("[data-hud-panel-tab='orbit']").click()
+
+    assert page.locator("[data-orbit-mode='auto']").is_disabled()
+    assert page.locator("[data-orbit-mode='north']").is_disabled()
+    assert page.locator("[data-orbit-mode='equator']").is_disabled()
+    assert page.locator("[data-orbit-mode='south']").is_disabled()
+
+    set_checkbox_value(page, "#reality-sync", False)
+    set_range_value(page, "#celestial-speed", 1.0)
+
+    assert page.locator("[data-orbit-mode='auto']").is_disabled()
+    assert page.locator("[data-orbit-mode='north']").is_disabled()
+    assert page.locator("[data-orbit-mode='equator']").is_disabled()
+    assert page.locator("[data-orbit-mode='south']").is_disabled()
+
+
+def test_stage_buttons_do_not_force_disable_reality_sync(page: Page, server_url: str):
+    open_eclipse_panel(page, server_url)
+    assert page.locator("#reality-sync").is_checked()
+
+    page.locator("#stage-pre-eclipse").click()
+    assert page.locator("#reality-sync").is_checked()
+
+    page.locator("#stage-pre-lunar-eclipse").click()
+    assert page.locator("#reality-sync").is_checked()
+
+
+def test_reality_sync_toggle_preserves_current_simulation_time(page: Page, server_url: str):
+    page.goto(server_url)
+    page.locator("#scene").wait_for(state="attached")
+
+    if page.locator("#reality-live").is_checked():
+      set_checkbox_value(page, "#reality-live", False)
+    page.locator("#observation-time").fill("2026-01-15T12:00")
+    page.locator("#apply-observation-time").click()
+    set_checkbox_value(page, "#reality-sync", False)
+
+    set_range_value(page, "#celestial-speed", 0.0)
+    page.wait_for_timeout(450)
+    accelerated_ms = page.evaluate("Date.parse(window.__E2E_SNAPSHOT?.dateIso)")
+
+    set_checkbox_value(page, "#reality-sync", True)
+    page.wait_for_timeout(220)
+    synced_ms = page.evaluate("Date.parse(window.__E2E_SNAPSHOT?.dateIso)")
+
+    set_checkbox_value(page, "#reality-sync", False)
+    page.wait_for_timeout(220)
+    accelerated_back_ms = page.evaluate("Date.parse(window.__E2E_SNAPSHOT?.dateIso)")
+
+    assert abs(synced_ms - accelerated_ms) < 2500
+    assert abs(accelerated_back_ms - synced_ms) < 2500

@@ -32,7 +32,7 @@ export function setupInputHandlers(deps) {
     darkSunOcclusionState,
     controlTabButtons, languageToggleEl, i18n, uploadInput, resetButton, cameraPresetButtons = [],
     exitFirstPersonMode, enterFirstPersonMode, walkerModeEl, resetWalkerButton,
-    routeSelectEl, routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl,
+    routeSelectEl, routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl, celestialSpeedPresetButtons = [],
     celestialFullTrailEl, routePlaybackButton, routeResetButton, realitySyncEl,
     realityLiveEl, observationTimeEl, observationMinusHourButton, observationPlusHourButton,
     eclipseCatalogSourceEl, eclipseCatalogUploadEl, eclipseKindSelectEl, eclipseYearSelectEl,
@@ -44,7 +44,7 @@ export function setupInputHandlers(deps) {
     stagePreEclipseButton, stagePreEclipseScene,
     stagePreLunarEclipseButton, stagePreLunarEclipseScene,
     skyAnalemmaOverlayEl, skyAnalemmaState, orbitModeButtons, cameraTrackButtons, seasonalYearEl,
-    seasonalEventButtons, setDemoMoonOrbitOffsetFromPhase, setDemoSeasonPhaseFromDate
+    seasonalEventButtons
   } = deps;
 
   const { rocketSpaceportSelect, rocketTypeSelect, rocketLaunchBtn } = ui;
@@ -344,21 +344,33 @@ export function setupInputHandlers(deps) {
   
   
   
-  celestialSpeedEl.addEventListener("input", () => {
-  
-    celestialControlState.speedMultiplier = THREE.MathUtils.clamp(
-  
-      Number.parseFloat(celestialSpeedEl.value),
-  
-      0,
-  
-      5
-  
+  function applyCelestialSpeedMultiplier(value) {
+    const parsed = Number.parseFloat(value);
+    if (!Number.isFinite(parsed)) {
+      return;
+    }
+    const nextSpeed = THREE.MathUtils.clamp(
+      parsed,
+      constants.CELESTIAL_SPEED_MIN,
+      constants.CELESTIAL_SPEED_MAX
     );
-  
+    celestialControlState.speedMultiplier = nextSpeed;
+    if (celestialSpeedEl) {
+      celestialSpeedEl.value = String(nextSpeed);
+    }
+    astronomyApi.rebaseAcceleratedTimeline();
     astronomyApi.syncAstronomyControls();
-  
+  }
+
+  celestialSpeedEl.addEventListener("input", () => {
+    applyCelestialSpeedMultiplier(celestialSpeedEl.value);
   });
+
+  for (const button of celestialSpeedPresetButtons) {
+    button.addEventListener("click", () => {
+      applyCelestialSpeedMultiplier(button.dataset.celestialSpeedPreset);
+    });
+  }
   
   
   
@@ -409,6 +421,26 @@ export function setupInputHandlers(deps) {
     return new Date();
   
   }
+
+  function getModeSwitchAnchorDate() {
+    if (!astronomyState.enabled) {
+      if (Number.isFinite(simulationState.simulatedDateMs)) {
+        return new Date(simulationState.simulatedDateMs);
+      }
+      if (Number.isFinite(simulationState.demoPhaseDateMs)) {
+        return new Date(simulationState.demoPhaseDateMs);
+      }
+    }
+
+    if (
+      astronomyState.selectedDate instanceof Date &&
+      !Number.isNaN(astronomyState.selectedDate.getTime())
+    ) {
+      return new Date(astronomyState.selectedDate.getTime());
+    }
+
+    return getObservationBaseDate();
+  }
   
   
   
@@ -420,13 +452,14 @@ export function setupInputHandlers(deps) {
       ? nextDate
       : new Date();
   
-    realitySyncEl.checked = true;
-  
     realityLiveEl.checked = false;
   
     resetDarkSunStageState();
-  
-    astronomyApi.enableRealityMode({ live: false, date: safeDate });
+    if (realitySyncEl.checked) {
+      astronomyApi.enableRealityMode({ live: false, date: safeDate });
+      return;
+    }
+    astronomyApi.setAcceleratedTimelineAnchor(safeDate, { live: false });
   
   }
   
@@ -453,33 +486,27 @@ export function setupInputHandlers(deps) {
   
   
   realitySyncEl.addEventListener("change", () => {
-  
-    if (realitySyncEl.checked) {
-  
-      resetDarkSunStageState();
-  
-      const nextDate = realityLiveEl.checked ? new Date() : new Date(observationTimeEl.value);
-  
-      astronomyApi.enableRealityMode({
-  
-        live: realityLiveEl.checked,
-  
-        date: Number.isNaN(nextDate.getTime()) ? new Date() : nextDate
-  
-      });
-  
-      return;
-  
-    }
-  
-    simulationState.demoPhaseDateMs = astronomyState.selectedDate.getTime();
-  
-    setDemoMoonOrbitOffsetFromPhase(simulationState.demoPhaseDateMs);
-    setDemoSeasonPhaseFromDate(simulationState.demoPhaseDateMs);
-  
+    const live = Boolean(realityLiveEl.checked);
+    const anchorDate = live ? new Date() : getModeSwitchAnchorDate();
 
-  
-    astronomyApi.disableRealityMode();
+    if (!live) {
+      astronomyApi.setObservationInputValue(anchorDate);
+    }
+
+    if (realitySyncEl.checked) {
+      resetDarkSunStageState();
+      astronomyApi.enableRealityMode({
+        live,
+        date: anchorDate
+      });
+      return;
+    }
+
+    resetDarkSunStageState();
+    astronomyApi.disableRealityMode({
+      date: anchorDate,
+      live
+    });
   
   });
   
@@ -487,24 +514,19 @@ export function setupInputHandlers(deps) {
   
   realityLiveEl.addEventListener("change", () => {
   
-    if (!realitySyncEl.checked) {
-  
-      realityLiveEl.checked = false;
-  
-      return;
-  
-    }
-  
     if (realityLiveEl.checked) {
-  
       resetDarkSunStageState();
-  
-      astronomyApi.enableRealityMode({ live: true, date: new Date() });
+      if (realitySyncEl.checked) {
+        astronomyApi.enableRealityMode({ live: true, date: new Date() });
+      } else {
+        astronomyApi.setAcceleratedTimelineAnchor(new Date(), { live: true });
+      }
   
       return;
   
     }
   
+    astronomyApi.setObservationInputValue(getModeSwitchAnchorDate());
     astronomyApi.applyObservationTimeSelection();
   
   });
@@ -512,13 +534,6 @@ export function setupInputHandlers(deps) {
   
   
   observationTimeEl.addEventListener("change", () => {
-  
-    if (!realitySyncEl.checked) {
-  
-      realitySyncEl.checked = true;
-  
-    }
-  
     realityLiveEl.checked = false;
   
     astronomyApi.applyObservationTimeSelection();
@@ -576,13 +591,6 @@ export function setupInputHandlers(deps) {
   
   
   applyObservationTimeButton.addEventListener("click", () => {
-  
-    if (!realitySyncEl.checked) {
-  
-      realitySyncEl.checked = true;
-  
-    }
-  
     realityLiveEl.checked = false;
   
     astronomyApi.applyObservationTimeSelection();
@@ -592,14 +600,14 @@ export function setupInputHandlers(deps) {
   
   
   setCurrentTimeButton.addEventListener("click", () => {
-  
-    realitySyncEl.checked = true;
-  
     realityLiveEl.checked = true;
   
     resetDarkSunStageState();
-  
-    astronomyApi.enableRealityMode({ live: true, date: new Date() });
+    if (realitySyncEl.checked) {
+      astronomyApi.enableRealityMode({ live: true, date: new Date() });
+      return;
+    }
+    astronomyApi.setAcceleratedTimelineAnchor(new Date(), { live: true });
   
   });
 
