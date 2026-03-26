@@ -11,12 +11,14 @@ const HOUR_MS = 3_600_000;
 const J2000 = 2451545;
 const FULL_CIRCLE_RADIANS = Math.PI * 2;
 const FULL_CIRCLE_DEGREES = 360;
-const SIDEREAL_ZODIAC_REFERENCE_DATE_MS = Date.parse("2026-03-21T00:00:00Z");
-const SIDEREAL_ZODIAC_REFERENCE_OFFSET_DEGREES = 24.125;
-const EARTH_PRECESSION_ARCSECONDS_PER_YEAR = 50.29;
-const TROPICAL_TO_SIDEREAL_DEGREES_PER_MS = (
-  (EARTH_PRECESSION_ARCSECONDS_PER_YEAR / 3600) /
-  (365.2422 * DAY_MS)
+const TROPICAL_YEAR_DAYS = 365.2422;
+const ZODIAC_AGE_REFERENCE_DATE_MS = Date.parse("2026-03-21T00:00:00Z");
+const ZODIAC_AGE_REFERENCE_OFFSET_DEGREES = 24.125;
+const ZODIAC_AGE_YEARS_PER_SIGN = 2060;
+const ZODIAC_AGE_FULL_CYCLE_YEARS = ZODIAC_AGE_YEARS_PER_SIGN * 12;
+const ZODIAC_AGE_DEGREES_PER_MS = (
+  (FULL_CIRCLE_DEGREES / ZODIAC_AGE_FULL_CYCLE_YEARS) /
+  (TROPICAL_YEAR_DAYS * DAY_MS)
 );
 export const SYNODIC_MONTH_DAYS = 29.530588853;
 export const MOON_PHASE_CYCLE_DAYS = SYNODIC_MONTH_DAYS;
@@ -24,7 +26,7 @@ export const REFERENCE_NEW_MOON_JULIAN_DATE = 2451550.1;
 export const MOON_PHASE_STEP_COUNT = 28;
 export const MOON_PHASE_STEP_DEGREES = FULL_CIRCLE_DEGREES / MOON_PHASE_STEP_COUNT;
 export const LOCAL_LIGHT_HORIZON_OFFSET_DEGREES = 22;
-const SEASONAL_PRECESSION_PHASE_BY_KEY = {
+const SEASONAL_ECLIPTIC_PHASE_BY_KEY = {
   springEquinox: 0,
   summerSolstice: 0.25,
   autumnEquinox: 0.5,
@@ -359,7 +361,7 @@ export function getSeasonalEventMoments(year) {
   return cloneSeasonalEventMoments(getCachedSeasonalEventMoments(year));
 }
 
-export function getSeasonalPrecessionPhase(date) {
+export function getSeasonalEclipticPhase(date) {
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
     return 0;
   }
@@ -368,14 +370,14 @@ export function getSeasonalPrecessionPhase(date) {
   const baseYear = date.getFullYear();
   for (let yearOffset = -1; yearOffset <= 1; yearOffset += 1) {
     const year = baseYear + yearOffset;
-    const seasonalEvents = getCachedSeasonalEventMoments(year);
-    for (const definition of SEASONAL_EVENT_DEFINITIONS) {
-      points.push({
-        dateMs: seasonalEvents[definition.key].getTime(),
-        phase: yearOffset + SEASONAL_PRECESSION_PHASE_BY_KEY[definition.key],
-      });
+      const seasonalEvents = getCachedSeasonalEventMoments(year);
+      for (const definition of SEASONAL_EVENT_DEFINITIONS) {
+        points.push({
+          dateMs: seasonalEvents[definition.key].getTime(),
+          phase: yearOffset + SEASONAL_ECLIPTIC_PHASE_BY_KEY[definition.key],
+        });
+      }
     }
-  }
 
   points.sort((left, right) => left.dateMs - right.dateMs);
 
@@ -398,20 +400,32 @@ export function getSeasonalPrecessionPhase(date) {
   return THREE.MathUtils.euclideanModulo(phase, 1);
 }
 
-export function getSeasonalPrecessionAngle(date) {
-  return -getSeasonalPrecessionPhase(date) * FULL_CIRCLE_RADIANS;
+export function getSeasonalPrecessionPhase(date) {
+  return getSeasonalEclipticPhase(date);
 }
 
-export function getSiderealZodiacOffsetRadians(date) {
+export function getSeasonalEclipticAngle(date) {
+  return -getSeasonalEclipticPhase(date) * FULL_CIRCLE_RADIANS;
+}
+
+export function getSeasonalPrecessionAngle(date) {
+  return getSeasonalEclipticAngle(date);
+}
+
+export function getZodiacAgeOffsetRadians(date) {
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
     return 0;
   }
 
-  const elapsedMs = date.getTime() - SIDEREAL_ZODIAC_REFERENCE_DATE_MS;
-  const offsetDegrees = SIDEREAL_ZODIAC_REFERENCE_OFFSET_DEGREES + (
-    elapsedMs * TROPICAL_TO_SIDEREAL_DEGREES_PER_MS
+  const elapsedMs = date.getTime() - ZODIAC_AGE_REFERENCE_DATE_MS;
+  const offsetDegrees = ZODIAC_AGE_REFERENCE_OFFSET_DEGREES + (
+    elapsedMs * ZODIAC_AGE_DEGREES_PER_MS
   );
   return THREE.MathUtils.euclideanModulo(toRadians(offsetDegrees), FULL_CIRCLE_RADIANS);
+}
+
+export function getSiderealZodiacOffsetRadians(date) {
+  return getZodiacAgeOffsetRadians(date);
 }
 
 function getMoonMotionWindow(date) {

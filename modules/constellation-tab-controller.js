@@ -2,8 +2,8 @@ import { getLocalizedConstellationName } from "./constellation-name-locales.js";
 import {
   CALENDAR_MONTH_SEQUENCE,
   ZODIAC_SIGNS,
-  getAgeSignIndexFromSiderealOffset
-} from "./zodiac-wheel.js?v=20260322-topview-zodiac2";
+  getAgeSignIndexFromAgeOffset
+} from "./zodiac-wheel.js?v=20260326-seasonal-ecliptic1";
 
 const DIRECTION_KEYS_16 = [
   "constellationDirectionN",
@@ -28,7 +28,7 @@ const MAP_SIZE = 100;
 const MAP_CENTER = MAP_SIZE / 2;
 const MAP_RADIUS = 46;
 const FULL_CIRCLE_RADIANS = Math.PI * 2;
-const PRECESSION_RENDER_THRESHOLD_RAD = Math.PI / 360;
+const ZODIAC_RENDER_THRESHOLD_RAD = Math.PI / 360;
 const ZODIAC_VIEW_SIZE = 100;
 const ZODIAC_VIEW_CENTER = ZODIAC_VIEW_SIZE / 2;
 const ZODIAC_MONTH_INNER_RADIUS = 39;
@@ -190,7 +190,7 @@ export function createConstellationTabController({
     isVisible: true,
     isPanelActive: false,
     lastRenderedAngle: null,
-    lastRenderedSiderealOffset: null,
+    lastRenderedAgeOffset: null,
     selectedName: null,
     zodiacVisible: zodiacWheelApi?.getVisible?.() ?? true,
   };
@@ -238,16 +238,16 @@ export function createConstellationTabController({
 
   function getZodiacViewState() {
     const seasonalAngleRadians = zodiacWheelApi?.getSeasonalAngle?.() ?? 0;
-    const siderealOffsetRadians = zodiacWheelApi?.getSiderealOffset?.() ?? 0;
+    const ageOffsetRadians = zodiacWheelApi?.getAgeOffset?.() ?? zodiacWheelApi?.getSiderealOffset?.() ?? 0;
     const tropicalSignIndex = getTropicalSignIndex(seasonalAngleRadians);
-    const ageSignIndex = zodiacWheelApi?.getAgeSignIndex?.() ?? getAgeSignIndexFromSiderealOffset(siderealOffsetRadians);
+    const ageSignIndex = zodiacWheelApi?.getAgeSignIndex?.() ?? getAgeSignIndexFromAgeOffset(ageOffsetRadians);
     const observationDate = getObservationDate?.() ?? null;
     return {
       ageSign: ZODIAC_SIGNS[ageSignIndex],
       ageSignIndex,
       observationDate,
       seasonalAngleRadians,
-      siderealOffsetRadians,
+      ageOffsetRadians,
       tropicalSign: ZODIAC_SIGNS[tropicalSignIndex],
       tropicalSignIndex,
     };
@@ -377,7 +377,7 @@ export function createConstellationTabController({
       ageSignIndex,
       observationDate,
       seasonalAngleRadians,
-      siderealOffsetRadians,
+      ageOffsetRadians,
       tropicalSign,
       tropicalSignIndex,
     } = getZodiacViewState();
@@ -399,7 +399,7 @@ export function createConstellationTabController({
 
     for (let index = 0; index < ZODIAC_SIGNS.length; index += 1) {
       const sign = ZODIAC_SIGNS[index];
-      const startAngle = seasonalAngleRadians + siderealOffsetRadians + (index * ZODIAC_SEGMENT_ARC);
+      const startAngle = seasonalAngleRadians + ageOffsetRadians + (index * ZODIAC_SEGMENT_ARC);
       const endAngle = startAngle + ZODIAC_SEGMENT_ARC;
       const centerAngle = startAngle + (ZODIAC_SEGMENT_ARC / 2);
       const labelPoint = getWheelSvgPoint(ZODIAC_SIGN_LABEL_RADIUS, centerAngle);
@@ -455,7 +455,7 @@ export function createConstellationTabController({
     ui.zodiacAgeViewEl.setAttribute("aria-label", i18n.t("zodiacAgeViewAria"));
     ui.zodiacCurrentAgeEl.textContent = `${ageSign.glyph} ${i18n.t(ageSign.nameKey)}`;
     ui.zodiacCurrentTropicalEl.textContent = `${tropicalSign.glyph} ${i18n.t(tropicalSign.nameKey)}`;
-    ui.zodiacSiderealOffsetEl.textContent = formatUnsignedDegrees((siderealOffsetRadians * 180) / Math.PI);
+    ui.zodiacAgeOffsetEl.textContent = formatUnsignedDegrees((ageOffsetRadians * 180) / Math.PI);
     if (ui.zodiacAgeCycleEl) {
       ui.zodiacAgeCycleEl.textContent = i18n.t("zodiacAgeCycleValue");
     }
@@ -466,7 +466,7 @@ export function createConstellationTabController({
     if (ui.zodiacAgeSummaryEl) {
       ui.zodiacAgeSummaryEl.textContent = i18n.t("zodiacAgeSummary", {
         ageSign: i18n.t(ageSign.nameKey),
-        offset: formatUnsignedDegrees((siderealOffsetRadians * 180) / Math.PI),
+        offset: formatUnsignedDegrees((ageOffsetRadians * 180) / Math.PI),
         tropicalSign: i18n.t(tropicalSign.nameKey),
       });
     }
@@ -538,20 +538,20 @@ export function createConstellationTabController({
   }
 
   function refreshDynamicState({ force = false } = {}) {
-    const currentAngle = constellationApi.getSeasonalPrecessionAngle?.() ?? 0;
-    const currentSiderealOffset = zodiacWheelApi?.getSiderealOffset?.() ?? 0;
+    const currentAngle = constellationApi.getSeasonalEclipticAngle?.() ?? constellationApi.getSeasonalPrecessionAngle?.() ?? 0;
+    const currentAgeOffset = zodiacWheelApi?.getAgeOffset?.() ?? zodiacWheelApi?.getSiderealOffset?.() ?? 0;
     if (!force && !state.isPanelActive) {
       state.lastRenderedAngle = currentAngle;
-      state.lastRenderedSiderealOffset = currentSiderealOffset;
+      state.lastRenderedAgeOffset = currentAgeOffset;
       return;
     }
 
     if (
       !force &&
       state.lastRenderedAngle !== null &&
-      state.lastRenderedSiderealOffset !== null &&
-      getWrappedAngleDeltaMagnitude(currentSiderealOffset, state.lastRenderedSiderealOffset) < PRECESSION_RENDER_THRESHOLD_RAD &&
-      getWrappedAngleDeltaMagnitude(currentAngle, state.lastRenderedAngle) < PRECESSION_RENDER_THRESHOLD_RAD
+      state.lastRenderedAgeOffset !== null &&
+      getWrappedAngleDeltaMagnitude(currentAgeOffset, state.lastRenderedAgeOffset) < ZODIAC_RENDER_THRESHOLD_RAD &&
+      getWrappedAngleDeltaMagnitude(currentAngle, state.lastRenderedAngle) < ZODIAC_RENDER_THRESHOLD_RAD
     ) {
       return;
     }
@@ -560,7 +560,7 @@ export function createConstellationTabController({
     renderMap();
     renderZodiacAgeView();
     state.lastRenderedAngle = currentAngle;
-    state.lastRenderedSiderealOffset = currentSiderealOffset;
+    state.lastRenderedAgeOffset = currentAgeOffset;
   }
 
   function setPanelActive(active) {

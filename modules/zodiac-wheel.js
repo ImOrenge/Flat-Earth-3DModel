@@ -182,9 +182,13 @@ function getMonthLabel(monthIndex, i18n) {
   );
 }
 
-export function getAgeSignIndexFromSiderealOffset(siderealOffsetRadians) {
-  const normalized = THREE.MathUtils.euclideanModulo(-siderealOffsetRadians, FULL_CIRCLE_RADIANS);
+export function getAgeSignIndexFromAgeOffset(ageOffsetRadians) {
+  const normalized = THREE.MathUtils.euclideanModulo(-ageOffsetRadians, FULL_CIRCLE_RADIANS);
   return Math.floor(normalized / SEGMENT_ARC) % SEGMENT_COUNT;
+}
+
+export function getAgeSignIndexFromSiderealOffset(siderealOffsetRadians) {
+  return getAgeSignIndexFromAgeOffset(siderealOffsetRadians);
 }
 
 function drawLabelTexture({ canvas, ctx, sign, i18n }) {
@@ -306,14 +310,14 @@ export function createZodiacWheel({ i18n }) {
 
   const tropicalLayer = new THREE.Group();
   tropicalLayer.name = "zodiac-wheel-tropical-layer";
-  const siderealLayer = new THREE.Group();
-  siderealLayer.name = "zodiac-wheel-sidereal-layer";
+  const ageLayer = new THREE.Group();
+  ageLayer.name = "zodiac-wheel-age-layer";
   group.add(tropicalLayer);
-  group.add(siderealLayer);
+  group.add(ageLayer);
 
   let visible = true;
   let suppressed = false;
-  let siderealOffset = 0;
+  let ageOffset = 0;
   let seasonalAngle = 0;
 
   const sectorMaterialOptions = {
@@ -341,7 +345,7 @@ export function createZodiacWheel({ i18n }) {
     );
     sector.rotation.x = -Math.PI / 2;
     sector.renderOrder = 9;
-    siderealLayer.add(sector);
+    ageLayer.add(sector);
   }
 
   const ringMaterial = new THREE.LineBasicMaterial({
@@ -382,11 +386,11 @@ export function createZodiacWheel({ i18n }) {
 
   const innerLoop = createCircleLine(WHEEL_INNER_RADIUS, ringMaterial);
   innerLoop.renderOrder = 11;
-  siderealLayer.add(innerLoop);
+  ageLayer.add(innerLoop);
 
   const outerLoop = createCircleLine(WHEEL_OUTER_RADIUS, ringMaterial);
   outerLoop.renderOrder = 11;
-  siderealLayer.add(outerLoop);
+  ageLayer.add(outerLoop);
 
   const boundaryAngles = [];
   const guideAngles = [];
@@ -402,7 +406,7 @@ export function createZodiacWheel({ i18n }) {
     material: spokeMaterial
   });
   boundaryLines.renderOrder = 11;
-  siderealLayer.add(boundaryLines);
+  ageLayer.add(boundaryLines);
 
   const centerGuides = createRadialLineGroup({
     angles: guideAngles,
@@ -411,7 +415,7 @@ export function createZodiacWheel({ i18n }) {
     material: guideMaterial
   });
   centerGuides.renderOrder = 10;
-  siderealLayer.add(centerGuides);
+  ageLayer.add(centerGuides);
 
   const monthInnerLoop = createCircleLine(MONTH_RING_INNER_RADIUS, monthRingMaterial);
   monthInnerLoop.renderOrder = 11;
@@ -442,7 +446,7 @@ export function createZodiacWheel({ i18n }) {
       textureHeight: 320,
       textureWidth: 512
     });
-    siderealLayer.add(entry.mesh);
+    ageLayer.add(entry.mesh);
 
     return {
       ...entry,
@@ -544,7 +548,7 @@ export function createZodiacWheel({ i18n }) {
   }
 
   function syncAgeMarker() {
-    const ageSign = ZODIAC_SIGNS[getAgeSignIndexFromSiderealOffset(siderealOffset)];
+    const ageSign = ZODIAC_SIGNS[getAgeSignIndexFromAgeOffset(ageOffset)];
     ageLineMaterial.color.setHex(ageSign.color);
     ageDot.material.color.setHex(ageSign.color);
     drawAgeTexture({
@@ -565,22 +569,30 @@ export function createZodiacWheel({ i18n }) {
     },
     group,
     getAgeSignIndex() {
-      return getAgeSignIndexFromSiderealOffset(siderealOffset);
+      return getAgeSignIndexFromAgeOffset(ageOffset);
     },
     getSeasonalAngle() {
       return seasonalAngle;
     },
+    getAgeOffset() {
+      return ageOffset;
+    },
     getSiderealOffset() {
-      return siderealOffset;
+      return ageOffset;
     },
     refreshLocalizedUi,
     setSeasonalAngle(angleRadians = 0) {
       seasonalAngle = angleRadians;
       group.rotation.y = angleRadians;
     },
+    setAgeOffset(angleRadians = 0) {
+      ageOffset = THREE.MathUtils.euclideanModulo(angleRadians, FULL_CIRCLE_RADIANS);
+      ageLayer.rotation.y = ageOffset;
+      syncAgeMarker();
+    },
     setSiderealOffset(angleRadians = 0) {
-      siderealOffset = THREE.MathUtils.euclideanModulo(angleRadians, FULL_CIRCLE_RADIANS);
-      siderealLayer.rotation.y = siderealOffset;
+      ageOffset = THREE.MathUtils.euclideanModulo(angleRadians, FULL_CIRCLE_RADIANS);
+      ageLayer.rotation.y = ageOffset;
       syncAgeMarker();
     },
     setSuppressed(nextSuppressed) {

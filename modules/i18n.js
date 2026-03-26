@@ -786,31 +786,33 @@ Object.assign(TRANSLATIONS.ko, {
 Object.assign(TRANSLATIONS.en, {
   cameraPresetTop: "Full Top View",
   cameraPresetAngle: "Angle View",
-  hudConstellationsSectionZodiac: "Zodiac Age",
-  zodiacAgeViewTitle: "Zodiac Age View",
-  zodiacAgeViewAria: "Tropical and sidereal zodiac age wheel",
+  hudConstellationsSectionZodiac: "Ecliptic / Ages",
+  zodiacAgeViewTitle: "Seasonal Ecliptic / Zodiac Age",
+  zodiacAgeViewAria: "Seasonal ecliptic and zodiac age wheel",
   zodiacCurrentAgeLabel: "Current Age",
   zodiacCurrentTropicalLabel: "Tropical Sign",
-  zodiacSiderealOffsetLabel: "Sidereal Offset",
+  zodiacAgeOffsetLabel: "Age Offset",
+  zodiacSiderealOffsetLabel: "Age Offset",
   zodiacAgeCycleLabel: "Age Span",
-  zodiacAgeCycleValue: "Approx. 2,150-2,160 years",
+  zodiacAgeCycleValue: "2060 years",
   zodiacObservationDateLabel: "Observation Date",
-  zodiacAgeSummary: "The gold marker stays on the tropical ring while the sidereal zodiac is shifted by {offset}. Each zodiac age spans roughly 2,150-2,160 years, placing the current age in {ageSign} against the tropical {tropicalSign} season."
+  zodiacAgeSummary: "The gold marker tracks the seasonal ecliptic while the zodiac age ring is shifted by {offset}. Each zodiac age lasts 2060 years, placing the current age in {ageSign} against the tropical {tropicalSign} season."
 });
 
 Object.assign(TRANSLATIONS.ko, {
   cameraPresetTop: "\uC644\uC804 \uD0D1\uBDF0",
   cameraPresetAngle: "\uAC01\uB3C4 \uBDF0",
-  hudConstellationsSectionZodiac: "\uD669\uB3C4\uAD81/\uC2DC\uB300",
-  zodiacAgeViewTitle: "\uD669\uB3C4\uAD81 \uC2DC\uB300 \uBDF0",
-  zodiacAgeViewAria: "\uC5F4\uB300\uAD81\uACFC \uC2DC\uB300\uC790\uB9AC \uD669\uB3C4 \uBC14\uD034",
+  hudConstellationsSectionZodiac: "\uACC4\uC808\uD669\uB3C4/\uC2DC\uB300",
+  zodiacAgeViewTitle: "\uACC4\uC808\uD669\uB3C4 / \uD669\uB3C4\uAD81 \uC2DC\uB300",
+  zodiacAgeViewAria: "\uACC4\uC808\uD669\uB3C4\uC640 \uD669\uB3C4\uAD81 \uC2DC\uB300 \uBC14\uD034",
   zodiacCurrentAgeLabel: "\uD604\uC7AC \uC2DC\uB300",
   zodiacCurrentTropicalLabel: "\uC5F4\uB300\uAD81",
+  zodiacAgeOffsetLabel: "\uC2DC\uB300 \uC624\uD504\uC14B",
   zodiacSiderealOffsetLabel: "\uC2DC\uB300 \uC624\uD504\uC14B",
   zodiacAgeCycleLabel: "\uC2DC\uB300 \uAE38\uC774",
-  zodiacAgeCycleValue: "\uC57D 2,150~2,160\uB144",
+  zodiacAgeCycleValue: "2060\uB144",
   zodiacObservationDateLabel: "\uAD00\uCE21 \uB0A0\uC9DC",
-  zodiacAgeSummary: "\uAE08\uC0C9 \uB9C8\uCEE4\uB294 \uC5F4\uB300\uAD81 \uB9C1\uC5D0 \uACE0\uC815\uB418\uACE0, \uC2DC\uB300\uC790\uB9AC \uD669\uB3C4\uAC00 {offset}\uB9CC\uD07C \uC774\uB3D9\uD569\uB2C8\uB2E4. \uD669\uB3C4\uAD81 \uD55C \uC2DC\uB300\uB294 \uB300\uB7B5 2,150~2,160\uB144 \uADDC\uBAA8\uB85C \uBC14\uB00C\uBA70, \uD604\uC7AC \uC2DC\uB300\uB97C {ageSign}, \uC5F4\uB300\uAD81 \uAE30\uC900\uC73C\uB85C\uB294 {tropicalSign}\uC5D0 \uB450\uACE0 \uBCF4\uC5EC\uC90D\uB2C8\uB2E4."
+  zodiacAgeSummary: "\uAE08\uC0C9 \uB9C8\uCEE4\uB294 \uACC4\uC808\uD669\uB3C4\uB97C \uAC00\uB9AC\uD0A4\uACE0, \uD669\uB3C4\uAD81 \uC2DC\uB300 \uB9C1\uC740 {offset}\uB9CC\uD07C \uC774\uB3D9\uD569\uB2C8\uB2E4. \uD55C \uC2DC\uB300\uB294 2060\uB144\uB9C8\uB2E4 \uBC14\uB00C\uBA70, \uD604\uC7AC \uC2DC\uB300\uB97C {ageSign}, \uC5F4\uB300\uAD81 \uAE30\uC900\uC73C\uB85C\uB294 {tropicalSign}\uC5D0 \uB450\uACE0 \uBCF4\uC5EC\uC90D\uB2C8\uB2E4."
 });
 
 Object.assign(TRANSLATIONS.en, {

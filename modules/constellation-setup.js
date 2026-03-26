@@ -397,9 +397,9 @@ export function createConstellations() {
   let highlightedConstellation = null;
   let areConstellationsVisible = true;
   let areConstellationLinesVisible = false;
-  let seasonalPrecessionAngle = 0;
-  let cosPrecessionAngle = 1;
-  let sinPrecessionAngle = 0;
+  let seasonalEclipticAngle = 0;
+  let cosSeasonalAngle = 1;
+  let sinSeasonalAngle = 0;
   const baseCatalogByName = new Map(baseCatalog.map((entry) => [entry.name, entry]));
 
   function applyHighlightState() {
@@ -449,19 +449,27 @@ export function createConstellations() {
     return areConstellationLinesVisible;
   }
 
-  function setSeasonalPrecessionAngle(angleRadians = 0) {
+  function setSeasonalEclipticAngle(angleRadians = 0) {
     if (!Number.isFinite(angleRadians)) {
       return;
     }
 
-    seasonalPrecessionAngle = angleRadians;
-    cosPrecessionAngle = Math.cos(seasonalPrecessionAngle);
-    sinPrecessionAngle = Math.sin(seasonalPrecessionAngle);
-    group.rotation.y = seasonalPrecessionAngle;
+    seasonalEclipticAngle = angleRadians;
+    cosSeasonalAngle = Math.cos(seasonalEclipticAngle);
+    sinSeasonalAngle = Math.sin(seasonalEclipticAngle);
+    group.rotation.y = seasonalEclipticAngle;
+  }
+
+  function setSeasonalPrecessionAngle(angleRadians = 0) {
+    setSeasonalEclipticAngle(angleRadians);
+  }
+
+  function getSeasonalEclipticAngle() {
+    return seasonalEclipticAngle;
   }
 
   function getSeasonalPrecessionAngle() {
-    return seasonalPrecessionAngle;
+    return getSeasonalEclipticAngle();
   }
 
   function getConstellationState(name) {
@@ -474,17 +482,17 @@ export function createConstellations() {
       return null;
     }
 
-    return cloneConstellationEntry(entry, cosPrecessionAngle, sinPrecessionAngle);
+    return cloneConstellationEntry(entry, cosSeasonalAngle, sinSeasonalAngle);
   }
 
   function getConstellationCatalog() {
-    return baseCatalog.map((entry) => cloneConstellationEntry(entry, cosPrecessionAngle, sinPrecessionAngle));
+    return baseCatalog.map((entry) => cloneConstellationEntry(entry, cosSeasonalAngle, sinSeasonalAngle));
   }
 
   applyHighlightState();
   applyLineVisibilityState();
   setConstellationsVisible(true);
-  setSeasonalPrecessionAngle(0);
+  setSeasonalEclipticAngle(0);
 
   console.log(
     `Flat-earth dome constellations: ${constellationData.length} constellations, ${globalStarKeys.size} stars.`
@@ -496,9 +504,11 @@ export function createConstellations() {
     getConstellationLinesVisible,
     setConstellationsVisible,
     setConstellationLinesVisible,
+    setSeasonalEclipticAngle,
     setSeasonalPrecessionAngle,
     setHighlightedConstellation,
     getConstellationCatalog,
+    getSeasonalEclipticAngle,
     getSeasonalPrecessionAngle,
   };
 }

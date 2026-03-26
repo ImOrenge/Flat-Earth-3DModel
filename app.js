@@ -6,16 +6,16 @@ import {
 import {
   createSolarEclipseState,
   getMoonPhase,
-  getSeasonalPrecessionPhase,
-  getSeasonalPrecessionAngle,
-  getSiderealZodiacOffsetRadians,
+  getSeasonalEclipticPhase,
+  getSeasonalEclipticAngle,
+  getZodiacAgeOffsetRadians,
   getSolarAltitudeFactor,
-} from "./modules/astronomy-utils.js?v=20260324-moon-cycle28";
+} from "./modules/astronomy-utils.js?v=20260326-seasonal-ecliptic1";
 import { createAstronomyController } from "./modules/astronomy-controller.js?v=20260325-eclipse-selector1";
 import { createCameraController } from "./modules/camera-controller.js?v=20260322-topview-zodiac2";
 import { createCelestialTrackingCameraController } from "./modules/celestial-tracking-camera-controller.js?v=20260320-constellation-precession1";
 import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js?v=20260324-moon-cycle28";
-import { createI18n } from "./modules/i18n.js?v=20260325-eclipse-selector1";
+import { createI18n } from "./modules/i18n.js?v=20260326-seasonal-ecliptic1";
 import { createMagneticFieldController } from "./modules/magnetic-field-controller.js?v=20260324-no-aurora1";
 import { createRouteSimulationController } from "./modules/route-simulation-controller.js";
 import { createTextureManager } from "./modules/texture-manager.js?v=20260311-gpu-daynight";
@@ -24,7 +24,7 @@ import { createWalkerController } from "./modules/walker-controller.js?v=2026032
 import * as constants from "./modules/constants.js?v=20260322-topview-zodiac4";
 import { createEclipseController } from "./modules/eclipse-controller.js?v=20260324-moon-cycle28";
 import { createCelestialVisualsController } from "./modules/celestial-visuals-controller.js?v=20260324-moon-disc-rotation1";
-import { createConstellationTabController } from "./modules/constellation-tab-controller.js?v=20260322-topview-zodiac6";
+import { createConstellationTabController } from "./modules/constellation-tab-controller.js?v=20260326-seasonal-ecliptic1";
 import { setupInputHandlers } from "./modules/input-handler.js?v=20260325-eclipse-selector1";
 import { createRocketController, SPACEPORTS } from "./modules/rocket-controller.js?v=20260319-parabola";
 const {
@@ -440,7 +440,7 @@ const zodiacAgeViewEl = document.getElementById("zodiac-age-view");
 const zodiacAgeSummaryEl = document.getElementById("zodiac-age-summary");
 const zodiacCurrentAgeEl = document.getElementById("zodiac-current-age");
 const zodiacCurrentTropicalEl = document.getElementById("zodiac-current-tropical");
-const zodiacSiderealOffsetEl = document.getElementById("zodiac-sidereal-offset");
+const zodiacAgeOffsetEl = document.getElementById("zodiac-sidereal-offset");
 const zodiacAgeCycleEl = document.getElementById("zodiac-age-cycle");
 const zodiacObservationDateEl = document.getElementById("zodiac-observation-date");
 const i18n = createI18n();
@@ -1004,8 +1004,8 @@ function setControlTab(tabKey) {
 }
 
 import { setupScene } from "./modules/scene-setup.js?v=20260324-moon-disc-rotation1";
-import { createConstellations } from "./modules/constellation-setup.js?v=20260320-constellation-precession1";
-import { createZodiacWheel } from "./modules/zodiac-wheel.js?v=20260322-topview-zodiac2";
+import { createConstellations } from "./modules/constellation-setup.js?v=20260326-seasonal-ecliptic1";
+import { createZodiacWheel } from "./modules/zodiac-wheel.js?v=20260326-seasonal-ecliptic1";
 const {
   renderer,
   scene,
@@ -1581,7 +1581,7 @@ constellationTabApi = createConstellationTabController({
     zodiacAgeSummaryEl,
     zodiacCurrentAgeEl,
     zodiacCurrentTropicalEl,
-    zodiacSiderealOffsetEl,
+    zodiacAgeOffsetEl,
     zodiacAgeCycleEl,
     zodiacObservationDateEl,
   },
@@ -1594,11 +1594,11 @@ i18n.subscribe(() => {
 
 constellationTabApi.initialize();
 setDemoSeasonPhaseFromDate(astronomyState.selectedDate.getTime());
-const initialSeasonalAngle = getSeasonalPrecessionAngle(astronomyState.selectedDate);
-const initialSiderealOffset = getSiderealZodiacOffsetRadians(astronomyState.selectedDate);
-constellationApi.setSeasonalPrecessionAngle(initialSeasonalAngle);
+const initialSeasonalAngle = getSeasonalEclipticAngle(astronomyState.selectedDate);
+const initialAgeOffset = getZodiacAgeOffsetRadians(astronomyState.selectedDate);
+constellationApi.setSeasonalEclipticAngle(initialSeasonalAngle);
 zodiacWheelApi.setSeasonalAngle(initialSeasonalAngle);
-zodiacWheelApi.setSiderealOffset(initialSiderealOffset);
+zodiacWheelApi.setAgeOffset(initialAgeOffset);
 constellationTabApi.refreshDynamicState({ force: true });
 
 celestialTrackingCameraApi = createCelestialTrackingCameraController({
@@ -1834,7 +1834,7 @@ function setDemoSeasonPhaseFromDate(dateMs = simulationState.demoPhaseDateMs) {
     return;
   }
 
-  simulationState.orbitSeasonPhase = getSeasonalPrecessionPhase(date) * Math.PI * 2;
+  simulationState.orbitSeasonPhase = getSeasonalEclipticPhase(date) * Math.PI * 2;
 }
 
 function syncDemoMoonOrbitToSun() {
@@ -2001,13 +2001,13 @@ function animate() {
     astronomyApi.updateAstronomyUi(snapshot);
   }
 
-  const constellationPrecessionAngle = astronomyState.enabled
-    ? getSeasonalPrecessionAngle(projectionDate)
+  const constellationSeasonalAngle = astronomyState.enabled
+    ? getSeasonalEclipticAngle(projectionDate)
     : -simulationState.orbitSeasonPhase;
-  const siderealZodiacOffset = getSiderealZodiacOffsetRadians(projectionDate);
-  constellationApi.setSeasonalPrecessionAngle(constellationPrecessionAngle);
-  zodiacWheelApi.setSeasonalAngle(constellationPrecessionAngle);
-  zodiacWheelApi.setSiderealOffset(siderealZodiacOffset);
+  const zodiacAgeOffset = getZodiacAgeOffsetRadians(projectionDate);
+  constellationApi.setSeasonalEclipticAngle(constellationSeasonalAngle);
+  zodiacWheelApi.setSeasonalAngle(constellationSeasonalAngle);
+  zodiacWheelApi.setAgeOffset(zodiacAgeOffset);
   zodiacWheelApi.setSuppressed(walkerState.enabled);
   constellationTabApi.refreshDynamicState();
 
@@ -2062,8 +2062,10 @@ function animate() {
     
     // Global trap for playwright
     window.__E2E_SNAPSHOT = { 
-        constellationPrecessionAngle,
+        constellationPrecessionAngle: constellationSeasonalAngle,
+        constellationSeasonalAngle,
         dateIso: snapshot.date?.toISOString?.() ?? null,
+        zodiacAgeOffset,
         moonPos: snapshot.moonPosition, 
         darkSunPos: snapshot.darkSunRenderPosition,
         activeLunarEclipseData: snapshot.activeLunarEclipseData ?? null
