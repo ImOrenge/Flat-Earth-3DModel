@@ -12,7 +12,6 @@ import {
   getAstronomySnapshot as buildAstronomySnapshot,
   getMoonEclipticLatitudeDegrees,
   getMoonPhase,
-  getSignedMoonPhaseOffsetDays,
   getMoonSubpoint,
   getSunSubpoint,
   getSeasonalEventMoments,
@@ -104,22 +103,6 @@ export function createAstronomyController({
   const DARK_SUN_BAND_SPEED_FACTOR = 1.08;
   const DARK_SUN_MS_PER_ORBIT_FRAME = (
     (24 * 3600 * 1000) * constants.ORBIT_SUN_SPEED / (2 * Math.PI)
-  );
-  const REALITY_ECLIPSE_MIN_ALIGNMENT = constants.REALITY_ECLIPSE_MIN_ALIGNMENT ?? 0.24;
-  const REALITY_ECLIPSE_MAX_ALIGNMENT_OFFSET_RADIANS = (
-    constants.REALITY_ECLIPSE_MAX_ALIGNMENT_OFFSET_RADIANS ?? (Math.PI * 0.42)
-  );
-  const REALITY_SOLAR_ECLIPSE_PHASE_WINDOW_DAYS = (
-    constants.REALITY_SOLAR_ECLIPSE_PHASE_WINDOW_DAYS ?? 1.6
-  );
-  const REALITY_LUNAR_ECLIPSE_PHASE_WINDOW_DAYS = (
-    constants.REALITY_LUNAR_ECLIPSE_PHASE_WINDOW_DAYS ?? 1.8
-  );
-  const REALITY_SOLAR_ECLIPSE_NODE_LIMIT_DEGREES = (
-    constants.REALITY_SOLAR_ECLIPSE_NODE_LIMIT_DEGREES ?? 1.55
-  );
-  const REALITY_LUNAR_ECLIPSE_NODE_LIMIT_DEGREES = (
-    constants.REALITY_LUNAR_ECLIPSE_NODE_LIMIT_DEGREES ?? 1.2
   );
   let lastSeasonalSunKey = "";
   let lastSolarEclipseState = createSolarEclipseState();
@@ -776,14 +759,6 @@ export function createAstronomyController({
     };
   }
 
-  function getPhaseWindowFactor(distanceDays = 0, windowDays = 1) {
-    return THREE.MathUtils.clamp(
-      1 - (Math.abs(distanceDays) / Math.max(windowDays, 0.0001)),
-      0,
-      1
-    );
-  }
-
   function getShortestAngleDeltaRadians(fromAngle = 0, toAngle = 0) {
     return Math.atan2(
       Math.sin(toAngle - fromAngle),
@@ -828,66 +803,53 @@ export function createAstronomyController({
     });
   }
 
-  function getRealityEclipseAlignmentState(date) {
-    const signedDaysToNew = getSignedMoonPhaseOffsetDays(date, 0);
-    const signedDaysToFull = getSignedMoonPhaseOffsetDays(date, 0.5);
-    const solarPhaseFactor = getPhaseWindowFactor(
-      signedDaysToNew,
-      REALITY_SOLAR_ECLIPSE_PHASE_WINDOW_DAYS
-    );
-    const lunarPhaseFactor = getPhaseWindowFactor(
-      signedDaysToFull,
-      REALITY_LUNAR_ECLIPSE_PHASE_WINDOW_DAYS
-    );
-    const nodeLatitudeDegrees = Math.abs(getMoonEclipticLatitudeDegrees(date));
-    const solarNodeFactor = THREE.MathUtils.clamp(
-      1 - (nodeLatitudeDegrees / Math.max(REALITY_SOLAR_ECLIPSE_NODE_LIMIT_DEGREES, 0.0001)),
-      0,
-      1
-    );
-    const lunarNodeFactor = THREE.MathUtils.clamp(
-      1 - (nodeLatitudeDegrees / Math.max(REALITY_LUNAR_ECLIPSE_NODE_LIMIT_DEGREES, 0.0001)),
-      0,
-      1
-    );
-    const solarStrength = Math.pow(solarPhaseFactor, 1.2) * Math.pow(solarNodeFactor, 1.35);
-    const lunarStrength = Math.pow(lunarPhaseFactor, 1.1) * Math.pow(lunarNodeFactor, 1.3);
-    let mode = "none";
-    let strength = 0;
-
-    if (solarStrength >= REALITY_ECLIPSE_MIN_ALIGNMENT && solarStrength >= (lunarStrength * 1.05)) {
-      mode = "solar";
-      strength = solarStrength;
-    } else if (lunarStrength >= REALITY_ECLIPSE_MIN_ALIGNMENT) {
-      mode = "lunar";
-      strength = lunarStrength;
-    }
-
-    return {
-      lunarStrength,
-      mode,
-      signedDaysToFull,
-      signedDaysToNew,
-      solarStrength,
-      strength
-    };
-  }
-
-  function getRealityBaselineDarkSunState(date) {
+  // 사로스 궤도: 교점 근접도 × 위상 가중치로 태양/달 물리 위치를 직접 보간.
+  // progress 매핑을 거치지 않으므로 corridor·height 불일치가 원천 차단됨.
+  function getDarkSunSarosOrbit(date, { sunRenderState = null, moonRenderState = null } = {}) {
     const sun = getSunSubpoint(date);
     const moonPhase = getMoonPhase(date);
     const sunAngleRadians = -THREE.MathUtils.degToRad(sun.longitudeDegrees);
     const orbitAngleRadians = sunAngleRadians + moonPhase.phaseAngleRadians;
+
+    // 교점 근접도 (황위도 0° = 1.0, 5.145° = 0.0)
     const nodeLatDeg = getMoonEclipticLatitudeDegrees(date);
-    const normalizedLat = THREE.MathUtils.clamp(nodeLatDeg / 5.145, -1, 1);
-    const progress = THREE.MathUtils.clamp(0.5 + normalizedLat * 0.38, 0, 1);
-    const direction = normalizedLat >= 0 ? 1 : -1;
+    const nodeProximity = 1 - Math.abs(THREE.MathUtils.clamp(nodeLatDeg / 5.145, -1, 1));
+    const direction = nodeLatDeg >= 0 ? 1 : -1;
+
+    // 위상 가중치: 삭(신월) = solarWeight, 망(보름) = lunarWeight
+    const cosPhase = Math.cos(moonPhase.phaseAngleRadians);
+    const solarWeight = nodeProximity * Math.pow(Math.max(0, cosPhase), 2);
+    const lunarWeight = nodeProximity * Math.pow(Math.max(0, -cosPhase), 2);
+    const totalWeight = solarWeight + lunarWeight;
+
+    // 중립 위치: 태양 corridor 중간, 태양 높이
+    const darkSunCorridor = getBodyCorridorRange("darkSun");
+    const neutralRadius = THREE.MathUtils.lerp(darkSunCorridor.min, darkSunCorridor.max, 0.5);
+    const neutralHeight = getSunOrbitHeight(neutralRadius);
+
+    if (totalWeight <= 0.0001) {
+      return { direction, orbitAngleRadians, centerRadius: neutralRadius, coilHeight: neutralHeight };
+    }
+
+    // 태양/달 render state에서 물리 위치 직접 참조
+    const resolvedSunState = sunRenderState ?? getRealitySunRenderStateAtDate(date);
+    const resolvedMoonState = moonRenderState ?? getRealityMoonRenderStateAtDate(date);
+
+    const solarRadius = resolvedSunState?.centerRadius ?? neutralRadius;
+    const lunarRadius = resolvedMoonState?.centerRadius ?? neutralRadius;
+    const solarHeight = resolvedSunState?.coilHeight ?? neutralHeight;
+    const lunarHeight = resolvedMoonState?.coilHeight ?? neutralHeight;
+
+    // 가중 평균 → 중립에서 블렌드
+    const blendedRadius = (solarWeight * solarRadius + lunarWeight * lunarRadius) / totalWeight;
+    const blendedHeight = (solarWeight * solarHeight + lunarWeight * lunarHeight) / totalWeight;
+    const blendFactor = THREE.MathUtils.clamp(totalWeight / 0.25, 0, 1);
 
     return {
       direction,
       orbitAngleRadians,
-      orbitMode: "auto",
-      progress
+      centerRadius: THREE.MathUtils.lerp(neutralRadius, blendedRadius, blendFactor),
+      coilHeight: THREE.MathUtils.lerp(neutralHeight, blendedHeight, blendFactor)
     };
   }
 
@@ -901,13 +863,17 @@ export function createAstronomyController({
     return Math.max(2 * Math.asin(contactRatio), 0.0005);
   }
 
-  function getEventAnchoredDarkSunState(date, {
-    baselineState,
+  // 카탈로그 이벤트 앵커링: sarosOrbit 위에 NASA 이벤트 타이밍을 블렌드
+  function getEventAnchoredDarkSunOrbit(date, {
+    sarosOrbit,
     moonRenderState = null,
     sunRenderState = null
   } = {}) {
     const alignment = getEclipseAlignmentTarget({
-      baselineState,
+      baselineState: {
+        orbitAngleRadians: sarosOrbit.orbitAngleRadians,
+        progress: getBodyCorridorProgress("darkSun", sarosOrbit.centerRadius)
+      },
       catalog: getRuntimeEclipseCatalog(),
       dateMs: date.getTime(),
       moonRenderState,
@@ -919,108 +885,39 @@ export function createAstronomyController({
     }
 
     const targetAnchorState = alignment.mode === "solar" ? sunRenderState : moonRenderState;
-    let targetOrbitAngle = alignment.targetOrbitAngleRadians ?? baselineState.orbitAngleRadians;
+    let targetOrbitAngle = alignment.targetOrbitAngleRadians ?? sarosOrbit.orbitAngleRadians;
     const eventType = alignment.eventMeta?.type ?? "";
+
+    // partial/total: 접촉 각도 클램핑
     if (targetAnchorState && (eventType === "partial" || eventType === "total")) {
-      const anchorOrbitAngle = targetAnchorState.orbitAngleRadians ?? baselineState.orbitAngleRadians;
+      const anchorOrbitAngle = targetAnchorState.orbitAngleRadians ?? sarosOrbit.orbitAngleRadians;
       const maxContactOffset = getDarkSunEventContactOffsetRadians(alignment.mode, targetAnchorState);
       const rawOffset = getShortestAngleDeltaRadians(anchorOrbitAngle, targetOrbitAngle);
-      const overlapScale = eventType === "total" ? 0.35 : 0.78;
-      const overlapLimit = maxContactOffset * overlapScale;
-      const clampedOffset = THREE.MathUtils.clamp(rawOffset, -overlapLimit, overlapLimit);
-      targetOrbitAngle = anchorOrbitAngle + clampedOffset;
+      const overlapScale = (eventType === "total" && alignment.mode === "lunar") ? 0 : 0.35;
+      const overlapLimit = maxContactOffset * (eventType === "total" ? overlapScale : 0.78);
+      targetOrbitAngle = anchorOrbitAngle + THREE.MathUtils.clamp(rawOffset, -overlapLimit, overlapLimit);
     }
 
     const blendFactor = THREE.MathUtils.clamp(alignment.blendFactor ?? 0, 0, 1);
+    const targetRadius = targetAnchorState?.centerRadius ?? sarosOrbit.centerRadius;
+    const targetHeight = targetAnchorState?.coilHeight ?? sarosOrbit.coilHeight;
+
     return {
-      direction: alignment.direction ?? baselineState.direction,
+      direction: alignment.direction ?? sarosOrbit.direction,
       eventMeta: alignment.eventMeta ?? null,
-      orbitAngleRadians: lerpAngleRadians(
-        baselineState.orbitAngleRadians,
-        targetOrbitAngle,
-        blendFactor
-      ),
-      orbitMode: "auto",
-      progress: THREE.MathUtils.clamp(
-        THREE.MathUtils.lerp(
-          baselineState.progress,
-          (targetAnchorState?.centerRadius != null
-            ? getBodyProgressFromProjectedRadius("darkSun", targetAnchorState.centerRadius)
-            : alignment.targetProgress) ?? baselineState.progress,
-          blendFactor
-        ),
-        0,
-        1
-      )
+      orbitAngleRadians: lerpAngleRadians(sarosOrbit.orbitAngleRadians, targetOrbitAngle, blendFactor),
+      centerRadius: THREE.MathUtils.lerp(sarosOrbit.centerRadius, targetRadius, blendFactor),
+      coilHeight: THREE.MathUtils.lerp(sarosOrbit.coilHeight, targetHeight, blendFactor)
     };
   }
 
-  function getRealityDarkSunState(date, { sunRenderState = null, moonRenderState = null } = {}) {
-    const baselineState = getRealityBaselineDarkSunState(date);
-    const eventAnchoredState = getEventAnchoredDarkSunState(date, {
-      baselineState,
+  function getRealityDarkSunOrbit(date, { sunRenderState = null, moonRenderState = null } = {}) {
+    const sarosOrbit = getDarkSunSarosOrbit(date, { sunRenderState, moonRenderState });
+    return getEventAnchoredDarkSunOrbit(date, {
+      sarosOrbit,
       moonRenderState,
       sunRenderState
-    });
-    if (eventAnchoredState) {
-      return eventAnchoredState;
-    }
-    const eclipseAlignment = getRealityEclipseAlignmentState(date);
-
-    if (eclipseAlignment.mode === "none") {
-      return baselineState;
-    }
-
-    const modeConfig = eclipseAlignment.mode === "solar"
-      ? {
-        signedDays: eclipseAlignment.signedDaysToNew,
-        windowDays: REALITY_SOLAR_ECLIPSE_PHASE_WINDOW_DAYS
-      }
-      : {
-        signedDays: eclipseAlignment.signedDaysToFull,
-        windowDays: REALITY_LUNAR_ECLIPSE_PHASE_WINDOW_DAYS
-      };
-    const targetRenderState = eclipseAlignment.mode === "solar"
-      ? (sunRenderState ?? getRealitySunRenderStateAtDate(date))
-      : (moonRenderState ?? getRealityMoonRenderStateAtDate(date));
-
-    if (!targetRenderState) {
-      return baselineState;
-    }
-
-    const blendFactor = THREE.MathUtils.clamp(
-      (eclipseAlignment.strength - REALITY_ECLIPSE_MIN_ALIGNMENT) /
-      Math.max(1 - REALITY_ECLIPSE_MIN_ALIGNMENT, 0.0001),
-      0,
-      1
-    );
-    const normalizedPhaseOffset = THREE.MathUtils.clamp(
-      modeConfig.signedDays / Math.max(modeConfig.windowDays, 0.0001),
-      -1,
-      1
-    );
-    const targetOrbitAngle = (
-      (targetRenderState.orbitAngleRadians ?? baselineState.orbitAngleRadians) +
-      (normalizedPhaseOffset * REALITY_ECLIPSE_MAX_ALIGNMENT_OFFSET_RADIANS)
-    );
-    const targetProgress = targetRenderState.centerRadius != null
-      ? getBodyProgressFromProjectedRadius("darkSun", targetRenderState.centerRadius)
-      : (targetRenderState.corridorProgress ?? targetRenderState.macroProgress ?? baselineState.progress);
-
-    return {
-      direction: normalizedPhaseOffset >= 0 ? 1 : -1,
-      orbitAngleRadians: lerpAngleRadians(
-        baselineState.orbitAngleRadians,
-        targetOrbitAngle,
-        blendFactor
-      ),
-      orbitMode: "auto",
-      progress: THREE.MathUtils.clamp(
-        THREE.MathUtils.lerp(baselineState.progress, targetProgress, blendFactor),
-        0,
-        1
-      )
-    };
+    }) ?? sarosOrbit;
   }
 
   function getDarkSunRenderState({
@@ -1038,31 +935,38 @@ export function createAstronomyController({
     useExplicitOrbit = true,
     orbitMode = source === "demo" ? simulationState.orbitMode : "auto"
   } = {}) {
-    // Demo keeps explicit orbit. Reality derives dark sun from real sun/moon cycle sync.
-    const darkSunState = source === "demo"
-      ? {
-        // Demo mode: use explicit state from simulationState (independent orbit)
-        direction,
+    if (source === "demo") {
+      // Demo: explicit independent orbit
+      const renderState = getBodyCoilRenderState({
+        body: "darkSun",
         orbitAngleRadians,
         orbitMode,
-        progress
-      }
-      : getRealityDarkSunState(date, {
-        moonRenderState,
-        sunRenderState
+        progress,
+        source: "demo"
       });
+      return { ...renderState, direction, orbitAngleRadians, orbitMode };
+    }
+
+    // Reality: Saros-based physical interpolation — directly blend sun/moon positions.
+    // No progress→corridor mapping; centerRadius and coilHeight come straight from orbit.
+    const orbit = getRealityDarkSunOrbit(date, { moonRenderState, sunRenderState });
+    const orbitProgress = getBodyCorridorProgress("darkSun", orbit.centerRadius);
     const renderState = getBodyCoilRenderState({
       body: "darkSun",
-      orbitAngleRadians: darkSunState.orbitAngleRadians,
-      orbitMode: darkSunState.orbitMode,
-      progress: darkSunState.progress,
-      source: "demo"
+      orbitAngleRadians: orbit.orbitAngleRadians,
+      orbitMode: "auto",
+      progress: orbitProgress,
+      source: "demo"  // use explicit progress, not projectedRadius
     });
+
+    // Override position height with physically blended coilHeight from saros/catalog orbit
     return {
       ...renderState,
-      direction: darkSunState.direction,
-      orbitAngleRadians: darkSunState.orbitAngleRadians,
-      orbitMode: darkSunState.orbitMode
+      coilHeight: orbit.coilHeight,
+      direction: orbit.direction,
+      orbitAngleRadians: orbit.orbitAngleRadians,
+      orbitMode: "auto",
+      position: new THREE.Vector3(renderState.position.x, orbit.coilHeight, renderState.position.z)
     };
   }
 
