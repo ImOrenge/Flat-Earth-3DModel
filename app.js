@@ -25,7 +25,7 @@ import * as constants from "./modules/constants.js";
 import { createEclipseController } from "./modules/eclipse-controller.js?v=20260320-reality-eclipse-sync2";
 import { createCelestialVisualsController } from "./modules/celestial-visuals-controller.js?v=20260321-sunset5";
 import { createConstellationTabController } from "./modules/constellation-tab-controller.js?v=20260320-constellation-precession1";
-import { setupInputHandlers } from "./modules/input-handler.js?v=20260327-mobilehud1";
+import { setupInputHandlers } from "./modules/input-handler.js?v=20260327-mobilehud4";
 import { createRocketController, SPACEPORTS } from "./modules/rocket-controller.js?v=20260319-parabola";
 const {
   DEFAULT_MAP_PATH,
@@ -286,6 +286,7 @@ const resetButton = document.getElementById("reset-camera");
 const summaryUtilitySlotEl = document.getElementById("summary-utility-slot");
 const languageToggleRowEl = document.getElementById("language-toggle-row");
 const summaryButtonRowEl = document.getElementById("summary-button-row");
+const cameraPresetRowEl = document.getElementById("camera-preset-row");
 const topbarStatusHomeEl = document.getElementById("topbar-status-home");
 const topbarStatusEl = document.getElementById("topbar-status");
 const topbarNavSlotEl = document.getElementById("topbar-nav-slot");
@@ -296,6 +297,7 @@ const topbarHelpHomeEl = document.getElementById("topbar-help-home");
 const settingsAnchorEl = document.getElementById("settings-anchor");
 const settingsToggleButtonEl = document.getElementById("settings-toggle");
 const settingsPopoverEl = document.getElementById("settings-popover");
+const privacyChoicesButtonEl = document.getElementById("privacy-choices-button");
 const settingsPrimarySlotEl = document.getElementById("settings-primary-slot");
 const settingsStatusSlotEl = document.getElementById("settings-status-slot");
 const detailTabsHomeEl = document.getElementById("detail-tabs-home");
@@ -319,6 +321,7 @@ const rocketSpaceportSelect = document.getElementById("rocket-spaceport-select")
 const rocketTypeSelect      = document.getElementById("rocket-type-select");
 const rocketLaunchBtn       = document.getElementById("rocket-launch-btn");
 const controlTabButtons = [...document.querySelectorAll("[data-control-tab]")];
+const cameraPresetButtons = [...document.querySelectorAll("[data-camera-preset]")];
 const controlTabPanels = [...document.querySelectorAll("[data-control-panel]")];
 const hudSubtabButtons = [...document.querySelectorAll("[data-hud-panel-tab]")];
 const translatableTextEls = [...document.querySelectorAll("[data-i18n]")];
@@ -739,6 +742,28 @@ function resetMovementInputs() {
   movementState.backward = false;
   movementState.left = false;
   movementState.right = false;
+}
+
+function openGooglePrivacyChoices() {
+  const googlefc = window.googlefc;
+  const usStatesOptOutApi = googlefc?.usstatesoptout;
+
+  if (typeof usStatesOptOutApi?.openConfirmationDialog === "function") {
+    usStatesOptOutApi.openConfirmationDialog();
+    return;
+  }
+
+  if (typeof googlefc?.showRevocationMessage === "function") {
+    googlefc.showRevocationMessage();
+    return;
+  }
+
+  if (typeof googlefc?.showManageOptions === "function") {
+    googlefc.showManageOptions();
+    return;
+  }
+
+  console.warn("[Privacy] Consent choices UI is not available in this region/session.");
 }
 
 function openSettingsPanel(trigger = settingsToggleButtonEl) {
@@ -1799,7 +1824,7 @@ const rocketApi = createRocketController({
     setControlTab, createSolarEclipseState: eclipseApi.createSolarEclipseState, syncFullTrailVisibility: eclipseApi.syncFullTrailVisibility,
     resetDarkSunStageState: eclipseApi.resetDarkSunStageState, showSolarEclipseToast: eclipseApi.showSolarEclipseToast,
     resetDarkSunOcclusionMotion: eclipseApi.resetDarkSunOcclusionMotion, darkSunOcclusionState,
-    controlTabButtons, languageToggleEl, i18n, resetButton,
+    controlTabButtons, cameraPresetButtons, languageToggleEl, i18n, resetButton,
     exitFirstPersonMode, enterFirstPersonMode, walkerModeEl, resetWalkerButton,
     routeSelectEl, routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl,
     celestialFullTrailEl, routePlaybackButton, routeResetButton, realitySyncEl,
