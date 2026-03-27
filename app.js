@@ -14,18 +14,18 @@ import {
 import { createAstronomyController } from "./modules/astronomy-controller.js?v=20260325-eclipse-selector1";
 import { createCameraController } from "./modules/camera-controller.js?v=20260322-topview-zodiac2";
 import { createCelestialTrackingCameraController } from "./modules/celestial-tracking-camera-controller.js?v=20260320-constellation-precession1";
-import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js?v=20260324-moon-cycle28";
-import { createI18n } from "./modules/i18n.js?v=20260326-seasonal-ecliptic1";
-import { createMagneticFieldController } from "./modules/magnetic-field-controller.js?v=20260324-no-aurora1";
+import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js?v=20260312-darksun-eclipse1";
+import { createI18n } from "./modules/i18n.js?v=20260327-mobilehud1";
+import { createMagneticFieldController } from "./modules/magnetic-field-controller.js?v=20260314-magnetic-pinecone3";
 import { createRouteSimulationController } from "./modules/route-simulation-controller.js";
 import { createTextureManager } from "./modules/texture-manager.js?v=20260311-gpu-daynight";
 import { createWalkerController } from "./modules/walker-controller.js?v=20260324-moon-cycle28";
 
-import * as constants from "./modules/constants.js?v=20260322-topview-zodiac4";
-import { createEclipseController } from "./modules/eclipse-controller.js?v=20260324-moon-cycle28";
-import { createCelestialVisualsController } from "./modules/celestial-visuals-controller.js?v=20260324-moon-disc-rotation1";
-import { createConstellationTabController } from "./modules/constellation-tab-controller.js?v=20260326-seasonal-ecliptic1";
-import { setupInputHandlers } from "./modules/input-handler.js?v=20260325-eclipse-selector1";
+import * as constants from "./modules/constants.js";
+import { createEclipseController } from "./modules/eclipse-controller.js?v=20260320-reality-eclipse-sync2";
+import { createCelestialVisualsController } from "./modules/celestial-visuals-controller.js?v=20260321-sunset5";
+import { createConstellationTabController } from "./modules/constellation-tab-controller.js?v=20260320-constellation-precession1";
+import { setupInputHandlers } from "./modules/input-handler.js?v=20260327-mobilehud1";
 import { createRocketController, SPACEPORTS } from "./modules/rocket-controller.js?v=20260319-parabola";
 const {
   DEFAULT_MAP_PATH,
@@ -282,20 +282,22 @@ const solarEclipseToastCopyEl = document.getElementById("solar-eclipse-toast-cop
 const statusEl = document.getElementById("status");
 const languageToggleEl = document.getElementById("language-toggle");
 const languageToggleTextEl = document.getElementById("language-toggle-text");
-const uploadInput = document.getElementById("map-upload");
 const resetButton = document.getElementById("reset-camera");
 const summaryUtilitySlotEl = document.getElementById("summary-utility-slot");
 const languageToggleRowEl = document.getElementById("language-toggle-row");
 const summaryButtonRowEl = document.getElementById("summary-button-row");
-const cameraPresetRowEl = document.getElementById("camera-preset-row");
-const cameraPresetButtons = [...document.querySelectorAll("[data-camera-preset]")];
+const topbarStatusHomeEl = document.getElementById("topbar-status-home");
+const topbarStatusEl = document.getElementById("topbar-status");
 const topbarNavSlotEl = document.getElementById("topbar-nav-slot");
 const topbarQuickSlotEl = document.getElementById("topbar-quick-slot");
 const topbarUtilitySlotEl = document.getElementById("topbar-utility-slot");
+const topbarLayoutHomeEl = document.getElementById("topbar-layout-home");
+const topbarHelpHomeEl = document.getElementById("topbar-help-home");
 const settingsAnchorEl = document.getElementById("settings-anchor");
 const settingsToggleButtonEl = document.getElementById("settings-toggle");
 const settingsPopoverEl = document.getElementById("settings-popover");
-const privacyChoicesButtonEl = document.getElementById("privacy-choices-button");
+const settingsPrimarySlotEl = document.getElementById("settings-primary-slot");
+const settingsStatusSlotEl = document.getElementById("settings-status-slot");
 const detailTabsHomeEl = document.getElementById("detail-tabs-home");
 const detailTabsEl = document.getElementById("detail-tabs");
 const helpOpenButtonEl = document.getElementById("help-open");
@@ -445,6 +447,7 @@ const zodiacAgeCycleEl = document.getElementById("zodiac-age-cycle");
 const zodiacObservationDateEl = document.getElementById("zodiac-observation-date");
 const i18n = createI18n();
 const LAYOUT_STORAGE_KEY = "flat-earth-layout-mode";
+const MOBILE_LAYOUT_BREAKPOINT = 1080;
 const HUD_PANEL_SECTION_DEFAULTS = {
   astronomy: "time",
   routes: "playback",
@@ -481,7 +484,8 @@ const FOCUSABLE_SELECTOR = [
 
 let helpModalOpen = false;
 let settingsPanelOpen = false;
-let currentLayoutMode = getInitialLayoutMode();
+let preferredLayoutMode = getInitialLayoutMode();
+let currentLayoutMode = "hud";
 let currentControlTab = controlTabButtons.find((button) => button.classList.contains("active"))?.dataset.controlTab ?? "astronomy";
 let lastFocusedBeforeHelpModal = null;
 let lastFocusedBeforeSettingsPanel = null;
@@ -504,6 +508,14 @@ function moveNodeToSlot(node, slot) {
   }
 
   slot.appendChild(node);
+}
+
+function isMobileViewport() {
+  if (typeof window.matchMedia === "function") {
+    return window.matchMedia(`(max-width: ${MOBILE_LAYOUT_BREAKPOINT}px)`).matches;
+  }
+
+  return window.innerWidth <= MOBILE_LAYOUT_BREAKPOINT;
 }
 
 function syncSummaryUtilitySlotVisibility() {
@@ -529,6 +541,21 @@ function syncLayoutAnchors(layoutMode) {
 
   moveNodeToSlot(detailTabsEl, detailTabsHomeEl);
   syncSummaryUtilitySlotVisibility();
+}
+
+function syncResponsiveTopbarAnchors() {
+  const useMobileSettingsLayout = isMobileViewport();
+
+  if (useMobileSettingsLayout) {
+    moveNodeToSlot(layoutSwitchEl, settingsPrimarySlotEl);
+    moveNodeToSlot(helpOpenButtonEl, settingsPrimarySlotEl);
+    moveNodeToSlot(topbarStatusEl, settingsStatusSlotEl);
+    return;
+  }
+
+  moveNodeToSlot(layoutSwitchEl, topbarLayoutHomeEl);
+  moveNodeToSlot(helpOpenButtonEl, topbarHelpHomeEl);
+  moveNodeToSlot(topbarStatusEl, topbarStatusHomeEl);
 }
 
 function syncHudMovablePanels() {
@@ -622,63 +649,55 @@ function syncHudStatusChips() {
   setChip(hudSystemChipEl, statusEl.textContent?.trim() || "--");
 }
 
-function setSystemStatusMessage(message) {
-  if (!statusEl || typeof message !== "string" || !message.trim()) {
-    return;
-  }
-
-  statusEl.textContent = message;
-  syncHudStatusChips();
+function getEffectiveLayoutMode() {
+  return isMobileViewport() ? "hud" : preferredLayoutMode;
 }
 
-function openGooglePrivacyChoices() {
-  const googleFc = window.googlefc;
-
-  if (!googleFc || !googleFc.callbackQueue || typeof googleFc.callbackQueue.push !== "function") {
-    setSystemStatusMessage(i18n.t("privacyChoicesStatusUnavailable"));
-    return;
-  }
-
-  closeSettingsPanel({ restoreFocus: false });
-  setSystemStatusMessage(i18n.t("privacyChoicesStatusOpening"));
-  googleFc.callbackQueue.push({
-    CONSENT_DATA_READY: () => {
-      if (typeof window.googlefc?.showRevocationMessage === "function") {
-        window.googlefc.showRevocationMessage();
-        return;
-      }
-
-      setSystemStatusMessage(i18n.t("privacyChoicesStatusUnavailable"));
-    }
-  });
-}
-
-function setLayoutMode(layoutMode, { persist = true } = {}) {
-  const nextLayoutMode = layoutMode === "classic" ? "classic" : "hud";
-  currentLayoutMode = nextLayoutMode;
-
-  document.body.dataset.layoutMode = nextLayoutMode;
-  if (appShellEl) {
-    appShellEl.dataset.layoutMode = nextLayoutMode;
-  }
-
-  syncLayoutAnchors(nextLayoutMode);
-  syncHudMovablePanels();
+function syncLayoutSwitchUi() {
+  const useMobileSettingsLayout = isMobileViewport();
+  layoutSwitchEl.classList.toggle("single-mode", useMobileSettingsLayout);
 
   for (const button of layoutModeButtons) {
-    const isActive = button.dataset.layoutModeSwitch === nextLayoutMode;
+    const layoutMode = button.dataset.layoutModeSwitch;
+    const isClassicButton = layoutMode === "classic";
+    const hideClassic = useMobileSettingsLayout && isClassicButton;
+    button.hidden = hideClassic;
+    button.disabled = hideClassic;
+    const isActive = useMobileSettingsLayout
+      ? layoutMode === "hud"
+      : layoutMode === preferredLayoutMode;
     button.classList.toggle("active", isActive);
     button.setAttribute("aria-pressed", String(isActive));
   }
+}
+
+function applyLayoutMode() {
+  const effectiveLayoutMode = getEffectiveLayoutMode();
+  currentLayoutMode = effectiveLayoutMode;
+
+  document.body.dataset.layoutMode = effectiveLayoutMode;
+  if (appShellEl) {
+    appShellEl.dataset.layoutMode = effectiveLayoutMode;
+  }
+
+  syncLayoutAnchors(effectiveLayoutMode);
+  syncResponsiveTopbarAnchors();
+  syncHudMovablePanels();
+  syncLayoutSwitchUi();
+  syncHudStatusChips();
+  syncHudPanelSections();
+}
+
+function setLayoutMode(layoutMode, { persist = true } = {}) {
+  preferredLayoutMode = layoutMode === "classic" ? "classic" : "hud";
 
   if (persist) {
     try {
-      window.localStorage.setItem(LAYOUT_STORAGE_KEY, nextLayoutMode);
+      window.localStorage.setItem(LAYOUT_STORAGE_KEY, preferredLayoutMode);
     } catch {}
   }
 
-  syncHudStatusChips();
-  syncHudPanelSections();
+  applyLayoutMode();
 }
 
 function getFocusableElements(root) {
@@ -843,6 +862,7 @@ function applyStaticTranslations() {
   settingsToggleButtonEl.setAttribute("aria-controls", "settings-popover");
   settingsToggleButtonEl.setAttribute("aria-haspopup", "dialog");
   settingsToggleButtonEl.setAttribute("aria-expanded", String(settingsPanelOpen));
+  settingsToggleButtonEl.setAttribute("aria-label", i18n.t("settingsButtonLabel"));
   settingsPopoverEl.setAttribute("aria-hidden", String(!settingsPanelOpen));
 
   for (const element of translatableTextEls) {
@@ -893,7 +913,7 @@ function syncSeasonalEventButtonLabels() {
 applyStaticTranslations();
 syncSeasonalEventButtonLabels();
 syncHudStatusChips();
-setLayoutMode(currentLayoutMode, { persist: false });
+applyLayoutMode();
 
 const hudStatusObserver = new MutationObserver(() => {
   syncHudStatusChips();
@@ -974,7 +994,7 @@ document.addEventListener("focusin", (event) => {
   }
 });
 window.addEventListener("resize", () => {
-  syncHudSideCard();
+  applyLayoutMode();
 });
 
 let constellationTabApi;
@@ -1481,7 +1501,8 @@ const firstPersonWorldApi = createFirstPersonWorldController({
   ambient: firstPersonAmbient,
   keyLight: firstPersonKeyLight,
   rimLight: firstPersonRimLight,
-  topDownBackground: skyTexture
+  topDownBackground: skyTexture,
+  orbitSun
 });
 
 const routeSimulationApi = createRouteSimulationController({
@@ -1773,12 +1794,12 @@ const rocketApi = createRocketController({
 
   setupInputHandlers({
     constants, canvas, cameraApi, walkerApi, celestialTrackingCameraApi, magneticFieldApi,
-    routeSimulationApi, textureApi, astronomyApi, rocketApi, ui, renderState, walkerState, cameraState,
+    routeSimulationApi, astronomyApi, rocketApi, ui, renderState, walkerState, cameraState,
     movementState, simulationState, astronomyState, celestialControlState, isUiBlocking, skyTexture, scene,
     setControlTab, createSolarEclipseState: eclipseApi.createSolarEclipseState, syncFullTrailVisibility: eclipseApi.syncFullTrailVisibility,
     resetDarkSunStageState: eclipseApi.resetDarkSunStageState, showSolarEclipseToast: eclipseApi.showSolarEclipseToast,
     resetDarkSunOcclusionMotion: eclipseApi.resetDarkSunOcclusionMotion, darkSunOcclusionState,
-    controlTabButtons, languageToggleEl, i18n, uploadInput, resetButton, cameraPresetButtons,
+    controlTabButtons, languageToggleEl, i18n, resetButton,
     exitFirstPersonMode, enterFirstPersonMode, walkerModeEl, resetWalkerButton,
     routeSelectEl, routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl,
     celestialFullTrailEl, routePlaybackButton, routeResetButton, realitySyncEl,
@@ -2266,3 +2287,94 @@ runOnboarding();
   });
 })();
 
+// Sunset/Sunrise timelapse
+(function initSunsetTimelapse() {
+  const btn = document.getElementById('watch-sunset-btn');
+  if (!btn) return;
+
+  const STEP_MS = 60 * 1000;
+  const AIM_LERP = 0.06;
+  let active = false;
+  let targetEvent = 'sunset';
+  let aimHeading = null;
+
+  function getSunAltitudeDeg() {
+    const sunPos = orbitSun.position;
+    const wx = walkerState.position.x;
+    const wz = walkerState.position.z;
+    const eyeH = constants.WALKER_EYE_HEIGHT || 0;
+    const dx = sunPos.x - wx;
+    const dz = sunPos.z - wz;
+    const dy = Math.max(sunPos.y - eyeH, 0.0001);
+    const planar = Math.hypot(dx, dz);
+    const raw = THREE.MathUtils.radToDeg(Math.atan2(dy, planar));
+    return raw - (constants.LOCAL_LIGHT_HORIZON_OFFSET_DEGREES || 22);
+  }
+
+  function getSunHeading() {
+    const sunPos = orbitSun.position;
+    return Math.atan2(sunPos.x - walkerState.position.x, sunPos.z - walkerState.position.z);
+  }
+
+  function updateLabel() {
+    if (active) {
+      btn.textContent = i18n.t('stopTimelapse');
+    } else if (getSunAltitudeDeg() > 5) {
+      btn.textContent = i18n.t('watchSunsetButton');
+    } else {
+      btn.textContent = i18n.t('watchSunriseButton');
+    }
+  }
+
+  function stop() {
+    active = false;
+    aimHeading = null;
+    updateLabel();
+  }
+
+  function tick() {
+    if (!active) return;
+    if (renderState.preparing) { requestAnimationFrame(tick); return; }
+    if (!walkerState.enabled) { stop(); return; }
+
+    const alt = getSunAltitudeDeg();
+    const done = targetEvent === 'sunset' ? alt < -1.5 : alt > 4;
+    if (done) { stop(); return; }
+
+    astronomyState.live = false;
+    astronomyState.selectedDate = new Date(astronomyState.selectedDate.getTime() + STEP_MS);
+    if (astronomyApi.syncLiveObservationInput) {
+      astronomyApi.syncLiveObservationInput(astronomyState.selectedDate);
+    }
+
+    const target = getSunHeading();
+    if (aimHeading === null) aimHeading = target;
+    let delta = target - aimHeading;
+    if (delta > Math.PI) delta -= Math.PI * 2;
+    if (delta < -Math.PI) delta += Math.PI * 2;
+    aimHeading += delta * AIM_LERP;
+    walkerState.heading = aimHeading;
+    walkerState.pitch = THREE.MathUtils.clamp(
+      THREE.MathUtils.degToRad(getSunAltitudeDeg() * 0.6),
+      -1.08, 0.72
+    );
+
+    requestAnimationFrame(tick);
+  }
+
+  btn.addEventListener('click', () => {
+    if (active) { stop(); return; }
+    if (!walkerState.enabled) {
+      enterFirstPersonMode();
+    }
+    const alt = getSunAltitudeDeg();
+    targetEvent = alt > 5 ? 'sunset' : 'sunrise';
+    active = true;
+    aimHeading = null;
+    updateLabel();
+    requestAnimationFrame(tick);
+  });
+
+  updateLabel();
+  document.addEventListener('i18n-updated', () => { if (!active) updateLabel(); });
+})();

@@ -11,7 +11,7 @@ const TRANSLATIONS = {
     firstPersonPrepLabel: "FIRST PERSON",
     summaryEyebrow: "3D MODEL",
     summaryTitle: "Flat Earth Disc",
-    summaryCopy: "Flat map texture based 3D preview. Drop a custom map into <code>assets/flat-earth-map.png</code> or upload one here for an immediate update.",
+    summaryCopy: "Flat map texture based 3D preview. Drop a custom map into <code>assets/flat-earth-map.png</code> and reload the scene for an immediate update.",
     languageLabel: "Language",
     uploadMapButton: "Upload Map",
     resetCameraButton: "Reset Camera",
@@ -60,6 +60,9 @@ const TRANSLATIONS = {
     coordObserver: "Observer",
     coordLocalLight: "Local Light",
     resetWalkerButton: "Reset Walker",
+    watchSunsetButton: "Watch Sunset",
+    watchSunriseButton: "Watch Sunrise",
+    stopTimelapse: "Stop",
     seasonalAuditControlsTitle: "Seasonal Audit Controls",
     auditYearLabel: "Audit Year",
     moonAuditTitle: "Moon Audit",
@@ -184,7 +187,7 @@ const TRANSLATIONS = {
     firstPersonPrepLabel: "1인칭",
     summaryEyebrow: "3D 모델",
     summaryTitle: "평면 지구 원반",
-    summaryCopy: "평면 지도 텍스처 기반 3D 미리보기입니다. 사용자 지도를 <code>assets/flat-earth-map.png</code>에 넣거나 여기에서 업로드하면 바로 반영됩니다.",
+    summaryCopy: "평면 지도 텍스처 기반 3D 미리보기입니다. 사용자 지도를 <code>assets/flat-earth-map.png</code>로 교체한 뒤 장면을 새로고침하면 바로 반영됩니다.",
     languageLabel: "언어",
     uploadMapButton: "지도 업로드",
     resetCameraButton: "카메라 초기화",
@@ -222,6 +225,9 @@ const TRANSLATIONS = {
     coordObserver: "관측자",
     coordLocalLight: "현지 광량",
     resetWalkerButton: "워커 초기화",
+    watchSunsetButton: "일몰 감상",
+    watchSunriseButton: "일출 감상",
+    stopTimelapse: "정지",
     seasonalAuditControlsTitle: "계절 점검 제어",
     auditYearLabel: "점검 연도",
     moonAuditTitle: "달 점검",
@@ -537,7 +543,7 @@ Object.assign(TRANSLATIONS.ko, {
 });
 
 Object.assign(TRANSLATIONS.en, {
-  summaryCopy: "Bundled default map: <code>assets/flat-earth-map-square.svg</code>. For a custom model source, replace <code>assets/flat-earth-map.png</code> or upload an SVG here for an immediate preview update.",
+  summaryCopy: "Bundled default map: <code>assets/flat-earth-map-square.svg</code>. For a custom model source, replace <code>assets/flat-earth-map.png</code> and reload the scene to refresh the preview.",
   stepSwapTexture: "Replace <code>assets/flat-earth-map.png</code> and rerun the mesh script when you need a new model texture.",
   statusDefaultTextureLoaded: "{label} bundled default map loaded into the square top surface.",
   statusFallbackTexture: "Fallback bundled map is active until a custom map is loaded.",
@@ -545,7 +551,7 @@ Object.assign(TRANSLATIONS.en, {
 });
 
 Object.assign(TRANSLATIONS.ko, {
-  summaryCopy: "\uAE30\uBCF8 \uBC88\uB4E4 \uC9C0\uB3C4\uB294 <code>assets/flat-earth-map-square.svg</code>\uC785\uB2C8\uB2E4. \uBAA8\uB378 \uC6A9 \uC0AC\uC6A9\uC790 \uC9C0\uB3C4\uB97C \uBC14\uAFB8\uB824\uBA74 <code>assets/flat-earth-map.png</code>\uB97C \uAD50\uCCB4\uD558\uAC70\uB098, \uC5EC\uAE30\uC5D0 SVG\uB97C \uC5C5\uB85C\uB4DC\uD574 \uBBF8\uB9AC\uBCF4\uAE30\uB97C \uBC14\uB85C \uAC31\uC2E0\uD558\uC138\uC694.",
+  summaryCopy: "\uAE30\uBCF8 \uBC88\uB4E4 \uC9C0\uB3C4\uB294 <code>assets/flat-earth-map-square.svg</code>\uC785\uB2C8\uB2E4. \uBAA8\uB378 \uC6A9 \uC0AC\uC6A9\uC790 \uC9C0\uB3C4\uB97C \uBC14\uAFB8\uB824\uBA74 <code>assets/flat-earth-map.png</code>\uB97C \uAD50\uCCB4\uD55C \uB4A4 \uC7A5\uBA74\uC744 \uC0C8\uB85C\uACE0\uCE68\uD574 \uBBF8\uB9AC\uBCF4\uAE30\uB97C \uAC31\uC2E0\uD558\uC138\uC694.",
   stepSwapTexture: "\uC0C8 \uBAA8\uB378 \uD14D\uC2A4\uCC98\uAC00 \uD544\uC694\uD558\uBA74 <code>assets/flat-earth-map.png</code>\uB97C \uAD50\uCCB4\uD55C \uB4A4 \uBA54\uC2DC \uC2A4\uD06C\uB9BD\uD2B8\uB97C \uB2E4\uC2DC \uC2E4\uD589\uD558\uC138\uC694.",
   statusDefaultTextureLoaded: "{label} \uAE30\uBCF8 \uBC88\uB4E4 \uC9C0\uB3C4\uB97C \uC0C1\uB2E8 \uC815\uC0AC\uAC01 \uD45C\uBA74\uC5D0 \uBD88\uB7EC\uC654\uC2B5\uB2C8\uB2E4.",
   statusFallbackTexture: "\uC0AC\uC6A9\uC790 \uC9C0\uB3C4\uB97C \uBD88\uB7EC\uC624\uAE30 \uC804\uAE4C\uC9C0 \uAE30\uBCF8 \uBC88\uB4E4 \uC9C0\uB3C4\uB97C \uC0AC\uC6A9\uD569\uB2C8\uB2E4.",

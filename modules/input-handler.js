@@ -9,7 +9,6 @@ export function setupInputHandlers(deps) {
     celestialTrackingCameraApi,
     magneticFieldApi,
     routeSimulationApi,
-    textureApi,
     astronomyApi,
     rocketApi,
     ui,
@@ -30,7 +29,7 @@ export function setupInputHandlers(deps) {
     showSolarEclipseToast,
     resetDarkSunOcclusionMotion,
     darkSunOcclusionState,
-    controlTabButtons, languageToggleEl, i18n, uploadInput, resetButton, cameraPresetButtons = [],
+    controlTabButtons, languageToggleEl, i18n, resetButton,
     exitFirstPersonMode, enterFirstPersonMode, walkerModeEl, resetWalkerButton,
     routeSelectEl, routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl,
     celestialFullTrailEl, routePlaybackButton, routeResetButton, realitySyncEl,
@@ -56,6 +55,8 @@ export function setupInputHandlers(deps) {
     CAMERA_TRACKING_MAX_DISTANCE,
     CAMERA_TOPDOWN_MIN_RADIUS,
     CAMERA_TOPDOWN_MAX_RADIUS,
+    CAMERA_TOPDOWN_ZOOM_WHEEL_SENSITIVITY,
+    CAMERA_TRACKING_ZOOM_WHEEL_SENSITIVITY,
     FOG_DEFAULT_NEAR,
     FOG_DEFAULT_FAR,
     DISC_RADIUS
@@ -196,6 +197,29 @@ export function setupInputHandlers(deps) {
   
   
   
+  function getWheelDeltaPixels(event) {
+    if (event.deltaMode === 1) {
+      return event.deltaY * 16;
+    }
+
+    if (event.deltaMode === 2) {
+      return event.deltaY * window.innerHeight;
+    }
+
+    return event.deltaY;
+  }
+
+  function applyResponsiveZoom(currentTarget, deltaPixels, minValue, maxValue, sensitivity) {
+    const safeRange = Math.max(maxValue - minValue, 0.0001);
+    const normalizedDistance = THREE.MathUtils.clamp(
+      (currentTarget - minValue) / safeRange,
+      0,
+      1
+    );
+    const damping = THREE.MathUtils.lerp(0.58, 1.05, normalizedDistance);
+    return currentTarget + (deltaPixels * sensitivity * Math.max(currentTarget, 0.001) * damping);
+  }
+
   canvas.addEventListener("wheel", (event) => {
   
     if (walkerState.enabled || renderState.preparing || isUiBlocking?.()) {
@@ -206,14 +230,24 @@ export function setupInputHandlers(deps) {
   
     event.preventDefault();
   
+    const deltaPixels = getWheelDeltaPixels(event);
+
     if (cameraState.mode === "tracking") {
-  
-      cameraState.targetTrackingDistance += event.deltaY * 0.01;
-  
+      cameraState.targetTrackingDistance = applyResponsiveZoom(
+        cameraState.targetTrackingDistance,
+        deltaPixels,
+        CAMERA_TRACKING_MIN_DISTANCE,
+        CAMERA_TRACKING_MAX_DISTANCE,
+        CAMERA_TRACKING_ZOOM_WHEEL_SENSITIVITY
+      );
     } else {
-  
-      cameraState.targetRadius += event.deltaY * 0.01;
-  
+      cameraState.targetRadius = applyResponsiveZoom(
+        cameraState.targetRadius,
+        deltaPixels,
+        CAMERA_TOPDOWN_MIN_RADIUS,
+        CAMERA_TOPDOWN_MAX_RADIUS,
+        CAMERA_TOPDOWN_ZOOM_WHEEL_SENSITIVITY
+      );
     }
   
     cameraApi.clampCamera();
@@ -237,16 +271,6 @@ export function setupInputHandlers(deps) {
   languageToggleEl.addEventListener("change", () => {
   
     i18n.setLanguage(languageToggleEl.checked ? "en" : "ko");
-  
-  });
-  
-  
-  
-  uploadInput.addEventListener("change", (event) => {
-  
-    const file = event.target.files[0];
-  
-    textureApi.loadUserTexture(file);
   
   });
   

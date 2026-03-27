@@ -30,7 +30,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="./styles.css?v=20260325-eclipse-selector1">
+    <link rel="stylesheet" href="./styles.css?v=20260327-mobilehud1">
 </head>
 <body>
   <div class="app-shell">
@@ -74,22 +74,24 @@
           <p class="eyebrow topbar-eyebrow" data-i18n="summaryEyebrow">3D MODEL</p>
           <strong class="topbar-title" data-i18n="summaryTitle">Flat Earth Disc</strong>
         </div>
-        <div class="topbar-status" aria-live="polite">
-          <div class="topbar-chip">
-            <span class="topbar-chip-label" data-i18n="seasonSolarLatitude">Solar Latitude</span>
-            <strong class="topbar-chip-value" id="hud-season-latitude-chip">23.4degN</strong>
-          </div>
-          <div class="topbar-chip">
-            <span class="topbar-chip-label" data-i18n="seasonState">Season State</span>
-            <strong class="topbar-chip-value" id="hud-season-state-chip">Northern summer / Southern winter</strong>
-          </div>
-          <div class="topbar-chip">
-            <span class="topbar-chip-label" data-i18n="hudTimeStatusLabel">Time</span>
-            <strong class="topbar-chip-value" id="hud-time-chip">Syncing to the current local time.</strong>
-          </div>
-          <div class="topbar-chip">
-            <span class="topbar-chip-label" data-i18n="hudSystemStatusLabel">System</span>
-            <strong class="topbar-chip-value" id="hud-system-chip">Loading the bundled default map.</strong>
+        <div class="topbar-status-slot" id="topbar-status-home">
+          <div class="topbar-status" id="topbar-status" aria-live="polite">
+            <div class="topbar-chip">
+              <span class="topbar-chip-label" data-i18n="seasonSolarLatitude">Solar Latitude</span>
+              <strong class="topbar-chip-value" id="hud-season-latitude-chip">23.4degN</strong>
+            </div>
+            <div class="topbar-chip">
+              <span class="topbar-chip-label" data-i18n="seasonState">Season State</span>
+              <strong class="topbar-chip-value" id="hud-season-state-chip">Northern summer / Southern winter</strong>
+            </div>
+            <div class="topbar-chip">
+              <span class="topbar-chip-label" data-i18n="hudTimeStatusLabel">Time</span>
+              <strong class="topbar-chip-value" id="hud-time-chip">Syncing to the current local time.</strong>
+            </div>
+            <div class="topbar-chip">
+              <span class="topbar-chip-label" data-i18n="hudSystemStatusLabel">System</span>
+              <strong class="topbar-chip-value" id="hud-system-chip">Loading the bundled default map.</strong>
+            </div>
           </div>
         </div>
       </div>
@@ -97,7 +99,15 @@
       <div class="topbar-right">
         <div class="topbar-quick-slot" id="topbar-quick-slot"></div>
         <div class="topbar-persistent-actions">
-          <button class="button secondary compact-button topbar-action" id="help-open" type="button" data-i18n="helpButtonLabel">Help</button>
+          <div class="topbar-layout-slot" id="topbar-layout-home">
+            <div class="layout-switch" id="layout-switch" role="group" aria-label="Layout switcher">
+              <button class="layout-mode-button active" id="layout-mode-hud" data-layout-mode-switch="hud" type="button" data-i18n="layoutModeHud">HUD</button>
+              <button class="layout-mode-button" id="layout-mode-classic" data-layout-mode-switch="classic" type="button" data-i18n="layoutModeClassic">Classic</button>
+            </div>
+          </div>
+          <div class="topbar-help-slot" id="topbar-help-home">
+            <button class="button secondary compact-button topbar-action" id="help-open" type="button" data-i18n="helpButtonLabel">Help</button>
+          </div>
           <div class="settings-anchor" id="settings-anchor">
             <button class="button secondary compact-button topbar-action settings-toggle-button" id="settings-toggle" type="button">
               <span class="settings-icon" aria-hidden="true">&#9881;</span>
@@ -109,10 +119,8 @@
                 <strong class="settings-popover-title" id="settings-popover-title" data-i18n="settingsPanelTitle">App Settings</strong>
               </div>
               <div class="settings-popover-body">
-                <div class="layout-switch" id="layout-switch" role="group" aria-label="Layout switcher">
-                  <button class="layout-mode-button active" id="layout-mode-hud" data-layout-mode-switch="hud" type="button" data-i18n="layoutModeHud">HUD</button>
-                  <button class="layout-mode-button" id="layout-mode-classic" data-layout-mode-switch="classic" type="button" data-i18n="layoutModeClassic">Classic</button>
-                </div>
+                <div class="settings-primary-slot" id="settings-primary-slot"></div>
+                <div class="settings-status-slot" id="settings-status-slot"></div>
                 <div class="topbar-utility-slot settings-utility-slot" id="topbar-utility-slot"></div>
                 <div class="settings-overlay-group">
                   <div class="sync-row overlay-row">
@@ -188,7 +196,7 @@
             </p>
             <p class="panel-copy" data-i18n-html="summaryCopy">
               Bundled default map: <code>assets/flat-earth-map-square.svg</code>. For a custom model source, replace
-              <code>assets/flat-earth-map.png</code> or upload an SVG here for an immediate preview update.
+              <code>assets/flat-earth-map.png</code> and reload the scene to refresh the preview.
             </p>
             <ol class="steps help-steps">
               <li data-i18n-html="stepGenerateMesh">Generate the mesh with <code>scripts/generate-flat-earth-obj.ps1</code>.</li>
@@ -251,7 +259,7 @@
         <h1 data-i18n="summaryTitle">Flat Earth Disc</h1>
         <p class="panel-copy" data-i18n-html="summaryCopy">
           Bundled default map: <code>assets/flat-earth-map-square.svg</code>. For a custom model source, replace
-          <code>assets/flat-earth-map.png</code> or upload an SVG here for an immediate preview update.
+          <code>assets/flat-earth-map.png</code> and reload the scene to refresh the preview.
         </p>
 
         <div class="summary-utility-slot" id="summary-utility-slot">
@@ -265,7 +273,6 @@
           </div>
 
           <div class="button-row" id="summary-button-row">
-            <label class="button primary" for="map-upload" data-i18n="uploadMapButton">Upload Map</label>
             <button class="button secondary" id="reset-camera" type="button" data-i18n="resetCameraButton">Reset Camera</button>
           </div>
           <div class="button-row compact camera-preset-row" id="camera-preset-row">
@@ -273,8 +280,6 @@
             <button class="button secondary compact-button" data-camera-preset="angle" type="button" data-i18n="cameraPresetAngle">Angle View</button>
           </div>
         </div>
-
-        <input id="map-upload" type="file" accept="image/svg+xml,.svg">
 
         <section class="season-panel">
           <div class="season-row">
@@ -571,6 +576,7 @@
                 </div>
                 <div class="button-row compact">
                   <button class="button secondary compact-button" id="reset-walker" type="button" data-i18n="resetWalkerButton">Reset Walker</button>
+                  <button class="button primary compact-button" id="watch-sunset-btn" type="button">Watch Sunset</button>
                 </div>
               </div>
             </div>
@@ -902,6 +908,6 @@
     </div>
   </div>
 
-    <script type="module" src="./app.js?v=20260325-eclipse-selector1"></script>
+    <script type="module" src="./app.js?v=20260327-mobilehud1"></script>
   </body>
 </html>
