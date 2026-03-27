@@ -15,7 +15,7 @@ const TROPICAL_YEAR_DAYS = 365.2422;
 const ZODIAC_AGE_REFERENCE_DATE_MS = Date.parse("2026-03-21T00:00:00Z");
 const ZODIAC_AGE_REFERENCE_OFFSET_DEGREES = 24.125;
 const ZODIAC_AGE_YEARS_PER_SIGN = 2060;
-const ZODIAC_AGE_FULL_CYCLE_YEARS = ZODIAC_AGE_YEARS_PER_SIGN * 12;
+const ZODIAC_AGE_FULL_CYCLE_YEARS = 24720;
 const ZODIAC_AGE_DEGREES_PER_MS = (
   (FULL_CIRCLE_DEGREES / ZODIAC_AGE_FULL_CYCLE_YEARS) /
   (TROPICAL_YEAR_DAYS * DAY_MS)
@@ -401,6 +401,7 @@ export function getSeasonalEclipticPhase(date) {
 }
 
 export function getSeasonalPrecessionPhase(date) {
+  // Deprecated alias for compatibility.
   return getSeasonalEclipticPhase(date);
 }
 
@@ -409,6 +410,7 @@ export function getSeasonalEclipticAngle(date) {
 }
 
 export function getSeasonalPrecessionAngle(date) {
+  // Deprecated alias for compatibility.
   return getSeasonalEclipticAngle(date);
 }
 
@@ -425,6 +427,7 @@ export function getZodiacAgeOffsetRadians(date) {
 }
 
 export function getSiderealZodiacOffsetRadians(date) {
+  // Deprecated alias for compatibility.
   return getZodiacAgeOffsetRadians(date);
 }
 
@@ -614,6 +617,7 @@ export function getAstronomySnapshot({
       longitudeDegrees: moon.longitudeDegrees,
       orbitAngleRadians: THREE.MathUtils.degToRad(moon.longitudeDegrees),
       projectedRadius: moonProjectedRadius,
+      sunRenderState,
       source: "reality"
     })
     : null;

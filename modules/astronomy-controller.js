@@ -113,6 +113,28 @@ export function createAstronomyController({
   };
   const ECLIPSE_TIME_POINT_VALUES = ["start", "peak", "end"];
 
+  if (!Number.isFinite(simulationState.demoPhaseDateMs)) {
+    simulationState.demoPhaseDateMs = astronomyState.selectedDate.getTime();
+  }
+  if (simulationState.useRealityTimelineInDemo === undefined) {
+    simulationState.useRealityTimelineInDemo = true;
+  }
+  if (!Number.isFinite(simulationState.demoAnchorSimMs)) {
+    simulationState.demoAnchorSimMs = simulationState.demoPhaseDateMs;
+  }
+  if (!Number.isFinite(simulationState.demoAnchorRealMs)) {
+    simulationState.demoAnchorRealMs = performance.now();
+  }
+  if (!Number.isFinite(simulationState.simulatedDateMs)) {
+    simulationState.simulatedDateMs = simulationState.demoPhaseDateMs;
+  }
+  if (!Number.isFinite(simulationState.timelineAnchorDateMs)) {
+    simulationState.timelineAnchorDateMs = simulationState.demoAnchorSimMs;
+  }
+  if (!Number.isFinite(simulationState.timelineAnchorNowMs)) {
+    simulationState.timelineAnchorNowMs = simulationState.demoAnchorRealMs;
+  }
+
   function getEclipseTypeLabel(type = "") {
     switch (type) {
       case "annular":
@@ -185,7 +207,109 @@ export function createAstronomyController({
   }
 
   function getSpeedMultiplier() {
-    return THREE.MathUtils.clamp(celestialControlState?.speedMultiplier ?? 1, 0, 5);
+    return THREE.MathUtils.clamp(
+      celestialControlState?.speedMultiplier ?? constants.CELESTIAL_SPEED_DEFAULT,
+      constants.CELESTIAL_SPEED_MIN,
+      constants.CELESTIAL_SPEED_MAX
+    );
+  }
+
+  function formatSpeedMultiplier(value = getSpeedMultiplier()) {
+    const clamped = THREE.MathUtils.clamp(
+      value,
+      constants.CELESTIAL_SPEED_MIN,
+      constants.CELESTIAL_SPEED_MAX
+    );
+    if (clamped >= 10) {
+      return String(Math.round(clamped));
+    }
+    return clamped.toFixed(1).replace(/\.0$/, "");
+  }
+
+  function isAcceleratedRealityMode() {
+    return !astronomyState.enabled && simulationState.useRealityTimelineInDemo !== false;
+  }
+
+  function getSafeDate(date = new Date()) {
+    if (date instanceof Date && !Number.isNaN(date.getTime())) {
+      return new Date(date.getTime());
+    }
+    return new Date();
+  }
+
+  function setAcceleratedTimelineAnchor(date = astronomyState.selectedDate, {
+    live = astronomyState.live,
+    nowMs = performance.now(),
+    refreshControls = true,
+    syncInput = true
+  } = {}) {
+    const safeDate = getSafeDate(date);
+    const safeDateMs = safeDate.getTime();
+    const safeNowMs = Number.isFinite(nowMs) ? nowMs : performance.now();
+
+    astronomyState.live = Boolean(live);
+    astronomyState.selectedDate = safeDate;
+    simulationState.simulatedDateMs = safeDateMs;
+    simulationState.timelineAnchorDateMs = safeDateMs;
+    simulationState.timelineAnchorNowMs = safeNowMs;
+    simulationState.demoPhaseDateMs = safeDateMs;
+    simulationState.demoAnchorSimMs = safeDateMs;
+    simulationState.demoAnchorRealMs = safeNowMs;
+    simulationState.useRealityTimelineInDemo = true;
+
+    if (syncInput) {
+      setObservationInputValue(safeDate);
+    }
+    if (refreshControls) {
+      syncAstronomyControls();
+    }
+    return safeDate;
+  }
+
+  function rebaseAcceleratedTimeline(nowMs = performance.now()) {
+    const anchorDate = Number.isFinite(simulationState.simulatedDateMs)
+      ? new Date(simulationState.simulatedDateMs)
+      : astronomyState.selectedDate;
+    setAcceleratedTimelineAnchor(anchorDate, {
+      live: astronomyState.live,
+      nowMs,
+      refreshControls: false,
+      syncInput: false
+    });
+  }
+
+  function getAcceleratedSimulationDate({
+    nowMs = performance.now(),
+    speedMultiplier = getSpeedMultiplier()
+  } = {}) {
+    const safeNowMs = Number.isFinite(nowMs) ? nowMs : performance.now();
+    const effectiveSpeed = THREE.MathUtils.clamp(
+      speedMultiplier,
+      constants.CELESTIAL_SPEED_MIN,
+      constants.CELESTIAL_SPEED_MAX
+    );
+    if (
+      !Number.isFinite(simulationState.timelineAnchorNowMs) ||
+      !Number.isFinite(simulationState.timelineAnchorDateMs)
+    ) {
+      setAcceleratedTimelineAnchor(astronomyState.selectedDate, {
+        live: astronomyState.live,
+        nowMs: safeNowMs,
+        refreshControls: false,
+        syncInput: false
+      });
+    }
+
+    const elapsedMs = safeNowMs - simulationState.timelineAnchorNowMs;
+    const simulatedMs = simulationState.timelineAnchorDateMs + (elapsedMs * effectiveSpeed * 1000);
+    const simulatedDate = new Date(simulatedMs);
+    simulationState.simulatedDateMs = simulatedMs;
+    simulationState.demoPhaseDateMs = simulatedMs;
+    simulationState.demoAnchorSimMs = simulationState.timelineAnchorDateMs;
+    simulationState.demoAnchorRealMs = simulationState.timelineAnchorNowMs;
+    astronomyState.selectedDate = simulatedDate;
+    syncLiveObservationInput(simulatedDate);
+    return simulatedDate;
   }
 
   function getCurrentTrailPointLimit(baseCount) {
@@ -402,7 +526,7 @@ export function createAstronomyController({
     const sunLaneIndex = Number.isFinite(sunRenderState?.laneIndex) ? (sunRenderState.laneIndex + 1) : null;
     const darkLaneIndex = Number.isFinite(darkSunRenderState?.laneIndex) ? (darkSunRenderState.laneIndex + 1) : null;
     const eclipseEligibility = getSolarEclipseTierFromRenderStates(sunRenderState, darkSunRenderState);
-    const sourceLabel = astronomyState.enabled
+    const sourceLabel = (astronomyState.enabled || isAcceleratedRealityMode())
       ? i18n.t("darkSunDebugSourceReality")
       : i18n.t("darkSunDebugSourceDemo");
     const lockLabel = simulationState.darkSunStageAltitudeLock
@@ -553,9 +677,8 @@ export function createAstronomyController({
   }
 
   function getBodyCorridorRange(body) {
-    const config = getBodyCoilConfig(body);
-    const min = constants.TROPIC_CANCER_RADIUS + constants.ORBIT_TRACK_TUBE_RADIUS + config.bodyClearance;
-    const max = constants.TROPIC_CAPRICORN_RADIUS - constants.ORBIT_TRACK_TUBE_RADIUS - config.bodyClearance;
+    const min = constants.TROPIC_CANCER_RADIUS;
+    const max = constants.TROPIC_CAPRICORN_RADIUS;
     return {
       max: Math.max(max, min + 0.0001),
       min
@@ -600,8 +723,9 @@ export function createAstronomyController({
 
   function getBodyProgressFromProjectedRadius(body, projectedRadius) {
     const corridor = getBodyCorridorRange(body);
+    const clampedRadius = THREE.MathUtils.clamp(projectedRadius, corridor.min, corridor.max);
     return THREE.MathUtils.clamp(
-      THREE.MathUtils.inverseLerp(corridor.min, corridor.max, projectedRadius),
+      THREE.MathUtils.inverseLerp(corridor.min, corridor.max, clampedRadius),
       0,
       1
     );
@@ -717,15 +841,22 @@ export function createAstronomyController({
     orbitMode = source === "demo" ? simulationState.orbitMode : "auto"
   }) {
     const bandRange = getBodyBandRadiusRange(body, orbitMode);
+    const clampedProjectedRadius = THREE.MathUtils.clamp(
+      projectedRadius,
+      constants.TROPIC_CANCER_RADIUS,
+      constants.TROPIC_CAPRICORN_RADIUS
+    );
     const bodyProgress = source === "reality"
-      ? getBodyProgressFromProjectedRadius(body, projectedRadius)
+      ? getBodyProgressFromProjectedRadius(body, clampedProjectedRadius)
       : getBodyModeProgress(body, orbitMode, progress);
     const config = getBodyCoilConfig(body);
-    const centerRadius = THREE.MathUtils.lerp(bandRange.min, bandRange.max, bodyProgress);
+    const centerRadius = source === "reality"
+      ? clampedProjectedRadius
+      : THREE.MathUtils.lerp(bandRange.min, bandRange.max, bodyProgress);
     const corridorProgress = getBodyCorridorProgress(body, centerRadius);
     const macroAngle = source === "demo"
       ? orbitAngleRadians
-      : -THREE.MathUtils.degToRad(longitudeDegrees);
+      : THREE.MathUtils.degToRad(longitudeDegrees);
     const baseHeight = getBodyBaseHeight(body, centerRadius);
 
     tempRadialAxis.set(-Math.cos(macroAngle), 0, Math.sin(macroAngle));
@@ -759,6 +890,18 @@ export function createAstronomyController({
     };
   }
 
+  function getSunBandLockProgress({
+    sunRenderState = null,
+    sunProgress = null,
+    fallbackProgress = simulationState.sunBandProgress ?? 0.5
+  } = {}) {
+    return THREE.MathUtils.clamp(
+      sunRenderState?.corridorProgress ?? sunRenderState?.macroProgress ?? sunProgress ?? fallbackProgress ?? 0.5,
+      0,
+      1
+    );
+  }
+
   function getShortestAngleDeltaRadians(fromAngle = 0, toAngle = 0) {
     return Math.atan2(
       Math.sin(toAngle - fromAngle),
@@ -787,7 +930,7 @@ export function createAstronomyController({
     });
   }
 
-  function getRealityMoonRenderStateAtDate(date) {
+  function getRealityMoonRenderStateAtDate(date, { sunRenderState = null } = {}) {
     const moon = getMoonSubpoint(date);
     const projectedRadius = THREE.MathUtils.clamp(
       projectedRadiusFromLatitude(moon.latitudeDegrees, constants.DISC_RADIUS),
@@ -799,6 +942,7 @@ export function createAstronomyController({
       longitudeDegrees: moon.longitudeDegrees,
       orbitAngleRadians: THREE.MathUtils.degToRad(moon.longitudeDegrees),
       projectedRadius,
+      sunRenderState,
       source: "reality"
     });
   }
@@ -808,7 +952,7 @@ export function createAstronomyController({
   function getDarkSunSarosOrbit(date, { sunRenderState = null, moonRenderState = null } = {}) {
     const sun = getSunSubpoint(date);
     const moonPhase = getMoonPhase(date);
-    const sunAngleRadians = -THREE.MathUtils.degToRad(sun.longitudeDegrees);
+    const sunAngleRadians = THREE.MathUtils.degToRad(sun.longitudeDegrees);
     const orbitAngleRadians = sunAngleRadians + moonPhase.phaseAngleRadians;
 
     // 교점 근접도 (황위도 0° = 1.0, 5.145° = 0.0)
@@ -833,7 +977,9 @@ export function createAstronomyController({
 
     // 태양/달 render state에서 물리 위치 직접 참조
     const resolvedSunState = sunRenderState ?? getRealitySunRenderStateAtDate(date);
-    const resolvedMoonState = moonRenderState ?? getRealityMoonRenderStateAtDate(date);
+    const resolvedMoonState = moonRenderState ?? getRealityMoonRenderStateAtDate(date, {
+      sunRenderState: resolvedSunState
+    });
 
     const solarRadius = resolvedSunState?.centerRadius ?? neutralRadius;
     const lunarRadius = resolvedMoonState?.centerRadius ?? neutralRadius;
@@ -935,38 +1081,43 @@ export function createAstronomyController({
     useExplicitOrbit = true,
     orbitMode = source === "demo" ? simulationState.orbitMode : "auto"
   } = {}) {
+    const lockedProgress = getSunBandLockProgress({
+      sunRenderState,
+      sunProgress,
+      fallbackProgress: progress
+    });
+    const lockedProjectedRadius = Number.isFinite(sunRenderState?.centerRadius)
+      ? sunRenderState.centerRadius
+      : undefined;
+
     if (source === "demo") {
       // Demo: explicit independent orbit
       const renderState = getBodyCoilRenderState({
-        body: "darkSun",
+        body: "sun",
         orbitAngleRadians,
         orbitMode,
-        progress,
+        progress: lockedProgress,
         source: "demo"
       });
       return { ...renderState, direction, orbitAngleRadians, orbitMode };
     }
 
-    // Reality: Saros-based physical interpolation — directly blend sun/moon positions.
-    // No progress→corridor mapping; centerRadius and coilHeight come straight from orbit.
+    // Reality keeps dark-sun orbital angle/direction, but locks band radius/height to sun.
     const orbit = getRealityDarkSunOrbit(date, { moonRenderState, sunRenderState });
-    const orbitProgress = getBodyCorridorProgress("darkSun", orbit.centerRadius);
     const renderState = getBodyCoilRenderState({
-      body: "darkSun",
+      body: "sun",
       orbitAngleRadians: orbit.orbitAngleRadians,
       orbitMode: "auto",
-      progress: orbitProgress,
-      source: "demo"  // use explicit progress, not projectedRadius
+      progress: lockedProgress,
+      projectedRadius: lockedProjectedRadius,
+      source: "demo"
     });
 
-    // Override position height with physically blended coilHeight from saros/catalog orbit
     return {
       ...renderState,
-      coilHeight: orbit.coilHeight,
       direction: orbit.direction,
       orbitAngleRadians: orbit.orbitAngleRadians,
-      orbitMode: "auto",
-      position: new THREE.Vector3(renderState.position.x, orbit.coilHeight, renderState.position.z)
+      orbitMode: "auto"
     };
   }
 
@@ -994,19 +1145,27 @@ export function createAstronomyController({
     orbitAngleRadians = 0,
     projectedRadius = constants.EQUATOR_RADIUS,
     progress = simulationState.moonBandProgress ?? 0.5,
+    sunProgress = simulationState.sunBandProgress ?? 0.5,
+    sunRenderState = null,
     source = "reality",
     orbitMode = source === "demo" ? simulationState.orbitMode : "auto"
   }) {
-    // Reality mode must preserve the exact projected radius from astronomical latitude.
-    // Demo mode can mirror the sun corridor for stylized synchronized orbit behavior.
-    const coilBody = source === "reality" ? "moon" : "sun";
+    const lockedProgress = getSunBandLockProgress({
+      sunRenderState,
+      sunProgress,
+      fallbackProgress: progress
+    });
+    const lockedProjectedRadius = Number.isFinite(sunRenderState?.centerRadius)
+      ? sunRenderState.centerRadius
+      : projectedRadius;
+
     return getBodyCoilRenderState({
-      body: coilBody,
+      body: "sun",
       longitudeDegrees,
       orbitAngleRadians,
       orbitMode,
-      progress,
-      projectedRadius,
+      progress: lockedProgress,
+      projectedRadius: lockedProjectedRadius,
       source
     });
   }
@@ -1446,7 +1605,8 @@ export function createAstronomyController({
 
   function syncCelestialMotionUi() {
     const trailPercent = Math.round(getTrailLengthFactor() * 100);
-    const speedValue = getSpeedMultiplier().toFixed(1);
+    const speedMultiplier = getSpeedMultiplier();
+    const speedValue = formatSpeedMultiplier(speedMultiplier);
 
     if (ui.celestialTrailLengthEl) {
       ui.celestialTrailLengthEl.value = String(trailPercent);
@@ -1457,8 +1617,16 @@ export function createAstronomyController({
       });
     }
     if (ui.celestialSpeedEl) {
-      ui.celestialSpeedEl.value = speedValue;
+      ui.celestialSpeedEl.value = String(speedMultiplier);
       ui.celestialSpeedEl.disabled = astronomyState.enabled;
+    }
+    if (Array.isArray(ui.celestialSpeedPresetButtons)) {
+      for (const button of ui.celestialSpeedPresetButtons) {
+        const presetValue = Number.parseFloat(button.dataset.celestialSpeedPreset);
+        const isActive = Number.isFinite(presetValue) && Math.abs(presetValue - speedMultiplier) < 0.0001;
+        button.classList.toggle("active", isActive);
+        button.disabled = astronomyState.enabled;
+      }
     }
     if (ui.celestialSpeedValueEl) {
       ui.celestialSpeedValueEl.textContent = i18n.t("celestialSpeedValue", {
@@ -1478,9 +1646,14 @@ export function createAstronomyController({
   function syncAstronomyControls() {
     ui.realitySyncEl.checked = astronomyState.enabled;
     ui.realityLiveEl.checked = astronomyState.live;
-    ui.realityLiveEl.disabled = !astronomyState.enabled;
-    ui.observationTimeEl.disabled = !astronomyState.enabled || astronomyState.live;
-    ui.applyObservationTimeButton.disabled = !astronomyState.enabled || astronomyState.live;
+    ui.realityLiveEl.disabled = false;
+    if (ui.realitySyncToggleTextEl) {
+      ui.realitySyncToggleTextEl.textContent = astronomyState.enabled
+        ? i18n.t("toggleSync")
+        : i18n.t("toggleAccelerated");
+    }
+    ui.observationTimeEl.disabled = astronomyState.live;
+    ui.applyObservationTimeButton.disabled = astronomyState.live;
     if (ui.darkSunDebugEl) {
       ui.darkSunDebugEl.checked = Boolean(simulationState.darkSunDebugVisible);
     }
@@ -1490,7 +1663,7 @@ export function createAstronomyController({
     syncCelestialMotionUi();
 
     for (const button of orbitModeButtons) {
-      button.disabled = astronomyState.enabled;
+      button.disabled = astronomyState.enabled || isAcceleratedRealityMode();
     }
   }
 
@@ -2057,7 +2230,11 @@ export function createAstronomyController({
           ? i18n.t("timeSummaryLive", { date: formatObservationTime(snapshot.date) })
           : i18n.t("timeSummaryPreview", { date: formatObservationTime(snapshot.date) })
       )
-      : i18n.t("demoOrbitModeActive");
+      : i18n.t("timeSummaryAccelerated", {
+        anchor: i18n.t(astronomyState.live ? "timeAnchorCurrent" : "timeAnchorSelected"),
+        date: formatObservationTime(snapshot.date),
+        speed: formatSpeedMultiplier()
+      });
     ui.sunCoordinatesEl.textContent = formatGeoPair(snapshot.sun.latitudeDegrees, snapshot.sun.longitudeDegrees);
     ui.moonCoordinatesEl.textContent = i18n.t("moonCoordinatesValue", {
       geo: formatGeoPair(snapshot.moon.latitudeDegrees, snapshot.moon.longitudeDegrees),
@@ -2066,7 +2243,7 @@ export function createAstronomyController({
     });
     syncMoonPhaseUi(snapshot);
     syncDarkSunDebugUi(snapshot);
-    ui.orbitLabelEl.textContent = astronomyState.enabled
+    ui.orbitLabelEl.textContent = (astronomyState.enabled || isAcceleratedRealityMode())
       ? i18n.t("orbitLabelRealitySync")
       : i18n.t(orbitModes[simulationState.orbitMode].labelKey);
   }
@@ -2183,16 +2360,10 @@ export function createAstronomyController({
       "sunBandDirection",
       snapshot.sunRenderState?.corridorProgress ?? snapshot.sunRenderState?.macroProgress
     );
-    syncBandProgressFromSnapshot(
-      "moonBandProgress",
-      "moonBandDirection",
-      snapshot.moonRenderState?.corridorProgress ?? snapshot.moonRenderState?.macroProgress
-    );
-    syncBandProgressFromSnapshot(
-      "darkSunBandProgress",
-      "darkSunBandDirection",
-      snapshot.darkSunRenderState?.corridorProgress ?? snapshot.darkSunRenderState?.macroProgress
-    );
+    const lockedProgress = THREE.MathUtils.clamp(simulationState.sunBandProgress ?? 0.5, 0, 1);
+    simulationState.moonBandProgress = lockedProgress;
+    simulationState.darkSunBandProgress = lockedProgress;
+    simulationState.moonBandDirection = simulationState.sunBandDirection ?? simulationState.moonBandDirection ?? 1;
   }
 
   function applyAstronomySnapshot(snapshot) {
@@ -2289,7 +2460,7 @@ export function createAstronomyController({
       button.classList.toggle("active", button.dataset.orbitMode === simulationState.orbitMode);
     }
     syncAstronomyControls();
-    ui.orbitLabelEl.textContent = astronomyState.enabled
+    ui.orbitLabelEl.textContent = (astronomyState.enabled || isAcceleratedRealityMode())
       ? i18n.t("orbitLabelRealitySync")
       : i18n.t(orbitModes[simulationState.orbitMode].labelKey);
   }
@@ -2329,23 +2500,40 @@ export function createAstronomyController({
   }
 
   function enableRealityMode({ live, date = new Date() }) {
+    const safeDate = getSafeDate(date);
     astronomyState.enabled = true;
     astronomyState.live = live;
+    simulationState.useRealityTimelineInDemo = true;
     astronomyState.lastTrailRebuildMs = 0;
     resetSunTrail();
     resetMoonTrail();
-    refreshAstronomyView(date);
+    setAcceleratedTimelineAnchor(safeDate, {
+      live,
+      refreshControls: false,
+      syncInput: false
+    });
+    refreshAstronomyView(safeDate);
     syncAstronomyControls();
   }
 
-  function disableRealityMode() {
+  function disableRealityMode({ live = astronomyState.live, date = astronomyState.selectedDate } = {}) {
+    const safeDate = getSafeDate(date);
     astronomyState.enabled = false;
-    astronomyState.live = false;
+    astronomyState.live = Boolean(live);
+    simulationState.useRealityTimelineInDemo = true;
     astronomyState.lastTrailRebuildMs = 0;
     resetSunTrail();
     resetMoonTrail();
     rebuildFullDemoTrails();
-    ui.timeSummaryEl.textContent = i18n.t("demoOrbitModeActive");
+    setAcceleratedTimelineAnchor(safeDate, {
+      live: astronomyState.live,
+      refreshControls: false
+    });
+    ui.timeSummaryEl.textContent = i18n.t("timeSummaryAccelerated", {
+      anchor: i18n.t(astronomyState.live ? "timeAnchorCurrent" : "timeAnchorSelected"),
+      date: formatObservationTime(astronomyState.selectedDate),
+      speed: formatSpeedMultiplier()
+    });
     syncSeasonalSunUi(true);
     syncAnalemmaUi(astronomyState.selectedDate, true);
     syncSkyAnalemmaUi(astronomyState.selectedDate, true);
@@ -2354,7 +2542,9 @@ export function createAstronomyController({
   }
 
   function refreshLocalizedUi() {
-    const activeDate = astronomyState.live ? new Date() : astronomyState.selectedDate;
+    const activeDate = astronomyState.enabled
+      ? (astronomyState.live ? new Date() : astronomyState.selectedDate)
+      : astronomyState.selectedDate;
     syncDayNightOverlayUi();
     syncAstronomyControls();
     syncSolarEclipseUi(lastSolarEclipseState);
@@ -2371,7 +2561,11 @@ export function createAstronomyController({
 
     rebuildFullDemoTrails();
     updateSeasonPresentation(getCurrentOrbitRadius());
-    ui.timeSummaryEl.textContent = i18n.t("demoOrbitModeActive");
+    ui.timeSummaryEl.textContent = i18n.t("timeSummaryAccelerated", {
+      anchor: i18n.t(astronomyState.live ? "timeAnchorCurrent" : "timeAnchorSelected"),
+      date: formatObservationTime(activeDate),
+      speed: formatSpeedMultiplier()
+    });
     updateOrbitModeUi();
   }
 
@@ -2388,7 +2582,13 @@ export function createAstronomyController({
     if (Number.isNaN(nextDate.getTime())) {
       return;
     }
-    enableRealityMode({ live: false, date: nextDate });
+    if (astronomyState.enabled) {
+      enableRealityMode({ live: false, date: nextDate });
+      return;
+    }
+    setAcceleratedTimelineAnchor(nextDate, {
+      live: false
+    });
   }
 
   function previewSeasonalMoonAudit(nextEventKey = seasonalMoonState.selectedEventKey, nextYear = seasonalMoonState.selectedYear) {
@@ -2451,6 +2651,10 @@ export function createAstronomyController({
     updateOrbitModeUi,
     updateSeasonPresentation,
     updateSunTrail,
-    previewSeasonalMoonAudit
+    previewSeasonalMoonAudit,
+    getAcceleratedSimulationDate,
+    isAcceleratedRealityMode,
+    rebaseAcceleratedTimeline,
+    setAcceleratedTimelineAnchor
   };
 }

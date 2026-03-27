@@ -188,6 +188,7 @@ export function getAgeSignIndexFromAgeOffset(ageOffsetRadians) {
 }
 
 export function getAgeSignIndexFromSiderealOffset(siderealOffsetRadians) {
+  // Deprecated alias for compatibility.
   return getAgeSignIndexFromAgeOffset(siderealOffsetRadians);
 }
 
@@ -578,7 +579,8 @@ export function createZodiacWheel({ i18n }) {
       return ageOffset;
     },
     getSiderealOffset() {
-      return ageOffset;
+      // Deprecated alias for compatibility.
+      return this.getAgeOffset();
     },
     refreshLocalizedUi,
     setSeasonalAngle(angleRadians = 0) {
@@ -591,9 +593,8 @@ export function createZodiacWheel({ i18n }) {
       syncAgeMarker();
     },
     setSiderealOffset(angleRadians = 0) {
-      ageOffset = THREE.MathUtils.euclideanModulo(angleRadians, FULL_CIRCLE_RADIANS);
-      ageLayer.rotation.y = ageOffset;
-      syncAgeMarker();
+      // Deprecated alias for compatibility.
+      this.setAgeOffset(angleRadians);
     },
     setSuppressed(nextSuppressed) {
       suppressed = Boolean(nextSuppressed);

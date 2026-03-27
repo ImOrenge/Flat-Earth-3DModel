@@ -330,6 +330,7 @@ const orbitLabelEl = document.getElementById("orbit-label");
 const celestialTrailLengthEl = document.getElementById("celestial-trail-length");
 const celestialTrailLengthValueEl = document.getElementById("celestial-trail-length-value");
 const celestialSpeedEl = document.getElementById("celestial-speed");
+const celestialSpeedPresetButtons = [...document.querySelectorAll("[data-celestial-speed-preset]")];
 const celestialSpeedValueEl = document.getElementById("celestial-speed-value");
 const celestialFullTrailEl = document.getElementById("celestial-full-trail");
 const celestialMotionSummaryEl = document.getElementById("celestial-motion-summary");
@@ -340,6 +341,7 @@ const seasonLatitudeEl = document.getElementById("season-latitude");
 const seasonSummaryEl = document.getElementById("season-summary");
 const seasonDetailEl = document.getElementById("season-detail");
 const realitySyncEl = document.getElementById("reality-sync");
+const realitySyncToggleTextEl = document.getElementById("reality-sync-toggle-text");
 const realityLiveEl = document.getElementById("reality-live");
 const observationTimeEl = document.getElementById("observation-time");
 const observationMinusHourButton = document.getElementById("observation-minus-hour");
@@ -1207,6 +1209,8 @@ scalableStage.add(constellationApi.group);
 const zodiacWheelApi = createZodiacWheel({ i18n });
 scalableStage.add(zodiacWheelApi.group);
 
+const initialTimelineDateMs = Date.now();
+const initialTimelineNowMs = performance.now();
 const simulationState = {
   darkSunBandDirection: -1,
   darkSunBandProgress: 0.88,
@@ -1216,7 +1220,9 @@ const simulationState = {
   darkSunStageOffsetRadians: 0,
   darkSunStageTotalityHoldMs: 0,
   darkSunStageTransit: 0,
-  demoPhaseDateMs: Date.now(),
+  demoAnchorRealMs: initialTimelineNowMs,
+  demoAnchorSimMs: initialTimelineDateMs,
+  demoPhaseDateMs: initialTimelineDateMs,
   moonBandDirection: 1,
   moonBandProgress: 0.12,
   moonSunOrbitOffsetRadians: Math.PI * 0.35,
@@ -1226,8 +1232,12 @@ const simulationState = {
   orbitMode: "auto",
   orbitSeasonPhase: -Math.PI / 2,
   orbitSunAngle: 0,
+  simulatedDateMs: initialTimelineDateMs,
   sunBandDirection: 1,
-  sunBandProgress: 0.12
+  sunBandProgress: 0.12,
+  timelineAnchorDateMs: initialTimelineDateMs,
+  timelineAnchorNowMs: initialTimelineNowMs,
+  useRealityTimelineInDemo: true
 };
 
 // Expose state for E2E testing
@@ -1345,6 +1355,7 @@ const ui = {
   celestialFullTrailEl,
   celestialMotionSummaryEl,
   celestialSpeedEl,
+  celestialSpeedPresetButtons,
   celestialSpeedValueEl,
   celestialTrailLengthEl,
   celestialTrailLengthValueEl,
@@ -1374,6 +1385,7 @@ const ui = {
   orbitLabelEl,
   realityLiveEl,
   realitySyncEl,
+  realitySyncToggleTextEl,
   seasonalEventTimeEl,
   seasonDetailEl,
   seasonLatitudeEl,
@@ -1672,7 +1684,7 @@ const rocketApi = createRocketController({
     astronomyState, renderState, walkerState, cameraState, astronomyApi,
     cameraApi, celestialTrackingCameraApi, celestialControlState,
     getGeoFromProjectedPosition, orbitMoon, orbitMoonBody, observerMoon, observerMoonBody,
-    getMoonPhase, solarEclipseToastTitleEl, solarEclipseToastCopyEl, solarEclipseToastEl, getBodyBandProgressStep, sunFullTrail, sunFullTrailPointsCloud, moonFullTrail, moonFullTrailPointsCloud, darkSunFullTrail, darkSunFullTrailPointsCloud, applyStaticTranslations, syncSeasonalEventButtonLabels, textureApi, magneticFieldApi, walkerApi, routeSimulationApi, syncPreparationPresentation: (...args) => celestialVisualsApi.syncPreparationPresentation(...args), observerSunBody, observerDarkSunBody, renderer, observerDarkSunRim, exitFirstPersonMode: () => celestialVisualsApi.exitFirstPersonMode(), realitySyncEl, realityLiveEl, setDemoMoonOrbitOffsetFromPhase, setDemoSeasonPhaseFromDate, syncDemoMoonOrbitToSun, updateSunVisualEffects: (...args) => celestialVisualsApi.updateSunVisualEffects(...args)
+    getMoonPhase, solarEclipseToastTitleEl, solarEclipseToastCopyEl, solarEclipseToastEl, getBodyBandProgressStep, sunFullTrail, sunFullTrailPointsCloud, moonFullTrail, moonFullTrailPointsCloud, darkSunFullTrail, darkSunFullTrailPointsCloud, applyStaticTranslations, syncSeasonalEventButtonLabels, textureApi, magneticFieldApi, walkerApi, routeSimulationApi, syncPreparationPresentation: (...args) => celestialVisualsApi.syncPreparationPresentation(...args), observerSunBody, observerDarkSunBody, renderer, observerDarkSunRim, exitFirstPersonMode: () => celestialVisualsApi.exitFirstPersonMode(), updateSunVisualEffects: (...args) => celestialVisualsApi.updateSunVisualEffects(...args)
   });
   const {
     createSolarEclipseWindowSolverState,
@@ -1827,6 +1839,7 @@ const rocketApi = createRocketController({
     controlTabButtons, cameraPresetButtons, languageToggleEl, i18n, resetButton,
     exitFirstPersonMode, enterFirstPersonMode, walkerModeEl, resetWalkerButton,
     routeSelectEl, routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl,
+    celestialSpeedPresetButtons,
     celestialFullTrailEl, routePlaybackButton, routeResetButton, realitySyncEl,
     realityLiveEl, observationTimeEl, observationMinusHourButton, observationPlusHourButton,
     eclipseCatalogSourceEl, eclipseCatalogUploadEl, eclipseKindSelectEl, eclipseYearSelectEl,
@@ -1839,7 +1852,7 @@ const rocketApi = createRocketController({
     stagePreEclipseButton, stagePreEclipseScene: eclipseApi.stagePreEclipseScene,
     stagePreLunarEclipseButton, stagePreLunarEclipseScene: eclipseApi.stagePreLunarEclipseScene,
     skyAnalemmaOverlayEl, skyAnalemmaState, orbitModeButtons, cameraTrackButtons,
-    seasonalYearEl, seasonalEventButtons, setDemoMoonOrbitOffsetFromPhase, setDemoSeasonPhaseFromDate
+    seasonalYearEl, seasonalEventButtons
   });
 
 function getBodyBandProgressStep(body) {
@@ -1866,7 +1879,7 @@ function advanceBandProgress(progressKey, directionKey, step) {
   simulationState[directionKey] = nextState.direction;
 }
 
-function setDemoMoonOrbitOffsetFromPhase(dateMs = simulationState.demoPhaseDateMs) {
+function setDemoMoonOrbitOffsetFromPhase(dateMs = simulationState.simulatedDateMs ?? simulationState.demoPhaseDateMs) {
   const moonPhase = getMoonPhase(new Date(dateMs));
   if (!Number.isFinite(moonPhase?.phaseAngleRadians)) {
     return;
@@ -1874,7 +1887,7 @@ function setDemoMoonOrbitOffsetFromPhase(dateMs = simulationState.demoPhaseDateM
   simulationState.moonSunOrbitOffsetRadians = moonPhase.phaseAngleRadians;
 }
 
-function setDemoSeasonPhaseFromDate(dateMs = simulationState.demoPhaseDateMs) {
+function setDemoSeasonPhaseFromDate(dateMs = simulationState.simulatedDateMs ?? simulationState.demoPhaseDateMs) {
   const date = new Date(dateMs);
   if (Number.isNaN(date.getTime())) {
     return;
@@ -1925,22 +1938,64 @@ function animate() {
     }
     snapshot = astronomyApi.getAstronomySnapshot(observationDate);
     astronomyApi.applyAstronomySnapshot(snapshot);
+    if (simulationState.darkSunStageAltitudeLock) {
+      updateDarkSunStageOrbit(deltaSeconds);
+      applyDarkSunStageTransitPosition({
+        sunBody: orbitSunBody,
+        sunGroup: orbitSun,
+        sunRadius: ORBIT_SUN_SIZE,
+        darkSunBody: orbitDarkSunBody,
+        darkSunGroup: orbitDarkSun,
+        darkSunRadius: ORBIT_DARK_SUN_SIZE
+      });
+      snapshot.darkSunRenderPosition = orbitDarkSun.position.clone();
+      snapshot.darkSunRenderState = astronomyApi.getDarkSunRenderState({
+        direction: simulationState.darkSunBandDirection,
+        orbitAngleRadians: simulationState.orbitDarkSunAngle,
+        orbitMode: simulationState.orbitMode,
+        progress: simulationState.darkSunBandProgress,
+        source: "demo",
+        useExplicitOrbit: true
+      });
+      astronomyApi.updateAstronomyUi(snapshot);
+    } else if (simulationState.darkSunLunarStageLock) {
+      updateDarkSunLunarStageOrbit(deltaSeconds);
+      const stagedDarkSunRenderState = astronomyApi.getDarkSunRenderState({
+        direction: simulationState.darkSunBandDirection,
+        orbitAngleRadians: simulationState.orbitDarkSunAngle,
+        orbitMode: simulationState.orbitMode,
+        progress: simulationState.darkSunBandProgress,
+        source: "demo",
+        useExplicitOrbit: true
+      });
+      orbitDarkSun.position.copy(stagedDarkSunRenderState.position);
+      snapshot.darkSunRenderPosition = orbitDarkSun.position.clone();
+      snapshot.darkSunRenderState = stagedDarkSunRenderState;
+      astronomyApi.updateAstronomyUi(snapshot);
+    }
   } else {
     const isSolarStagingActive = simulationState.darkSunStageAltitudeLock;
     const isLunarStagingActive = simulationState.darkSunLunarStageLock;
-    let stageSpeedFactor = 1;
-    if (isSolarStagingActive && !astronomyState.enabled) {
+    const isAcceleratedRealityMode = astronomyApi.isAcceleratedRealityMode();
+    let stageSpeedFactor = false;
+    if (isSolarStagingActive) {
       stageSpeedFactor = updateDarkSunStageOrbit(deltaSeconds);
-    } else if (isLunarStagingActive && !astronomyState.enabled) {
+    } else if (isLunarStagingActive) {
       stageSpeedFactor = updateDarkSunLunarStageOrbit(deltaSeconds);
     }
     const eclipseStageActive = stageSpeedFactor !== false;
-    let activeSpeedFactor = eclipseStageActive ? stageSpeedFactor : eclipseAnimationSpeedFactor;
+    let activeSpeedFactor = (isAcceleratedRealityMode && !eclipseStageActive)
+      ? 1
+      : (
+        eclipseStageActive
+          ? stageSpeedFactor
+          : eclipseAnimationSpeedFactor
+      );
 
     // Lunar eclipse natural slowdown effect
     // Slow down heavily when moon and dark sun approach each other so the
     // blood-moon tint has enough frames to visually register.
-    if (!astronomyState.enabled && !eclipseStageActive) {
+    if (!eclipseStageActive && !isAcceleratedRealityMode) {
       const moonAngle = simulationState.orbitMoonAngle;
       const darkSunAngle = simulationState.orbitDarkSunAngle;
       if (Number.isFinite(moonAngle) && Number.isFinite(darkSunAngle)) {
@@ -1958,50 +2013,48 @@ function animate() {
     }
 
     const speedMultiplier = celestialControlState.speedMultiplier * activeSpeedFactor;
-    simulationState.orbitSunAngle += ORBIT_SUN_SPEED * speedMultiplier;
-    simulationState.orbitMoonAngle += ORBIT_MOON_SPEED * speedMultiplier;
-    simulationState.orbitSeasonPhase = THREE.MathUtils.euclideanModulo(
-      simulationState.orbitSeasonPhase + (ORBIT_SUN_SEASON_SPEED * speedMultiplier),
-      Math.PI * 2
+    projectionDate = astronomyApi.getAcceleratedSimulationDate({
+      nowMs: performance.now(),
+      speedMultiplier
+    });
+    const baseSnapshot = astronomyApi.getAstronomySnapshot(projectionDate);
+
+    const previousSunProgress = simulationState.sunBandProgress ?? 0.5;
+    const sunRealityProgress = THREE.MathUtils.clamp(
+      baseSnapshot.sunRenderState?.corridorProgress ?? baseSnapshot.sunRenderState?.macroProgress ?? 0.5,
+      0,
+      1
     );
-    // Decoupled dark sun: advances directly opposite the sun
-    // Skip natural angle update when lunar stage is driving the dark sun's position
-    if (!isLunarStagingActive) {
-      simulationState.orbitDarkSunAngle -= ORBIT_DARK_SUN_SPEED * speedMultiplier;
+    const lockedRealityProgress = sunRealityProgress;
+
+    simulationState.orbitSunAngle = baseSnapshot.sunRenderState?.orbitAngleRadians ?? simulationState.orbitSunAngle;
+    simulationState.orbitMoonAngle = baseSnapshot.moonRenderState?.orbitAngleRadians ?? simulationState.orbitMoonAngle;
+    simulationState.orbitSeasonPhase = getSeasonalEclipticPhase(projectionDate) * Math.PI * 2;
+    simulationState.sunBandProgress = lockedRealityProgress;
+    simulationState.moonBandProgress = lockedRealityProgress;
+    simulationState.darkSunBandProgress = lockedRealityProgress;
+    if (Math.abs(lockedRealityProgress - previousSunProgress) > 0.0001) {
+      simulationState.sunBandDirection = lockedRealityProgress > previousSunProgress ? 1 : -1;
+    }
+    simulationState.moonBandDirection = simulationState.sunBandDirection;
+
+    if (!isSolarStagingActive && !isLunarStagingActive) {
+      simulationState.orbitDarkSunAngle = baseSnapshot.darkSunRenderState?.orbitAngleRadians ?? simulationState.orbitDarkSunAngle;
+      if (Number.isFinite(baseSnapshot.darkSunRenderState?.direction)) {
+        simulationState.darkSunBandDirection = baseSnapshot.darkSunRenderState.direction >= 0 ? 1 : -1;
+      }
+    } else if (isSolarStagingActive) {
+      updateDarkSunStageOrbit(0);
+    } else if (isLunarStagingActive) {
+      updateDarkSunLunarStageOrbit(0);
     }
 
-    if (simulationState.orbitMode === "auto") {
-      advanceBandProgress("sunBandProgress", "sunBandDirection", getBodyBandProgressStep("sun") * speedMultiplier);
-      // Advance moon band progress using its own coil geometry, scaled strictly by the moon's angular speed ratio.
-      // This guarantees the moon perfectly traces its own 12-turn coil spiral.
-      const moonRatio = ORBIT_MOON_SPEED / ORBIT_SUN_SPEED;
-      advanceBandProgress("moonBandProgress", "moonBandDirection", getBodyBandProgressStep("moon") * moonRatio * speedMultiplier);
-      
-      // Update dark sun band progress symmetrically to sun
-      const darkSunRatio = ORBIT_DARK_SUN_SPEED / ORBIT_SUN_SPEED;
-      advanceBandProgress("darkSunBandProgress", "darkSunBandDirection", getBodyBandProgressStep("sun") * darkSunRatio * speedMultiplier);
-    }
-    // 1 full sun rotation (2?) = 1 day (86,400,000 ms)
-    const demoDaysPerFrame = (ORBIT_SUN_SPEED * speedMultiplier) / (2 * Math.PI);
-    simulationState.demoPhaseDateMs += demoDaysPerFrame * 86_400_000;
-    projectionDate = new Date(simulationState.demoPhaseDateMs);
+    const sunRenderState = baseSnapshot.sunRenderState;
+    const moonRenderState = baseSnapshot.moonRenderState;
+    orbitSun.position.copy(baseSnapshot.sunRenderPosition ?? baseSnapshot.sunPosition);
+    orbitMoon.position.copy(baseSnapshot.moonRenderPosition ?? baseSnapshot.moonPosition);
 
-    const sunRenderState = astronomyApi.getSunRenderState({
-      orbitAngleRadians: simulationState.orbitSunAngle,
-      orbitMode: simulationState.orbitMode,
-      progress: simulationState.sunBandProgress,
-      source: "demo"
-    });
-    orbitSun.position.copy(sunRenderState.position);
-
-    const darkSunRenderState = astronomyApi.getDarkSunRenderState({
-      direction: simulationState.darkSunBandDirection,
-      orbitAngleRadians: simulationState.orbitDarkSunAngle,
-      orbitMode: simulationState.orbitMode,
-      progress: simulationState.darkSunBandProgress,
-      source: "demo",
-      useExplicitOrbit: true
-    });
+    let darkSunRenderState = baseSnapshot.darkSunRenderState;
 
     if (simulationState.darkSunStageAltitudeLock) {
       applyDarkSunStageTransitPosition({
@@ -2012,42 +2065,51 @@ function animate() {
         darkSunGroup: orbitDarkSun,
         darkSunRadius: ORBIT_DARK_SUN_SIZE
       });
+      darkSunRenderState = astronomyApi.getDarkSunRenderState({
+        direction: simulationState.darkSunBandDirection,
+        orbitAngleRadians: simulationState.orbitDarkSunAngle,
+        orbitMode: simulationState.orbitMode,
+        progress: simulationState.darkSunBandProgress,
+        source: "demo",
+        useExplicitOrbit: true
+      });
     } else {
-      orbitDarkSun.position.copy(darkSunRenderState.position);
+      orbitDarkSun.position.copy(baseSnapshot.darkSunRenderPosition ?? darkSunRenderState?.position ?? orbitDarkSun.position);
     }
 
     astronomyApi.updateSunTrail();
     astronomyApi.updateDarkSunTrail();
-    astronomyApi.updateMoonOrbit({
-      orbitMode: simulationState.orbitMode,
-      progress: simulationState.moonBandProgress
-    });
     astronomyApi.updateMoonTrail();
-    astronomyApi.updateSeasonPresentation(sunRenderState.centerRadius);
-
-    const demoSunGeo = getGeoFromProjectedPosition(orbitSun.position, DISC_RADIUS);
-    const demoMoonGeo = getGeoFromProjectedPosition(orbitMoon.position, DISC_RADIUS);
-    astronomyApi.updateDayNightOverlayFromSun(demoSunGeo.latitudeDegrees, demoSunGeo.longitudeDegrees);
+    astronomyApi.updateSeasonPresentation(
+      projectedRadiusFromLatitude(baseSnapshot.sun.latitudeDegrees, DISC_RADIUS)
+    );
+    astronomyApi.updateDayNightOverlayFromSun(
+      baseSnapshot.sun.latitudeDegrees,
+      baseSnapshot.sun.longitudeDegrees
+    );
     
     snapshot = {
       date: projectionDate,
-      sun: demoSunGeo,
-      moon: demoMoonGeo,
-      moonPhase: getMoonPhase(projectionDate),
+      sun: baseSnapshot.sun,
+      moon: baseSnapshot.moon,
+      moonPhase: baseSnapshot.moonPhase ?? getMoonPhase(projectionDate),
       darkSunRenderState,
       darkSunRenderPosition: orbitDarkSun.position.clone(),
-      solarEclipse: createSolarEclipseState(),
+      solarEclipse: baseSnapshot.solarEclipse ?? createSolarEclipseState(),
       sunPosition: orbitSun.position.clone(),
       sunRenderState,
       sunRenderPosition: orbitSun.position.clone(),
-      sunDisplayHorizontal: astronomyApi.getSunDisplayHorizontalFromPosition(orbitSun.position),
+      sunDisplayHorizontal: baseSnapshot.sunDisplayHorizontal ?? astronomyApi.getSunDisplayHorizontalFromPosition(orbitSun.position),
       moonPosition: orbitMoon.position.clone(),
-      moonRenderPosition: orbitMoon.position.clone()
+      moonRenderPosition: orbitMoon.position.clone(),
+      moonRenderState
     };
     astronomyApi.updateAstronomyUi(snapshot);
   }
 
-  const constellationSeasonalAngle = astronomyState.enabled
+  const constellationSeasonalAngle = (
+    astronomyState.enabled || simulationState.useRealityTimelineInDemo !== false
+  )
     ? getSeasonalEclipticAngle(projectionDate)
     : -simulationState.orbitSeasonPhase;
   const zodiacAgeOffset = getZodiacAgeOffsetRadians(projectionDate);
@@ -2111,7 +2173,18 @@ function animate() {
         constellationPrecessionAngle: constellationSeasonalAngle,
         constellationSeasonalAngle,
         dateIso: snapshot.date?.toISOString?.() ?? null,
+        simulationDateIso: projectionDate?.toISOString?.() ?? null,
+        accelerationRate: celestialControlState.speedMultiplier ?? null,
         zodiacAgeOffset,
+        sunPos: snapshot.sunPosition,
+        sunAngle: simulationState.orbitSunAngle,
+        moonAngle: simulationState.orbitMoonAngle,
+        darkSunAngle: simulationState.orbitDarkSunAngle,
+        sunBandProgress: simulationState.sunBandProgress,
+        moonBandProgress: simulationState.moonBandProgress,
+        darkSunBandProgress: simulationState.darkSunBandProgress,
+        moonSunBandDelta: (simulationState.moonBandProgress ?? 0) - (simulationState.sunBandProgress ?? 0),
+        darkSunSunBandDelta: (simulationState.darkSunBandProgress ?? 0) - (simulationState.sunBandProgress ?? 0),
         moonPos: snapshot.moonPosition, 
         darkSunPos: snapshot.darkSunRenderPosition,
         activeLunarEclipseData: snapshot.activeLunarEclipseData ?? null

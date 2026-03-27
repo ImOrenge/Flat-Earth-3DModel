@@ -130,7 +130,9 @@ export const ORBIT_SUN_SEASON_SPEED = 0.0026;
 // sweep to keep both bodies on the same seasonal corridor in demo mode.
 export const ORBIT_MOON_BAND_SPEED_FACTOR = 0.75;
 export const CELESTIAL_TRAIL_LENGTH_DEFAULT_PERCENT = 100;
-export const CELESTIAL_SPEED_DEFAULT = 0.5;
+export const CELESTIAL_SPEED_MIN = 0;
+export const CELESTIAL_SPEED_MAX = 60;
+export const CELESTIAL_SPEED_DEFAULT = 1;
 export const ORBIT_SUN_HALO_OPACITY = 0.2;
 export const ORBIT_SUN_LIGHT_INTENSITY = 32;
 export const ORBIT_SUN_BODY_EMISSIVE_INTENSITY = 5.4;
