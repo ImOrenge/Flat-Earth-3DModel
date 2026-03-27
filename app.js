@@ -14,7 +14,7 @@ import { createAstronomyController } from "./modules/astronomy-controller.js?v=2
 import { createCameraController } from "./modules/camera-controller.js?v=20260313-tracking-angle1";
 import { createCelestialTrackingCameraController } from "./modules/celestial-tracking-camera-controller.js?v=20260320-constellation-precession1";
 import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js?v=20260312-darksun-eclipse1";
-import { createI18n } from "./modules/i18n.js?v=20260320-hudtabs2";
+import { createI18n } from "./modules/i18n.js?v=20260327-mobilehud1";
 import { createMagneticFieldController } from "./modules/magnetic-field-controller.js?v=20260314-magnetic-pinecone3";
 import { createRouteSimulationController } from "./modules/route-simulation-controller.js";
 import { createTextureManager } from "./modules/texture-manager.js?v=20260311-gpu-daynight";
@@ -24,7 +24,7 @@ import * as constants from "./modules/constants.js";
 import { createEclipseController } from "./modules/eclipse-controller.js?v=20260320-reality-eclipse-sync2";
 import { createCelestialVisualsController } from "./modules/celestial-visuals-controller.js?v=20260321-sunset5";
 import { createConstellationTabController } from "./modules/constellation-tab-controller.js?v=20260320-constellation-precession1";
-import { setupInputHandlers } from "./modules/input-handler.js?v=20260320-hud-classic1";
+import { setupInputHandlers } from "./modules/input-handler.js?v=20260327-mobilehud1";
 import { createRocketController, SPACEPORTS } from "./modules/rocket-controller.js?v=20260319-parabola";
 const {
   DEFAULT_MAP_PATH,
@@ -281,16 +281,21 @@ const solarEclipseToastCopyEl = document.getElementById("solar-eclipse-toast-cop
 const statusEl = document.getElementById("status");
 const languageToggleEl = document.getElementById("language-toggle");
 const languageToggleTextEl = document.getElementById("language-toggle-text");
-const uploadInput = document.getElementById("map-upload");
 const resetButton = document.getElementById("reset-camera");
 const summaryUtilitySlotEl = document.getElementById("summary-utility-slot");
 const languageToggleRowEl = document.getElementById("language-toggle-row");
 const summaryButtonRowEl = document.getElementById("summary-button-row");
+const topbarStatusHomeEl = document.getElementById("topbar-status-home");
+const topbarStatusEl = document.getElementById("topbar-status");
 const topbarNavSlotEl = document.getElementById("topbar-nav-slot");
 const topbarUtilitySlotEl = document.getElementById("topbar-utility-slot");
+const topbarLayoutHomeEl = document.getElementById("topbar-layout-home");
+const topbarHelpHomeEl = document.getElementById("topbar-help-home");
 const settingsAnchorEl = document.getElementById("settings-anchor");
 const settingsToggleButtonEl = document.getElementById("settings-toggle");
 const settingsPopoverEl = document.getElementById("settings-popover");
+const settingsPrimarySlotEl = document.getElementById("settings-primary-slot");
+const settingsStatusSlotEl = document.getElementById("settings-status-slot");
 const detailTabsHomeEl = document.getElementById("detail-tabs-home");
 const detailTabsEl = document.getElementById("detail-tabs");
 const helpOpenButtonEl = document.getElementById("help-open");
@@ -413,6 +418,7 @@ const constellationSegmentsEl = document.getElementById("constellation-segments"
 const constellationStarsEl = document.getElementById("constellation-stars");
 const i18n = createI18n();
 const LAYOUT_STORAGE_KEY = "flat-earth-layout-mode";
+const MOBILE_LAYOUT_BREAKPOINT = 1080;
 const HUD_PANEL_SECTION_DEFAULTS = {
   astronomy: "time",
   routes: "playback",
@@ -442,7 +448,8 @@ const FOCUSABLE_SELECTOR = [
 
 let helpModalOpen = false;
 let settingsPanelOpen = false;
-let currentLayoutMode = getInitialLayoutMode();
+let preferredLayoutMode = getInitialLayoutMode();
+let currentLayoutMode = "hud";
 let currentControlTab = controlTabButtons.find((button) => button.classList.contains("active"))?.dataset.controlTab ?? "astronomy";
 let lastFocusedBeforeHelpModal = null;
 let lastFocusedBeforeSettingsPanel = null;
@@ -467,6 +474,14 @@ function moveNodeToSlot(node, slot) {
   slot.appendChild(node);
 }
 
+function isMobileViewport() {
+  if (typeof window.matchMedia === "function") {
+    return window.matchMedia(`(max-width: ${MOBILE_LAYOUT_BREAKPOINT}px)`).matches;
+  }
+
+  return window.innerWidth <= MOBILE_LAYOUT_BREAKPOINT;
+}
+
 function syncSummaryUtilitySlotVisibility() {
   if (!summaryUtilitySlotEl) {
     return;
@@ -487,6 +502,21 @@ function syncLayoutAnchors(layoutMode) {
 
   moveNodeToSlot(detailTabsEl, detailTabsHomeEl);
   syncSummaryUtilitySlotVisibility();
+}
+
+function syncResponsiveTopbarAnchors() {
+  const useMobileSettingsLayout = isMobileViewport();
+
+  if (useMobileSettingsLayout) {
+    moveNodeToSlot(layoutSwitchEl, settingsPrimarySlotEl);
+    moveNodeToSlot(helpOpenButtonEl, settingsPrimarySlotEl);
+    moveNodeToSlot(topbarStatusEl, settingsStatusSlotEl);
+    return;
+  }
+
+  moveNodeToSlot(layoutSwitchEl, topbarLayoutHomeEl);
+  moveNodeToSlot(helpOpenButtonEl, topbarHelpHomeEl);
+  moveNodeToSlot(topbarStatusEl, topbarStatusHomeEl);
 }
 
 function syncHudMovablePanels() {
@@ -570,32 +600,55 @@ function syncHudStatusChips() {
   setChip(hudSystemChipEl, statusEl.textContent?.trim() || "--");
 }
 
-function setLayoutMode(layoutMode, { persist = true } = {}) {
-  const nextLayoutMode = layoutMode === "classic" ? "classic" : "hud";
-  currentLayoutMode = nextLayoutMode;
+function getEffectiveLayoutMode() {
+  return isMobileViewport() ? "hud" : preferredLayoutMode;
+}
 
-  document.body.dataset.layoutMode = nextLayoutMode;
-  if (appShellEl) {
-    appShellEl.dataset.layoutMode = nextLayoutMode;
-  }
-
-  syncLayoutAnchors(nextLayoutMode);
-  syncHudMovablePanels();
+function syncLayoutSwitchUi() {
+  const useMobileSettingsLayout = isMobileViewport();
+  layoutSwitchEl.classList.toggle("single-mode", useMobileSettingsLayout);
 
   for (const button of layoutModeButtons) {
-    const isActive = button.dataset.layoutModeSwitch === nextLayoutMode;
+    const layoutMode = button.dataset.layoutModeSwitch;
+    const isClassicButton = layoutMode === "classic";
+    const hideClassic = useMobileSettingsLayout && isClassicButton;
+    button.hidden = hideClassic;
+    button.disabled = hideClassic;
+    const isActive = useMobileSettingsLayout
+      ? layoutMode === "hud"
+      : layoutMode === preferredLayoutMode;
     button.classList.toggle("active", isActive);
     button.setAttribute("aria-pressed", String(isActive));
   }
+}
+
+function applyLayoutMode() {
+  const effectiveLayoutMode = getEffectiveLayoutMode();
+  currentLayoutMode = effectiveLayoutMode;
+
+  document.body.dataset.layoutMode = effectiveLayoutMode;
+  if (appShellEl) {
+    appShellEl.dataset.layoutMode = effectiveLayoutMode;
+  }
+
+  syncLayoutAnchors(effectiveLayoutMode);
+  syncResponsiveTopbarAnchors();
+  syncHudMovablePanels();
+  syncLayoutSwitchUi();
+  syncHudStatusChips();
+  syncHudPanelSections();
+}
+
+function setLayoutMode(layoutMode, { persist = true } = {}) {
+  preferredLayoutMode = layoutMode === "classic" ? "classic" : "hud";
 
   if (persist) {
     try {
-      window.localStorage.setItem(LAYOUT_STORAGE_KEY, nextLayoutMode);
+      window.localStorage.setItem(LAYOUT_STORAGE_KEY, preferredLayoutMode);
     } catch {}
   }
 
-  syncHudStatusChips();
-  syncHudPanelSections();
+  applyLayoutMode();
 }
 
 function getFocusableElements(root) {
@@ -760,6 +813,7 @@ function applyStaticTranslations() {
   settingsToggleButtonEl.setAttribute("aria-controls", "settings-popover");
   settingsToggleButtonEl.setAttribute("aria-haspopup", "dialog");
   settingsToggleButtonEl.setAttribute("aria-expanded", String(settingsPanelOpen));
+  settingsToggleButtonEl.setAttribute("aria-label", i18n.t("settingsButtonLabel"));
   settingsPopoverEl.setAttribute("aria-hidden", String(!settingsPanelOpen));
 
   for (const element of translatableTextEls) {
@@ -810,7 +864,7 @@ function syncSeasonalEventButtonLabels() {
 applyStaticTranslations();
 syncSeasonalEventButtonLabels();
 syncHudStatusChips();
-setLayoutMode(currentLayoutMode, { persist: false });
+applyLayoutMode();
 
 const hudStatusObserver = new MutationObserver(() => {
   syncHudStatusChips();
@@ -885,7 +939,7 @@ document.addEventListener("focusin", (event) => {
   }
 });
 window.addEventListener("resize", () => {
-  syncHudSideCard();
+  applyLayoutMode();
 });
 
 let constellationTabApi;
@@ -1635,12 +1689,12 @@ const rocketApi = createRocketController({
 
   setupInputHandlers({
     constants, canvas, cameraApi, walkerApi, celestialTrackingCameraApi, magneticFieldApi,
-    routeSimulationApi, textureApi, astronomyApi, rocketApi, ui, renderState, walkerState, cameraState,
+    routeSimulationApi, astronomyApi, rocketApi, ui, renderState, walkerState, cameraState,
     movementState, simulationState, astronomyState, celestialControlState, isUiBlocking, skyTexture, scene,
     setControlTab, createSolarEclipseState: eclipseApi.createSolarEclipseState, syncFullTrailVisibility: eclipseApi.syncFullTrailVisibility,
     resetDarkSunStageState: eclipseApi.resetDarkSunStageState, showSolarEclipseToast: eclipseApi.showSolarEclipseToast,
     resetDarkSunOcclusionMotion: eclipseApi.resetDarkSunOcclusionMotion, darkSunOcclusionState,
-    controlTabButtons, languageToggleEl, i18n, uploadInput, resetButton,
+    controlTabButtons, languageToggleEl, i18n, resetButton,
     exitFirstPersonMode, enterFirstPersonMode, walkerModeEl, resetWalkerButton,
     routeSelectEl, routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl,
     celestialFullTrailEl, routePlaybackButton, routeResetButton, realitySyncEl,
