@@ -27,6 +27,9 @@ export const DOME_BASE_Y = scaleDimension(0.46);
 export const DOME_VERTICAL_SCALE = 0.78;
 export const CELESTIAL_HEIGHT_DROP = scaleDimension(0.42);
 export const CELESTIAL_ALTITUDE_DROP_DEGREES = 6;
+// Temporary azimuth calibration to align model azimuth with external reference.
+// Positive values rotate azimuth clockwise (toward East) after conversion to degrees.
+export const CELESTIAL_AZIMUTH_OFFSET_DEGREES = 31.646;
 export const CELESTIAL_ORBIT_Y_SPREAD_SCALE = 1.5;
 export const POLARIS_ALTITUDE_OFFSET = 0;
 export const POLARIS_CORE_RADIUS = scaleDimension(0.07);

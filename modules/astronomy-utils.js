@@ -23,6 +23,7 @@ const ZODIAC_AGE_DEGREES_PER_MS = (
 export const SYNODIC_MONTH_DAYS = 29.530588853;
 export const MOON_PHASE_CYCLE_DAYS = SYNODIC_MONTH_DAYS;
 export const REFERENCE_NEW_MOON_JULIAN_DATE = 2451550.1;
+export const MOON_PHASE_ANCHOR_ISO = "2026-03-18T00:00:00+09:00";
 export const MOON_PHASE_STEP_COUNT = 28;
 export const MOON_PHASE_STEP_DEGREES = FULL_CIRCLE_DEGREES / MOON_PHASE_STEP_COUNT;
 export const LOCAL_LIGHT_HORIZON_OFFSET_DEGREES = 22;
@@ -199,17 +200,40 @@ function getWrappedPhaseDelta(phaseProgress = 0, targetPhase = 0) {
   return THREE.MathUtils.euclideanModulo((phaseProgress - targetPhase) + 0.5, 1) - 0.5;
 }
 
-export function getMoonPhase(date) {
-  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
-    return getMoonPhaseFromProgress(0);
-  }
+function getRawMoonPhaseProgress(date) {
   const sun = getSunEquatorialPosition(date);
   const moon = getMoonEquatorialPosition(date);
   const phaseAngleRadians = THREE.MathUtils.euclideanModulo(
     moon.eclipticLongitude - sun.eclipticLongitude,
     FULL_CIRCLE_RADIANS
   );
-  const phaseProgress = phaseAngleRadians / FULL_CIRCLE_RADIANS;
+  return phaseAngleRadians / FULL_CIRCLE_RADIANS;
+}
+
+let cachedMoonPhaseOffset = null;
+function getMoonPhaseOffset() {
+  if (cachedMoonPhaseOffset !== null) {
+    return cachedMoonPhaseOffset;
+  }
+  const anchorDate = new Date(MOON_PHASE_ANCHOR_ISO);
+  if (Number.isNaN(anchorDate.getTime())) {
+    cachedMoonPhaseOffset = 0;
+    return cachedMoonPhaseOffset;
+  }
+  const anchorProgress = getRawMoonPhaseProgress(anchorDate);
+  cachedMoonPhaseOffset = THREE.MathUtils.euclideanModulo(-anchorProgress, 1);
+  return cachedMoonPhaseOffset;
+}
+
+export function getMoonPhase(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return getMoonPhaseFromProgress(0);
+  }
+  const rawProgress = getRawMoonPhaseProgress(date);
+  const phaseProgress = THREE.MathUtils.euclideanModulo(
+    rawProgress + getMoonPhaseOffset(),
+    1
+  );
   return getMoonPhaseFromProgress(phaseProgress);
 }
 
@@ -794,14 +818,17 @@ function getHorizontalCoordinates({
     (Math.cos(observerLatitude) * Math.cos(declination) * Math.cos(hourAngle));
   const altitude = Math.asin(THREE.MathUtils.clamp(sinAltitude, -1, 1));
   const azimuth = Math.atan2(
-    -Math.sin(hourAngle),
-    (Math.tan(declination) * Math.cos(observerLatitude)) -
-      (Math.sin(observerLatitude) * Math.cos(hourAngle))
+    Math.sin(hourAngle),
+    (Math.cos(hourAngle) * Math.sin(observerLatitude)) -
+      (Math.tan(declination) * Math.cos(observerLatitude))
   );
 
   return {
     altitudeDegrees: toDegrees(altitude),
-    azimuthDegrees: normalizeDegrees(toDegrees(azimuth)),
+    azimuthDegrees: THREE.MathUtils.euclideanModulo(
+      toDegrees(azimuth) + (constants.CELESTIAL_AZIMUTH_OFFSET_DEGREES ?? 0),
+      FULL_CIRCLE_DEGREES
+    ),
     altitudeRadians: altitude,
     azimuthRadians: azimuth
   };
