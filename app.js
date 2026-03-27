@@ -1974,35 +1974,23 @@ function animate() {
     const baseSnapshot = astronomyApi.getAstronomySnapshot(projectionDate);
 
     const previousSunProgress = simulationState.sunBandProgress ?? 0.5;
-    const previousMoonProgress = simulationState.moonBandProgress ?? 0.5;
     const sunRealityProgress = THREE.MathUtils.clamp(
       baseSnapshot.sunRenderState?.corridorProgress ?? baseSnapshot.sunRenderState?.macroProgress ?? 0.5,
       0,
       1
     );
-    const moonRealityProgress = THREE.MathUtils.clamp(
-      baseSnapshot.moonRenderState?.corridorProgress ?? baseSnapshot.moonRenderState?.macroProgress ?? 0.5,
-      0,
-      1
-    );
-    const darkSunRealityProgress = THREE.MathUtils.clamp(
-      baseSnapshot.darkSunRenderState?.corridorProgress ?? baseSnapshot.darkSunRenderState?.macroProgress ?? 0.5,
-      0,
-      1
-    );
+    const lockedRealityProgress = sunRealityProgress;
 
     simulationState.orbitSunAngle = baseSnapshot.sunRenderState?.orbitAngleRadians ?? simulationState.orbitSunAngle;
     simulationState.orbitMoonAngle = baseSnapshot.moonRenderState?.orbitAngleRadians ?? simulationState.orbitMoonAngle;
     simulationState.orbitSeasonPhase = getSeasonalEclipticPhase(projectionDate) * Math.PI * 2;
-    simulationState.sunBandProgress = sunRealityProgress;
-    simulationState.moonBandProgress = moonRealityProgress;
-    simulationState.darkSunBandProgress = darkSunRealityProgress;
-    if (Math.abs(sunRealityProgress - previousSunProgress) > 0.0001) {
-      simulationState.sunBandDirection = sunRealityProgress > previousSunProgress ? 1 : -1;
+    simulationState.sunBandProgress = lockedRealityProgress;
+    simulationState.moonBandProgress = lockedRealityProgress;
+    simulationState.darkSunBandProgress = lockedRealityProgress;
+    if (Math.abs(lockedRealityProgress - previousSunProgress) > 0.0001) {
+      simulationState.sunBandDirection = lockedRealityProgress > previousSunProgress ? 1 : -1;
     }
-    if (Math.abs(moonRealityProgress - previousMoonProgress) > 0.0001) {
-      simulationState.moonBandDirection = moonRealityProgress > previousMoonProgress ? 1 : -1;
-    }
+    simulationState.moonBandDirection = simulationState.sunBandDirection;
 
     if (!isSolarStagingActive && !isLunarStagingActive) {
       simulationState.orbitDarkSunAngle = baseSnapshot.darkSunRenderState?.orbitAngleRadians ?? simulationState.orbitDarkSunAngle;
@@ -2144,6 +2132,13 @@ function animate() {
         zodiacAgeOffset,
         sunPos: snapshot.sunPosition,
         sunAngle: simulationState.orbitSunAngle,
+        moonAngle: simulationState.orbitMoonAngle,
+        darkSunAngle: simulationState.orbitDarkSunAngle,
+        sunBandProgress: simulationState.sunBandProgress,
+        moonBandProgress: simulationState.moonBandProgress,
+        darkSunBandProgress: simulationState.darkSunBandProgress,
+        moonSunBandDelta: (simulationState.moonBandProgress ?? 0) - (simulationState.sunBandProgress ?? 0),
+        darkSunSunBandDelta: (simulationState.darkSunBandProgress ?? 0) - (simulationState.sunBandProgress ?? 0),
         moonPos: snapshot.moonPosition, 
         darkSunPos: snapshot.darkSunRenderPosition,
         activeLunarEclipseData: snapshot.activeLunarEclipseData ?? null

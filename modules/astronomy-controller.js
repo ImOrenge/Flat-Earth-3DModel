@@ -890,6 +890,18 @@ export function createAstronomyController({
     };
   }
 
+  function getSunBandLockProgress({
+    sunRenderState = null,
+    sunProgress = null,
+    fallbackProgress = simulationState.sunBandProgress ?? 0.5
+  } = {}) {
+    return THREE.MathUtils.clamp(
+      sunRenderState?.corridorProgress ?? sunRenderState?.macroProgress ?? sunProgress ?? fallbackProgress ?? 0.5,
+      0,
+      1
+    );
+  }
+
   function getShortestAngleDeltaRadians(fromAngle = 0, toAngle = 0) {
     return Math.atan2(
       Math.sin(toAngle - fromAngle),
@@ -918,7 +930,7 @@ export function createAstronomyController({
     });
   }
 
-  function getRealityMoonRenderStateAtDate(date) {
+  function getRealityMoonRenderStateAtDate(date, { sunRenderState = null } = {}) {
     const moon = getMoonSubpoint(date);
     const projectedRadius = THREE.MathUtils.clamp(
       projectedRadiusFromLatitude(moon.latitudeDegrees, constants.DISC_RADIUS),
@@ -930,6 +942,7 @@ export function createAstronomyController({
       longitudeDegrees: moon.longitudeDegrees,
       orbitAngleRadians: THREE.MathUtils.degToRad(moon.longitudeDegrees),
       projectedRadius,
+      sunRenderState,
       source: "reality"
     });
   }
@@ -964,7 +977,9 @@ export function createAstronomyController({
 
     // 태양/달 render state에서 물리 위치 직접 참조
     const resolvedSunState = sunRenderState ?? getRealitySunRenderStateAtDate(date);
-    const resolvedMoonState = moonRenderState ?? getRealityMoonRenderStateAtDate(date);
+    const resolvedMoonState = moonRenderState ?? getRealityMoonRenderStateAtDate(date, {
+      sunRenderState: resolvedSunState
+    });
 
     const solarRadius = resolvedSunState?.centerRadius ?? neutralRadius;
     const lunarRadius = resolvedMoonState?.centerRadius ?? neutralRadius;
@@ -1066,38 +1081,43 @@ export function createAstronomyController({
     useExplicitOrbit = true,
     orbitMode = source === "demo" ? simulationState.orbitMode : "auto"
   } = {}) {
+    const lockedProgress = getSunBandLockProgress({
+      sunRenderState,
+      sunProgress,
+      fallbackProgress: progress
+    });
+    const lockedProjectedRadius = Number.isFinite(sunRenderState?.centerRadius)
+      ? sunRenderState.centerRadius
+      : undefined;
+
     if (source === "demo") {
       // Demo: explicit independent orbit
       const renderState = getBodyCoilRenderState({
-        body: "darkSun",
+        body: "sun",
         orbitAngleRadians,
         orbitMode,
-        progress,
+        progress: lockedProgress,
         source: "demo"
       });
       return { ...renderState, direction, orbitAngleRadians, orbitMode };
     }
 
-    // Reality: Saros-based physical interpolation — directly blend sun/moon positions.
-    // No progress→corridor mapping; centerRadius and coilHeight come straight from orbit.
+    // Reality keeps dark-sun orbital angle/direction, but locks band radius/height to sun.
     const orbit = getRealityDarkSunOrbit(date, { moonRenderState, sunRenderState });
-    const orbitProgress = getBodyCorridorProgress("darkSun", orbit.centerRadius);
     const renderState = getBodyCoilRenderState({
-      body: "darkSun",
+      body: "sun",
       orbitAngleRadians: orbit.orbitAngleRadians,
       orbitMode: "auto",
-      progress: orbitProgress,
-      source: "demo"  // use explicit progress, not projectedRadius
+      progress: lockedProgress,
+      projectedRadius: lockedProjectedRadius,
+      source: "demo"
     });
 
-    // Override position height with physically blended coilHeight from saros/catalog orbit
     return {
       ...renderState,
-      coilHeight: orbit.coilHeight,
       direction: orbit.direction,
       orbitAngleRadians: orbit.orbitAngleRadians,
-      orbitMode: "auto",
-      position: new THREE.Vector3(renderState.position.x, orbit.coilHeight, renderState.position.z)
+      orbitMode: "auto"
     };
   }
 
@@ -1125,19 +1145,27 @@ export function createAstronomyController({
     orbitAngleRadians = 0,
     projectedRadius = constants.EQUATOR_RADIUS,
     progress = simulationState.moonBandProgress ?? 0.5,
+    sunProgress = simulationState.sunBandProgress ?? 0.5,
+    sunRenderState = null,
     source = "reality",
     orbitMode = source === "demo" ? simulationState.orbitMode : "auto"
   }) {
-    // Reality mode must preserve the exact projected radius from astronomical latitude.
-    // Demo mode can mirror the sun corridor for stylized synchronized orbit behavior.
-    const coilBody = source === "reality" ? "moon" : "sun";
+    const lockedProgress = getSunBandLockProgress({
+      sunRenderState,
+      sunProgress,
+      fallbackProgress: progress
+    });
+    const lockedProjectedRadius = Number.isFinite(sunRenderState?.centerRadius)
+      ? sunRenderState.centerRadius
+      : projectedRadius;
+
     return getBodyCoilRenderState({
-      body: coilBody,
+      body: "sun",
       longitudeDegrees,
       orbitAngleRadians,
       orbitMode,
-      progress,
-      projectedRadius,
+      progress: lockedProgress,
+      projectedRadius: lockedProjectedRadius,
       source
     });
   }
@@ -2332,16 +2360,10 @@ export function createAstronomyController({
       "sunBandDirection",
       snapshot.sunRenderState?.corridorProgress ?? snapshot.sunRenderState?.macroProgress
     );
-    syncBandProgressFromSnapshot(
-      "moonBandProgress",
-      "moonBandDirection",
-      snapshot.moonRenderState?.corridorProgress ?? snapshot.moonRenderState?.macroProgress
-    );
-    syncBandProgressFromSnapshot(
-      "darkSunBandProgress",
-      "darkSunBandDirection",
-      snapshot.darkSunRenderState?.corridorProgress ?? snapshot.darkSunRenderState?.macroProgress
-    );
+    const lockedProgress = THREE.MathUtils.clamp(simulationState.sunBandProgress ?? 0.5, 0, 1);
+    simulationState.moonBandProgress = lockedProgress;
+    simulationState.darkSunBandProgress = lockedProgress;
+    simulationState.moonBandDirection = simulationState.sunBandDirection ?? simulationState.moonBandDirection ?? 1;
   }
 
   function applyAstronomySnapshot(snapshot) {

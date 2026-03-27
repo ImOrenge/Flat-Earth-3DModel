@@ -320,6 +320,85 @@ def test_stage_pre_lunar_eclipse_uses_selected_event_start_window(page: Page, se
     assert stage_state["eclipse"]["stageKey"] == "approach"
 
 
+def test_sun_band_lock_applies_across_reality_catalog_and_demo_modes(page: Page, server_url: str):
+    page.goto(server_url)
+    page.locator("#scene").wait_for(state="attached")
+
+    if page.locator("#reality-live").is_checked():
+        set_checkbox_value(page, "#reality-live", False)
+    page.locator("#observation-time").fill("2026-03-03T20:34")
+    page.locator("#apply-observation-time").click()
+    set_checkbox_value(page, "#reality-sync", True)
+
+    def read_metrics() -> dict:
+        return page.evaluate(
+            """
+            () => {
+              const snapshot = window.__E2E_SNAPSHOT ?? {};
+              const sim = window.__simulationState ?? {};
+              const sunBand = snapshot.sunBandProgress ?? sim.sunBandProgress ?? 0;
+              const moonBand = snapshot.moonBandProgress ?? sim.moonBandProgress ?? 0;
+              const darkBand = snapshot.darkSunBandProgress ?? sim.darkSunBandProgress ?? 0;
+              return {
+                darkDelta: snapshot.darkSunSunBandDelta ?? (darkBand - sunBand),
+                moonDelta: snapshot.moonSunBandDelta ?? (moonBand - sunBand),
+                sunAngle: snapshot.sunAngle ?? sim.orbitSunAngle ?? 0,
+                moonAngle: snapshot.moonAngle ?? sim.orbitMoonAngle ?? 0,
+              };
+            }
+            """
+        )
+
+    def assert_band_lock(mode_label: str) -> None:
+        page.wait_for_timeout(300)
+        metrics = read_metrics()
+        assert abs(metrics["moonDelta"]) < 1e-4, mode_label
+        assert abs(metrics["darkDelta"]) < 1e-4, mode_label
+        assert abs(wrapped_delta(metrics["sunAngle"], metrics["moonAngle"])) > 1e-6, mode_label
+
+    assert_band_lock("reality")
+
+    page.locator("[data-hud-panel-tab='eclipse']").click()
+    page.locator("#eclipse-kind-select").select_option("lunar")
+    page.locator("#eclipse-year-select").select_option("2026")
+    page.locator("#eclipse-event-select").select_option("LE-09708")
+    assert_band_lock("catalog")
+
+    set_checkbox_value(page, "#reality-sync", False)
+    assert_band_lock("demo")
+
+    snapshot_keys = page.evaluate("Object.keys(window.__E2E_SNAPSHOT ?? {})")
+    assert "sunBandProgress" in snapshot_keys
+    assert "moonBandProgress" in snapshot_keys
+    assert "darkSunBandProgress" in snapshot_keys
+    assert "moonSunBandDelta" in snapshot_keys
+    assert "darkSunSunBandDelta" in snapshot_keys
+
+
+def test_strict_catalog_lock_applies_in_accelerated_mode_for_lunar_events(page: Page, server_url: str):
+    page.goto(server_url)
+    page.locator("#scene").wait_for(state="attached")
+
+    if page.locator("#reality-live").is_checked():
+        set_checkbox_value(page, "#reality-live", False)
+    set_checkbox_value(page, "#reality-sync", False)
+
+    page.locator("#observation-time").fill("2026-01-15T12:00")
+    page.locator("#apply-observation-time").click()
+    page.wait_for_timeout(350)
+    idle_lunar = page.evaluate("window.__E2E_SNAPSHOT?.activeLunarEclipseData ?? null")
+    assert idle_lunar is not None
+    assert idle_lunar["stageKey"] == "idle"
+    assert idle_lunar["active"] is False
+
+    page.locator("#observation-time").fill("2026-03-03T20:34")
+    page.locator("#apply-observation-time").click()
+    page.wait_for_timeout(350)
+    active_lunar = page.evaluate("window.__E2E_SNAPSHOT?.activeLunarEclipseData ?? null")
+    assert active_lunar is not None
+    assert active_lunar["stageKey"] != "idle"
+
+
 def test_accelerated_mode_preserves_solar_orbit_direction_sign(page: Page, server_url: str):
     page.goto(server_url)
     page.locator("#scene").wait_for(state="attached")

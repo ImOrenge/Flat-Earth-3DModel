@@ -173,6 +173,65 @@ export function createEclipseController(deps) {
   function isAcceleratedRealityMode() {
     return !astronomyState.enabled && simulationState.useRealityTimelineInDemo !== false;
   }
+  function isCatalogStrictEclipseMode() {
+    return Boolean(ui?.realitySyncEl?.checked) || isAcceleratedRealityMode();
+  }
+  const STRICT_ECLIPSE_APPROACH_SHARE = 0.2;
+  const STRICT_ECLIPSE_INGRESS_SHARE = 0.25;
+  const STRICT_ECLIPSE_TOTALITY_SHARE = 0.25;
+  const STRICT_ECLIPSE_EGRESS_SHARE = 0.3;
+
+  function getStrictEventProgress(dateMs, event) {
+    if (!Number.isFinite(dateMs) || !event) {
+      return null;
+    }
+    const spanMs = Math.max((event.endMs ?? 0) - (event.startMs ?? 0), 1);
+    return THREE.MathUtils.clamp((dateMs - event.startMs) / spanMs, 0, 1);
+  }
+
+  function getStrictStageFromProgress(progress) {
+    const p = THREE.MathUtils.clamp(progress ?? 0, 0, 1);
+    const approachEnd = STRICT_ECLIPSE_APPROACH_SHARE;
+    const ingressEnd = approachEnd + STRICT_ECLIPSE_INGRESS_SHARE;
+    const totalityEnd = ingressEnd + STRICT_ECLIPSE_TOTALITY_SHARE;
+    const egressEnd = totalityEnd + STRICT_ECLIPSE_EGRESS_SHARE;
+    if (p < approachEnd) {
+      return "approach";
+    }
+    if (p < ingressEnd) {
+      return "partialIngress";
+    }
+    if (p < totalityEnd) {
+      return "totality";
+    }
+    if (p < egressEnd) {
+      return "partialEgress";
+    }
+    return "complete";
+  }
+
+  function getStrictCoverageFromProgress(progress, totalCoverageFloor = SOLAR_ECLIPSE_TOTAL_COVERAGE) {
+    const p = THREE.MathUtils.clamp(progress ?? 0, 0, 1);
+    const approachEnd = STRICT_ECLIPSE_APPROACH_SHARE;
+    const ingressEnd = approachEnd + STRICT_ECLIPSE_INGRESS_SHARE;
+    const totalityEnd = ingressEnd + STRICT_ECLIPSE_TOTALITY_SHARE;
+    const egressEnd = totalityEnd + STRICT_ECLIPSE_EGRESS_SHARE;
+    if (p < approachEnd) {
+      return 0;
+    }
+    if (p < ingressEnd) {
+      const t = (p - approachEnd) / Math.max(STRICT_ECLIPSE_INGRESS_SHARE, 0.0001);
+      return THREE.MathUtils.lerp(0, totalCoverageFloor, t);
+    }
+    if (p < totalityEnd) {
+      return 1;
+    }
+    if (p < egressEnd) {
+      const t = (p - totalityEnd) / Math.max(STRICT_ECLIPSE_EGRESS_SHARE, 0.0001);
+      return THREE.MathUtils.lerp(totalCoverageFloor, 0, t);
+    }
+    return 0;
+  }
   const solarEclipsePresentationMaskState = {
     maskCenterNdc: new THREE.Vector2(),
     maskRadius: 0,
@@ -2341,6 +2400,14 @@ export function createEclipseController(deps) {
     const sunSceneVisible = walkerState.enabled ? observerSun.visible : true;
     const sunRenderState = snapshot.sunRenderState ?? null;
     const darkSunRenderState = snapshot.darkSunRenderState ?? null;
+    const catalogStrictMode = isCatalogStrictEclipseMode();
+    const activeSolarEvent = Number.isFinite(snapshot?.date?.getTime?.())
+      ? getActiveEclipseEvent(
+        snapshot.date.getTime(),
+        "solar",
+        astronomyApi.getRuntimeEclipseCatalog?.()
+      )
+      : null;
   
     sunGroup.getWorldPosition(tempSunWorldPosition);
     darkSunGroup.getWorldPosition(tempDarkSunWorldPosition);
@@ -2465,6 +2532,117 @@ export function createEclipseController(deps) {
       snapshot.solarEclipse = rawSolarEclipse;
       astronomyApi.syncSolarEclipseUi(snapshot.solarEclipse);
       syncDarkSunPresentation(snapshot.solarEclipse, snapshot);
+      return snapshot.solarEclipse;
+    }
+
+    if (catalogStrictMode) {
+      const previousEventWindowActive = Boolean(solarEclipseWindowSolverState.eventWindowActive);
+      if (!activeSolarEvent) {
+        const idleSolarEclipse = createSolarEclipseState({
+          ...rawSolarEclipse,
+          active: false,
+          total: false,
+          coverage: 0,
+          projectionCoverage: 0,
+          rawCoverage: 0,
+          direction: "idle",
+          hasContact: false,
+          hasVisibleOverlap: false,
+          rawStageKey: "idle",
+          stageKey: "idle",
+          stageLabelKey: getSolarEclipseStageLabelKey("idle"),
+          stageProgress: 0,
+          eventWindowActive: false,
+          eventWindowJustOpened: false,
+          eventWindowJustClosed: previousEventWindowActive,
+          recentlyActive: false,
+          lightReduction: 0,
+          sunlightScale: 1,
+          sunlightPercent: 100
+        });
+        snapshot.solarEclipse = idleSolarEclipse;
+        Object.assign(
+          solarEclipseWindowSolverState,
+          createSolarEclipseWindowSolverState({
+            displayCoverage: 0,
+            eventWindowActive: false,
+            hasEnteredVisibleOverlap: false,
+            previousRawCoverage: 0,
+            previousRawStageKey: "idle",
+            stageElapsedMs: 0,
+            stageKey: "idle"
+          })
+        );
+        astronomyApi.syncSolarEclipseUi(snapshot.solarEclipse);
+        syncDarkSunPresentation(snapshot.solarEclipse);
+        return snapshot.solarEclipse;
+      }
+
+      const strictProgress = getStrictEventProgress(snapshot.date.getTime(), activeSolarEvent);
+      const strictStageKey = getStrictStageFromProgress(strictProgress);
+      const strictCoverage = getStrictCoverageFromProgress(strictProgress, SOLAR_ECLIPSE_TOTAL_COVERAGE);
+      const strictDirection = strictProgress < 0.5 ? "ingress" : "egress";
+      const strictTier = activeSolarEvent.type === "partial"
+        ? SOLAR_ECLIPSE_TIER_PARTIAL_2
+        : SOLAR_ECLIPSE_TIER_TOTAL;
+      const strictActive = ["partialIngress", "totality", "partialEgress"].includes(strictStageKey);
+      const strictTotal = strictStageKey === "totality" && strictTier === SOLAR_ECLIPSE_TIER_TOTAL;
+      const strictEventWindowActive = strictStageKey !== "complete" && strictStageKey !== "idle";
+      const strictStageProgress = strictStageKey === "complete"
+        ? 1
+        : (
+          strictStageKey === "approach"
+            ? THREE.MathUtils.clamp(strictProgress / Math.max(STRICT_ECLIPSE_APPROACH_SHARE, 0.0001), 0, 1)
+            : THREE.MathUtils.clamp(strictCoverage, 0, 1)
+        );
+
+      let strictSolarEclipse = createSolarEclipseState({
+        ...rawSolarEclipse,
+        active: strictActive,
+        total: strictTotal,
+        coverage: strictCoverage,
+        projectionCoverage: strictCoverage,
+        rawCoverage: strictCoverage,
+        direction: strictDirection,
+        hasContact: strictStageKey !== "approach" && strictStageKey !== "idle" && strictStageKey !== "complete",
+        hasVisibleOverlap: strictActive,
+        eclipseTier: strictTier,
+        rawStageKey: strictStageKey,
+        stageKey: strictStageKey,
+        stageLabelKey: getSolarEclipseStageLabelKey(strictStageKey),
+        stageProgress: strictStageProgress,
+        eventWindowActive: strictEventWindowActive,
+        eventWindowJustOpened: strictEventWindowActive && !previousEventWindowActive,
+        eventWindowJustClosed: !strictEventWindowActive && previousEventWindowActive,
+        recentlyActive: strictEventWindowActive
+      });
+      const strictSunlightScale = THREE.MathUtils.clamp(
+        getSolarEclipseVisualProfile(strictSolarEclipse).sunLightScale ?? 1,
+        0,
+        1
+      );
+      strictSolarEclipse = createSolarEclipseState({
+        ...strictSolarEclipse,
+        lightReduction: THREE.MathUtils.clamp(1 - strictSunlightScale, 0, 1),
+        sunlightScale: strictSunlightScale,
+        sunlightPercent: Math.round(strictSunlightScale * 100)
+      });
+
+      snapshot.solarEclipse = strictSolarEclipse;
+      Object.assign(
+        solarEclipseWindowSolverState,
+        createSolarEclipseWindowSolverState({
+          displayCoverage: strictCoverage,
+          eventWindowActive: strictEventWindowActive,
+          hasEnteredVisibleOverlap: strictActive || strictTotal,
+          previousRawCoverage: strictCoverage,
+          previousRawStageKey: strictStageKey,
+          stageElapsedMs: 0,
+          stageKey: strictStageKey
+        })
+      );
+      astronomyApi.syncSolarEclipseUi(snapshot.solarEclipse);
+      syncDarkSunPresentation(snapshot.solarEclipse);
       return snapshot.solarEclipse;
     }
 
@@ -3109,11 +3287,7 @@ export function createEclipseController(deps) {
     simulationState.sunBandProgress = targetSunProgress;
     simulationState.sunBandDirection = targetSunDirection;
     simulationState.orbitMoonAngle = activeMoonRenderState?.orbitAngleRadians ?? simulationState.orbitMoonAngle;
-    simulationState.moonBandProgress = THREE.MathUtils.clamp(
-      activeMoonRenderState?.corridorProgress ?? activeMoonRenderState?.macroProgress ?? simulationState.moonBandProgress ?? 0.5,
-      0,
-      1
-    );
+    simulationState.moonBandProgress = targetSunProgress;
     // Dark sun angle set to pre-contact position
     simulationState.orbitDarkSunAngle = preContactDarkSunAngle;
     simulationState.darkSunBandProgress = targetSunProgress;
@@ -3126,11 +3300,15 @@ export function createEclipseController(deps) {
       source: "demo",
       useExplicitOrbit: true
     });
-    simulationState.orbitDarkSunAngle = preContactDarkSunRenderState.orbitAngleRadians;
-    astronomyApi.updateMoonOrbit({
+    const stagedMoonRenderState = astronomyApi.getMoonRenderState({
+      orbitAngleRadians: simulationState.orbitMoonAngle,
       orbitMode: simulationState.orbitMode,
-      progress: simulationState.moonBandProgress
+      progress: simulationState.moonBandProgress,
+      source: "demo",
+      sunRenderState: alignedSunRenderState
     });
+    simulationState.orbitDarkSunAngle = preContactDarkSunRenderState.orbitAngleRadians;
+    orbitMoon.position.copy(stagedMoonRenderState.position);
     astronomyApi.updateSeasonPresentation(alignedSunRenderState.centerRadius);
     astronomyApi.updateOrbitModeUi();
     astronomyApi.refreshTrailsForCurrentMode();
@@ -3144,6 +3322,8 @@ export function createEclipseController(deps) {
   
     const stagedSnapshot = getCurrentUiSnapshot();
     stagedSnapshot.sunRenderState = alignedSunRenderState;
+    stagedSnapshot.moonRenderState = stagedMoonRenderState;
+    stagedSnapshot.moonRenderPosition = orbitMoon.position.clone();
     stagedSnapshot.darkSunRenderState = preContactDarkSunRenderState;
     stagedSnapshot.darkSunRenderPosition = orbitDarkSun.position.clone();
     astronomyApi.updateAstronomyUi(stagedSnapshot);
@@ -3336,8 +3516,8 @@ export function createEclipseController(deps) {
     // Moon moves at +ORBIT_MOON_SPEED, dark sun at -ORBIT_DARK_SUN_SPEED
     // In staged mode, we override the dark sun angle to be moonAngle + offset
     simulationState.orbitDarkSunAngle = simulationState.orbitMoonAngle + offset;
-    // Match band progress so they're at the same altitude
-    simulationState.darkSunBandProgress = simulationState.moonBandProgress;
+    // Keep band progress locked to sun for all modes.
+    simulationState.darkSunBandProgress = simulationState.sunBandProgress;
 
     if (transit >= 1) {
       resetLunarStageState();
@@ -3430,9 +3610,23 @@ export function createEclipseController(deps) {
         astronomyApi.getRuntimeEclipseCatalog?.()
       )
       : null;
+    const catalogStrictMode = isCatalogStrictEclipseMode();
     const moonIllumination = snapshot.moonPhase?.illuminationFraction ?? 1;
     const isNearFullMoon = moonIllumination >= 0.85;
-    if (!activeLunarEvent && !isNearFullMoon) {
+    if (catalogStrictMode && !simulationState.darkSunLunarStageLock && !activeLunarEvent) {
+      snapshot.activeLunarEclipseData = createLunarEclipseState({
+        rawStageKey: "idle",
+        stageKey: "idle",
+        stageLabelKey: "idle"
+      });
+      return decayLunarEclipseVisuals(snapshot);
+    }
+    if (!catalogStrictMode && !activeLunarEvent && !isNearFullMoon) {
+      snapshot.activeLunarEclipseData = createLunarEclipseState({
+        rawStageKey: "idle",
+        stageKey: "idle",
+        stageLabelKey: "idle"
+      });
       return decayLunarEclipseVisuals(snapshot);
     }
 
@@ -3518,27 +3712,75 @@ export function createEclipseController(deps) {
       return stagedTint;
     }
 
+    if (catalogStrictMode && activeLunarEvent) {
+      const strictProgress = getStrictEventProgress(snapshot.date.getTime(), activeLunarEvent);
+      const strictStageKeyRaw = getStrictStageFromProgress(strictProgress);
+      const strictStageKey = strictStageKeyRaw === "complete" ? "idle" : strictStageKeyRaw;
+      const strictCoverage = getStrictCoverageFromProgress(strictProgress, SOLAR_ECLIPSE_TOTAL_COVERAGE);
+      const strictDirection = strictProgress < 0.5 ? "ingress" : "egress";
+      const strictTotal = strictStageKey === "totality";
+      const strictActive = ["partialIngress", "totality", "partialEgress"].includes(strictStageKey);
+      const strictHasContact = strictStageKey !== "approach" && strictStageKey !== "idle";
+      const strictShadowTarget = strictTotal
+        ? 1
+        : (
+          strictHasContact
+            ? THREE.MathUtils.clamp(strictCoverage / Math.max(SOLAR_ECLIPSE_TOTAL_COVERAGE, 0.0001), 0, 1)
+            : 0
+        );
+      const strictTintBase = strictActive
+        ? THREE.MathUtils.clamp((strictCoverage - 0.56) / 0.44, 0, 1)
+        : 0;
+      const strictTintTarget = strictTotal ? 1 : (strictTintBase * strictTintBase);
+
+      lunarEclipseState.currentShadowStrength = THREE.MathUtils.clamp(strictShadowTarget, 0, 1);
+      lunarEclipseState.currentTint = THREE.MathUtils.clamp(strictTintTarget, 0, 1);
+      lunarEclipseState.previousRawStageKey = strictStageKey;
+      lunarEclipseState.previousCoverage = strictCoverage;
+
+      snapshot.activeLunarEclipseData = createLunarEclipseState({
+        active: strictActive,
+        total: strictTotal,
+        coverage: strictCoverage,
+        projectionCoverage: strictCoverage,
+        rawCoverage: strictCoverage,
+        direction: strictDirection,
+        hasContact: strictHasContact,
+        hasVisibleOverlap: strictActive,
+        rawStageKey: strictStageKey,
+        stageKey: strictStageKey,
+        stageLabelKey: strictStageKey === "idle" ? "idle" : (strictTotal ? "totalLunarEclipse" : "partialLunarEclipse"),
+        stageProgress: strictStageKey === "approach"
+          ? THREE.MathUtils.clamp(strictProgress / Math.max(STRICT_ECLIPSE_APPROACH_SHARE, 0.0001), 0, 1)
+          : THREE.MathUtils.clamp(strictCoverage, 0, 1),
+        eventWindowActive: strictStageKey !== "idle",
+        visibleInView: true
+      });
+      snapshot.lunarEclipseShadowStrength = lunarEclipseState.currentShadowStrength;
+      snapshot.lunarEclipseTint = lunarEclipseState.currentTint;
+      snapshot.lunarEclipseApproachFactor = strictStageKey === "approach" || strictHasContact ? 1 : 0;
+      clearLunarEclipseMaskSnapshot(snapshot);
+      return lunarEclipseState.currentTint;
+    }
+
     moonBody.updateMatrixWorld(true);
     darkSunBody.updateMatrixWorld(true);
     moonBody.getWorldPosition(tempLunarEclipseMoonWorldPos);
     darkSunBody.getWorldPosition(tempLunarEclipseDarkSunWorldPos);
 
-    // Apply virtual projection trick:
     // Virtual projection trick:
     // Project the dark sun onto the moon's orbital track (same XZ radius AND same direction)
     // using the orbitAngle difference so coverage peaks when the two angles align.
     // World-space position formula: x = -cos(orbitAngle)*R, z = sin(orbitAngle)*R
     // → worldAngle = atan2(z, x) = π - orbitAngle
     // → ΔworldAngle = -ΔorbitAngle
-    if (!astronomyState.enabled && !isAcceleratedRealityMode()) {
-      const moonRadiusXZ = Math.hypot(tempLunarEclipseMoonWorldPos.x, tempLunarEclipseMoonWorldPos.z);
-      const moonWorldAngleXZ = Math.atan2(tempLunarEclipseMoonWorldPos.z, tempLunarEclipseMoonWorldPos.x);
-      const orbitAngleDiff = (darkSunOrbitAngleForDebug ?? 0) - (moonOrbitAngleForDebug ?? 0);
-      const projectedAngle = moonWorldAngleXZ - orbitAngleDiff;
-      tempLunarEclipseDarkSunWorldPos.x = Math.cos(projectedAngle) * moonRadiusXZ;
-      tempLunarEclipseDarkSunWorldPos.z = Math.sin(projectedAngle) * moonRadiusXZ;
-      tempLunarEclipseDarkSunWorldPos.y = tempLunarEclipseMoonWorldPos.y;
-    }
+    const moonRadiusXZ = Math.hypot(tempLunarEclipseMoonWorldPos.x, tempLunarEclipseMoonWorldPos.z);
+    const moonWorldAngleXZ = Math.atan2(tempLunarEclipseMoonWorldPos.z, tempLunarEclipseMoonWorldPos.x);
+    const orbitAngleDiff = (darkSunOrbitAngleForDebug ?? 0) - (moonOrbitAngleForDebug ?? 0);
+    const projectedAngle = moonWorldAngleXZ - orbitAngleDiff;
+    tempLunarEclipseDarkSunWorldPos.x = Math.cos(projectedAngle) * moonRadiusXZ;
+    tempLunarEclipseDarkSunWorldPos.z = Math.sin(projectedAngle) * moonRadiusXZ;
+    tempLunarEclipseDarkSunWorldPos.y = tempLunarEclipseMoonWorldPos.y;
 
     const moonWorldRadius = getWorldBodyRadius(moonBody, ORBIT_MOON_SIZE);
     const darkSunWorldRadiusL = getWorldBodyRadius(darkSunBody, ORBIT_DARK_SUN_SIZE);
@@ -3773,13 +4015,16 @@ export function createEclipseController(deps) {
       0,
       1
     );
-    simulationState.moonBandProgress = THREE.MathUtils.clamp(
-      targetSnapshot.moonRenderState?.corridorProgress ?? targetSnapshot.moonRenderState?.macroProgress ?? simulationState.moonBandProgress ?? 0.5,
-      0,
-      1
-    );
+    simulationState.moonBandProgress = simulationState.sunBandProgress;
     orbitSun.position.copy(targetSnapshot.sunRenderPosition ?? targetSnapshot.sunPosition);
-    orbitMoon.position.copy(targetSnapshot.moonRenderPosition ?? targetSnapshot.moonPosition);
+    const stagedMoonRenderState = astronomyApi.getMoonRenderState({
+      orbitAngleRadians: simulationState.orbitMoonAngle,
+      orbitMode: simulationState.orbitMode,
+      progress: simulationState.moonBandProgress,
+      source: "demo",
+      sunRenderState: targetSnapshot.sunRenderState
+    });
+    orbitMoon.position.copy(stagedMoonRenderState.position);
 
     // Activate the staged lunar eclipse system:
     // Drive the dark sun through 5 keyframe stages relative to the moon's orbit.
@@ -3791,7 +4036,7 @@ export function createEclipseController(deps) {
     const contactOffset = getLunarStageContactOffsetRadians();
     const startOffset = getLunarStageOffsetRadians(0, contactOffset);
     simulationState.orbitDarkSunAngle = simulationState.orbitMoonAngle + startOffset;
-    simulationState.darkSunBandProgress = simulationState.moonBandProgress;
+    simulationState.darkSunBandProgress = simulationState.sunBandProgress;
     simulationState.darkSunBandDirection = -1;
     astronomyApi.updateOrbitModeUi();
     astronomyApi.refreshTrailsForCurrentMode();
