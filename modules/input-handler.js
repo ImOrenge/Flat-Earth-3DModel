@@ -29,7 +29,7 @@ export function setupInputHandlers(deps) {
     showSolarEclipseToast,
     resetDarkSunOcclusionMotion,
     darkSunOcclusionState,
-    controlTabButtons, cameraPresetButtons = [], languageToggleEl, i18n, resetButton,
+    controlTabButtons, cameraPresetButtons = [], cameraViewToggleEl = null, syncCameraViewToggleUi = () => {}, languageToggleEl, i18n, resetButton,
     exitFirstPersonMode, enterFirstPersonMode, walkerModeEl, resetWalkerButton,
     routeSelectEl, routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl, celestialSpeedPresetButtons = [],
     celestialFullTrailEl, routePlaybackButton, routeResetButton, realitySyncEl,
@@ -73,26 +73,60 @@ export function setupInputHandlers(deps) {
   const DOUBLE_TAP_MAX_DISTANCE_PX = 32;
   const TAP_MOVE_TOLERANCE_PX = 14;
   const PINCH_TO_WHEEL_FACTOR = 4;
+  const TOUCH_DRAG_SENSITIVITY = 1.2;
+  const TOUCH_PINCH_TO_WHEEL_FACTOR = 3.5;
+  let touchFallbackActive = false;
+  let touchDragActive = false;
+  let touchPreviousX = 0;
+  let touchPreviousY = 0;
+  let touchPinchDistance = null;
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let touchStartTime = 0;
+
+  function getResponsivePresetValues(preset = "top") {
+    const viewportWidth = Math.max(canvas?.clientWidth || window.innerWidth || 0, 1);
+    const viewportHeight = Math.max(canvas?.clientHeight || window.innerHeight || 0, 1);
+    const isMobileViewport = viewportWidth <= 1080;
+    const aspectRatio = viewportWidth / viewportHeight;
+    const portraitTightness = isMobileViewport
+      ? THREE.MathUtils.clamp((0.68 - aspectRatio) / 0.28, 0, 1)
+      : 0;
+
+    if (preset === "angle") {
+      return {
+        theta: constants.CAMERA_ANGLED_DEFAULT_THETA,
+        phi: THREE.MathUtils.lerp(constants.CAMERA_ANGLED_DEFAULT_PHI, 1.02, portraitTightness),
+        radius: constants.CAMERA_ANGLED_DEFAULT_RADIUS * THREE.MathUtils.lerp(1, 0.88, portraitTightness)
+      };
+    }
+
+    return {
+      theta: constants.CAMERA_TOPDOWN_EXACT_THETA,
+      phi: THREE.MathUtils.lerp(constants.CAMERA_TOPDOWN_EXACT_PHI, 0.022, portraitTightness),
+      radius: constants.CAMERA_TOPDOWN_FULL_RADIUS * THREE.MathUtils.lerp(1, 0.82, portraitTightness)
+    };
+  }
 
   function applyCameraPreset(preset = "top") {
     if (walkerState.enabled || renderState.preparing) {
       exitFirstPersonMode();
     }
 
+    const responsivePreset = getResponsivePresetValues(preset);
+
     celestialTrackingCameraApi.clearTracking();
-    cameraState.targetTheta = preset === "angle"
-      ? constants.CAMERA_ANGLED_DEFAULT_THETA
-      : constants.CAMERA_TOPDOWN_EXACT_THETA;
-    cameraState.targetPhi = preset === "angle"
-      ? constants.CAMERA_ANGLED_DEFAULT_PHI
-      : constants.CAMERA_TOPDOWN_EXACT_PHI;
-    cameraState.targetRadius = preset === "angle"
-      ? constants.CAMERA_ANGLED_DEFAULT_RADIUS
-      : constants.CAMERA_TOPDOWN_FULL_RADIUS;
+    cameraState.targetTheta = responsivePreset.theta;
+    cameraState.targetPhi = responsivePreset.phi;
+    cameraState.targetRadius = responsivePreset.radius;
     cameraState.targetTrackingAzimuth = constants.CAMERA_TRACKING_DEFAULT_AZIMUTH;
     cameraState.targetTrackingElevation = constants.CAMERA_TRACKING_DEFAULT_ELEVATION;
     cameraState.targetTrackingDistance = constants.CAMERA_TRACKING_DEFAULT_DISTANCE;
     cameraApi.clampCamera();
+    if (cameraViewToggleEl) {
+      cameraViewToggleEl.checked = preset === "angle";
+      syncCameraViewToggleUi();
+    }
   }
   
   
@@ -108,11 +142,15 @@ export function setupInputHandlers(deps) {
     return Math.hypot(second.x - first.x, second.y - first.y);
   }
 
-  function applyDragDelta(deltaX, deltaY) {
+  function applyDragDelta(deltaX, deltaY, pointerType = "mouse") {
+    const dragSensitivity = pointerType === "touch" ? TOUCH_DRAG_SENSITIVITY : 1;
+    const adjustedDeltaX = deltaX * dragSensitivity;
+    const adjustedDeltaY = deltaY * dragSensitivity;
+
     if (walkerState.enabled) {
-      walkerState.heading -= deltaX * 0.005;
+      walkerState.heading -= adjustedDeltaX * 0.005;
       walkerState.pitch = THREE.MathUtils.clamp(
-        walkerState.pitch - (deltaY * 0.004),
+        walkerState.pitch - (adjustedDeltaY * 0.004),
         constants.WALKER_PITCH_MIN,
         constants.WALKER_PITCH_MAX
       );
@@ -120,14 +158,14 @@ export function setupInputHandlers(deps) {
     }
 
     if (cameraState.mode === "tracking") {
-      cameraState.targetTrackingAzimuth -= deltaX * 0.008;
-      cameraState.targetTrackingElevation -= deltaY * 0.006;
+      cameraState.targetTrackingAzimuth -= adjustedDeltaX * 0.008;
+      cameraState.targetTrackingElevation -= adjustedDeltaY * 0.006;
       cameraApi.clampCamera();
       return;
     }
 
-    cameraState.targetTheta -= deltaX * 0.008;
-    cameraState.targetPhi += deltaY * 0.006;
+    cameraState.targetTheta -= adjustedDeltaX * 0.008;
+    cameraState.targetPhi += adjustedDeltaY * 0.006;
     cameraApi.clampCamera();
   }
 
@@ -169,7 +207,20 @@ export function setupInputHandlers(deps) {
     }
   }
 
+  function isTouchGestureBlockedTarget(target) {
+    if (!(target instanceof Element)) {
+      return false;
+    }
+    return Boolean(
+      target.closest("button,a,input,select,textarea,label,[role='button'],[role='slider'],[contenteditable='true']")
+    );
+  }
+
   canvas.addEventListener("pointerdown", (event) => {
+    if (touchFallbackActive && event.pointerType === "touch") {
+      return;
+    }
+
     if (renderState.preparing || isUiBlocking?.()) {
       return;
     }
@@ -209,6 +260,10 @@ export function setupInputHandlers(deps) {
   });
 
   canvas.addEventListener("pointermove", (event) => {
+    if (touchFallbackActive && event.pointerType === "touch") {
+      return;
+    }
+
     const pointer = activePointers.get(event.pointerId);
     if (!pointer) {
       return;
@@ -242,13 +297,17 @@ export function setupInputHandlers(deps) {
 
     const deltaX = event.clientX - previousX;
     const deltaY = event.clientY - previousY;
-    applyDragDelta(deltaX, deltaY);
+    applyDragDelta(deltaX, deltaY, event.pointerType);
 
     previousX = event.clientX;
     previousY = event.clientY;
   });
 
   function handlePointerEnd(event) {
+    if (touchFallbackActive && event.pointerType === "touch") {
+      return;
+    }
+
     const pointer = activePointers.get(event.pointerId);
     const wasSingleTouch = activePointers.size === 1;
 
@@ -304,6 +363,128 @@ export function setupInputHandlers(deps) {
   canvas.addEventListener("pointerleave", handlePointerEnd);
   canvas.addEventListener("pointercancel", handlePointerEnd);
 
+  canvas.addEventListener("touchstart", (event) => {
+    if (renderState.preparing || isUiBlocking?.() || isTouchGestureBlockedTarget(event.target)) {
+      return;
+    }
+
+    touchFallbackActive = true;
+
+    if (event.touches.length === 1) {
+      const touch = event.touches[0];
+      touchDragActive = true;
+      touchPreviousX = touch.clientX;
+      touchPreviousY = touch.clientY;
+      touchStartX = touch.clientX;
+      touchStartY = touch.clientY;
+      touchStartTime = performance.now();
+      touchPinchDistance = null;
+      event.preventDefault();
+      return;
+    }
+
+    touchDragActive = false;
+    if (event.touches.length >= 2) {
+      const first = event.touches[0];
+      const second = event.touches[1];
+      touchPinchDistance = Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
+      event.preventDefault();
+    }
+  }, { passive: false });
+
+  canvas.addEventListener("touchmove", (event) => {
+    if (!touchFallbackActive || renderState.preparing || isUiBlocking?.()) {
+      return;
+    }
+
+    if (event.touches.length >= 2) {
+      const first = event.touches[0];
+      const second = event.touches[1];
+      const nextDistance = Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
+      if (touchPinchDistance !== null) {
+        const pinchDelta = nextDistance - touchPinchDistance;
+        if (Math.abs(pinchDelta) > 0.5) {
+          applyZoomDelta(-pinchDelta * TOUCH_PINCH_TO_WHEEL_FACTOR);
+        }
+      }
+      touchPinchDistance = nextDistance;
+      event.preventDefault();
+      return;
+    }
+
+    if (!touchDragActive || event.touches.length !== 1) {
+      return;
+    }
+
+    const touch = event.touches[0];
+    const deltaX = touch.clientX - touchPreviousX;
+    const deltaY = touch.clientY - touchPreviousY;
+    applyDragDelta(deltaX, deltaY, "touch");
+    touchPreviousX = touch.clientX;
+    touchPreviousY = touch.clientY;
+    event.preventDefault();
+  }, { passive: false });
+
+  canvas.addEventListener("touchend", (event) => {
+    if (!touchFallbackActive) {
+      return;
+    }
+
+    if (touchDragActive && event.touches.length === 0) {
+      const elapsedMs = performance.now() - touchStartTime;
+      const movedDistance = Math.hypot(
+        touchPreviousX - touchStartX,
+        touchPreviousY - touchStartY
+      );
+      if (elapsedMs <= DOUBLE_TAP_MAX_DELAY_MS && movedDistance <= TAP_MOVE_TOLERANCE_PX) {
+        const now = performance.now();
+        const sinceLastTap = now - lastTapTime;
+        const tapDistance = Math.hypot(touchPreviousX - lastTapX, touchPreviousY - lastTapY);
+        if (sinceLastTap <= DOUBLE_TAP_MAX_DELAY_MS && tapDistance <= DOUBLE_TAP_MAX_DISTANCE_PX) {
+          applyCameraPreset("top");
+          lastTapTime = 0;
+          lastTapX = 0;
+          lastTapY = 0;
+        } else {
+          lastTapTime = now;
+          lastTapX = touchPreviousX;
+          lastTapY = touchPreviousY;
+        }
+      }
+    }
+
+    if (event.touches.length === 1) {
+      const touch = event.touches[0];
+      touchDragActive = true;
+      touchPreviousX = touch.clientX;
+      touchPreviousY = touch.clientY;
+      touchStartX = touch.clientX;
+      touchStartY = touch.clientY;
+      touchStartTime = performance.now();
+      touchPinchDistance = null;
+      event.preventDefault();
+      return;
+    }
+
+    touchDragActive = false;
+    if (event.touches.length >= 2) {
+      const first = event.touches[0];
+      const second = event.touches[1];
+      touchPinchDistance = Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
+      event.preventDefault();
+      return;
+    }
+
+    touchPinchDistance = null;
+    touchFallbackActive = false;
+  }, { passive: false });
+
+  canvas.addEventListener("touchcancel", () => {
+    touchDragActive = false;
+    touchPinchDistance = null;
+    touchFallbackActive = false;
+  }, { passive: false });
+
   canvas.addEventListener("wheel", (event) => {
     if (walkerState.enabled || renderState.preparing || isUiBlocking?.()) {
       return;
@@ -349,6 +530,12 @@ export function setupInputHandlers(deps) {
   
     });
   
+  }
+
+  if (cameraViewToggleEl) {
+    cameraViewToggleEl.addEventListener("change", () => {
+      applyCameraPreset(cameraViewToggleEl.checked ? "angle" : "top");
+    });
   }
   
   

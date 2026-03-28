@@ -12,7 +12,7 @@ import {
   getSolarAltitudeFactor,
 } from "./modules/astronomy-utils.js?v=20260326-seasonal-ecliptic1";
 import { createAstronomyController } from "./modules/astronomy-controller.js?v=20260325-eclipse-selector1";
-import { createCameraController } from "./modules/camera-controller.js?v=20260322-topview-zodiac2";
+import { createCameraController } from "./modules/camera-controller.js?v=20260328-mobiletouch1";
 import { createCelestialTrackingCameraController } from "./modules/celestial-tracking-camera-controller.js?v=20260320-constellation-precession1";
 import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js?v=20260312-darksun-eclipse1";
 import { createI18n } from "./modules/i18n.js?v=20260327-mobilehud1";
@@ -25,7 +25,7 @@ import * as constants from "./modules/constants.js";
 import { createEclipseController } from "./modules/eclipse-controller.js?v=20260320-reality-eclipse-sync2";
 import { createCelestialVisualsController } from "./modules/celestial-visuals-controller.js?v=20260321-sunset5";
 import { createConstellationTabController } from "./modules/constellation-tab-controller.js?v=20260320-constellation-precession1";
-import { setupInputHandlers } from "./modules/input-handler.js?v=20260327-mobilehud4";
+import { setupInputHandlers } from "./modules/input-handler.js?v=20260328-mobileratio1";
 import { createRocketController, SPACEPORTS } from "./modules/rocket-controller.js?v=20260319-parabola";
 const {
   DEFAULT_MAP_PATH,
@@ -300,6 +300,9 @@ const summaryUtilitySlotEl = document.getElementById("summary-utility-slot");
 const languageToggleRowEl = document.getElementById("language-toggle-row");
 const summaryButtonRowEl = document.getElementById("summary-button-row");
 const cameraPresetRowEl = document.getElementById("camera-preset-row");
+const cameraViewToggleEl = document.getElementById("camera-view-toggle");
+const cameraViewModeTopEl = document.getElementById("camera-view-mode-top");
+const cameraViewModeAngleEl = document.getElementById("camera-view-mode-angle");
 const topbarStatusHomeEl = document.getElementById("topbar-status-home");
 const topbarStatusEl = document.getElementById("topbar-status");
 const topbarNavSlotEl = document.getElementById("topbar-nav-slot");
@@ -307,15 +310,19 @@ const topbarQuickSlotEl = document.getElementById("topbar-quick-slot");
 const topbarUtilitySlotEl = document.getElementById("topbar-utility-slot");
 const topbarLayoutHomeEl = document.getElementById("topbar-layout-home");
 const topbarHelpHomeEl = document.getElementById("topbar-help-home");
+const topbarBrandSettingsSlotEl = document.getElementById("topbar-brand-settings-slot");
+const topbarSettingsHomeEl = document.getElementById("topbar-settings-home");
 const settingsAnchorEl = document.getElementById("settings-anchor");
 const settingsToggleButtonEl = document.getElementById("settings-toggle");
 const settingsPopoverEl = document.getElementById("settings-popover");
+const settingsBackdropEl = document.getElementById("settings-backdrop");
 const privacyChoicesButtonEl = document.getElementById("privacy-choices-button");
 const settingsPrivacyGroupEl = document.getElementById("settings-privacy-group");
 const settingsPrimarySlotEl = document.getElementById("settings-primary-slot");
 const settingsStatusSlotEl = document.getElementById("settings-status-slot");
 const detailTabsHomeEl = document.getElementById("detail-tabs-home");
 const detailTabsEl = document.getElementById("detail-tabs");
+const detailPanelEl = document.querySelector(".detail-panel");
 const helpOpenButtonEl = document.getElementById("help-open");
 const helpModalLayerEl = document.getElementById("help-modal-layer");
 const helpModalBackdropEl = document.getElementById("help-modal-backdrop");
@@ -467,6 +474,9 @@ const zodiacObservationDateEl = document.getElementById("zodiac-observation-date
 const i18n = createI18n();
 const LAYOUT_STORAGE_KEY = "flat-earth-layout-mode";
 const MOBILE_LAYOUT_BREAKPOINT = 1080;
+const TAB_SWIPE_THRESHOLD_X = 48;
+const TAB_SWIPE_MAX_DRIFT_Y = 24;
+const TAB_ORDER_FALLBACK = ["astronomy", "routes", "constellations", "rockets"];
 const HUD_PANEL_SECTION_DEFAULTS = {
   astronomy: "time",
   routes: "playback",
@@ -569,12 +579,16 @@ function syncResponsiveTopbarAnchors() {
     moveNodeToSlot(layoutSwitchEl, settingsPrimarySlotEl);
     moveNodeToSlot(helpOpenButtonEl, settingsPrimarySlotEl);
     moveNodeToSlot(topbarStatusEl, settingsStatusSlotEl);
+    moveNodeToSlot(settingsAnchorEl, topbarBrandSettingsSlotEl);
+    moveNodeToSlot(settingsPopoverEl, appShellEl);
     return;
   }
 
   moveNodeToSlot(layoutSwitchEl, topbarLayoutHomeEl);
   moveNodeToSlot(helpOpenButtonEl, topbarHelpHomeEl);
   moveNodeToSlot(topbarStatusEl, topbarStatusHomeEl);
+  moveNodeToSlot(settingsAnchorEl, topbarSettingsHomeEl);
+  moveNodeToSlot(settingsPopoverEl, settingsAnchorEl);
 }
 
 function syncHudMovablePanels() {
@@ -793,8 +807,14 @@ function openSettingsPanel(trigger = settingsToggleButtonEl) {
   settingsPanelOpen = true;
   lastFocusedBeforeSettingsPanel = trigger instanceof HTMLElement ? trigger : document.activeElement;
   settingsPopoverEl.hidden = false;
+  settingsPopoverEl.scrollTop = 0;
   settingsPopoverEl.classList.add("active");
   settingsPopoverEl.setAttribute("aria-hidden", "false");
+  if (settingsBackdropEl) {
+    settingsBackdropEl.hidden = false;
+    settingsBackdropEl.classList.add("active");
+    settingsBackdropEl.setAttribute("aria-hidden", "false");
+  }
   settingsToggleButtonEl.setAttribute("aria-expanded", "true");
   document.body.classList.add("settings-panel-open");
   resetMovementInputs();
@@ -809,6 +829,11 @@ function closeSettingsPanel({ restoreFocus = true } = {}) {
   settingsPopoverEl.classList.remove("active");
   settingsPopoverEl.hidden = true;
   settingsPopoverEl.setAttribute("aria-hidden", "true");
+  if (settingsBackdropEl) {
+    settingsBackdropEl.classList.remove("active");
+    settingsBackdropEl.hidden = true;
+    settingsBackdropEl.setAttribute("aria-hidden", "true");
+  }
   settingsToggleButtonEl.setAttribute("aria-expanded", "false");
   document.body.classList.remove("settings-panel-open");
   resetMovementInputs();
@@ -889,6 +914,32 @@ function isUiBlocking() {
   return helpModalOpen || settingsPanelOpen;
 }
 
+function syncCameraPresetAccessibility() {
+  const topLabel = i18n.t("cameraPresetTop");
+  const angleLabel = i18n.t("cameraPresetAngle");
+
+  for (const button of cameraPresetButtons) {
+    const labelKey = button.dataset.cameraLabelKey;
+    if (!labelKey) {
+      continue;
+    }
+    const label = i18n.t(labelKey);
+    button.setAttribute("aria-label", label);
+    button.setAttribute("title", label);
+  }
+
+  if (cameraViewToggleEl) {
+    cameraViewToggleEl.setAttribute("aria-label", `${topLabel} / ${angleLabel}`);
+    cameraViewToggleEl.setAttribute("title", `${topLabel} / ${angleLabel}`);
+  }
+}
+
+function syncCameraViewToggleUi() {
+  const isAngle = Boolean(cameraViewToggleEl?.checked);
+  cameraViewModeTopEl?.classList.toggle("active", !isAngle);
+  cameraViewModeAngleEl?.classList.toggle("active", isAngle);
+}
+
 function applyStaticTranslations() {
   document.documentElement.lang = i18n.getLanguage();
   document.title = i18n.t("documentTitle");
@@ -917,6 +968,8 @@ function applyStaticTranslations() {
     element.innerHTML = i18n.t(element.dataset.i18nHtml);
   }
 
+  syncCameraPresetAccessibility();
+  syncCameraViewToggleUi();
   syncHudPanelSections();
 }
 
@@ -986,9 +1039,21 @@ for (const button of hudSubtabButtons) {
   });
 }
 
+if (cameraViewToggleEl) {
+  cameraViewToggleEl.addEventListener("change", () => {
+    syncCameraViewToggleUi();
+  });
+}
+
 settingsToggleButtonEl.addEventListener("click", () => {
   toggleSettingsPanel();
 });
+
+if (settingsBackdropEl) {
+  settingsBackdropEl.addEventListener("click", () => {
+    closeSettingsPanel({ restoreFocus: false });
+  });
+}
 
 if (privacyChoicesButtonEl) {
   privacyChoicesButtonEl.addEventListener("click", () => {
@@ -1017,7 +1082,7 @@ document.addEventListener("pointerdown", (event) => {
     return;
   }
 
-  if (!settingsAnchorEl.contains(event.target)) {
+  if (!settingsAnchorEl.contains(event.target) && !settingsPopoverEl?.contains(event.target)) {
     closeSettingsPanel({ restoreFocus: false });
   }
 }, true);
@@ -1037,13 +1102,44 @@ document.addEventListener("focusin", (event) => {
     return;
   }
 
-  if (!settingsAnchorEl.contains(event.target)) {
+  if (!settingsAnchorEl.contains(event.target) && !settingsPopoverEl?.contains(event.target)) {
     closeSettingsPanel({ restoreFocus: false });
   }
 });
 window.addEventListener("resize", () => {
   applyLayoutMode();
 });
+
+function getControlTabOrder() {
+  const tabs = controlTabButtons
+    .map((button) => button.dataset.controlTab)
+    .filter(Boolean);
+  return tabs.length > 0 ? tabs : TAB_ORDER_FALLBACK;
+}
+
+function scrollActiveControlTabIntoView() {
+  if (!isMobileViewport() || currentLayoutMode !== "hud") {
+    return;
+  }
+  const activeButton = controlTabButtons.find((button) => button.dataset.controlTab === currentControlTab);
+  activeButton?.scrollIntoView({
+    behavior: "smooth",
+    block: "nearest",
+    inline: "center"
+  });
+}
+
+function shiftControlTab(direction) {
+  const tabOrder = getControlTabOrder();
+  if (tabOrder.length === 0) {
+    return;
+  }
+  const currentIndex = tabOrder.indexOf(currentControlTab);
+  const safeIndex = currentIndex >= 0 ? currentIndex : 0;
+  const offset = direction >= 0 ? 1 : -1;
+  const nextIndex = (safeIndex + offset + tabOrder.length) % tabOrder.length;
+  setControlTab(tabOrder[nextIndex]);
+}
 
 let constellationTabApi;
 
@@ -1069,9 +1165,82 @@ function setControlTab(tabKey) {
 
   syncHudPanelSections();
   constellationTabApi?.setPanelActive(tabKey === "constellations");
+  scrollActiveControlTabIntoView();
 }
 
-import { setupScene } from "./modules/scene-setup.js?v=20260324-moon-disc-rotation1";
+function isSwipeNavigationEnabled() {
+  return isMobileViewport()
+    && currentLayoutMode === "hud"
+    && !settingsPanelOpen
+    && !helpModalOpen;
+}
+
+function isSwipeBlockedTarget(target, { blockButtons = true } = {}) {
+  if (!(target instanceof Element)) {
+    return false;
+  }
+
+  const blockingSelector = blockButtons
+    ? "button,a,input,select,textarea,label,[role='button'],[role='slider'],[contenteditable='true']"
+    : "a,input,select,textarea,[role='slider'],[contenteditable='true']";
+
+  return Boolean(target.closest(blockingSelector));
+}
+
+function bindTabSwipeNavigation(container, options = {}) {
+  if (!container) {
+    return;
+  }
+
+  const { blockButtons = true } = options;
+  let pointerId = null;
+  let startX = 0;
+  let startY = 0;
+
+  container.addEventListener("pointerdown", (event) => {
+    if (!isSwipeNavigationEnabled()) {
+      return;
+    }
+    if (event.pointerType === "mouse" && event.button !== 0) {
+      return;
+    }
+    if (isSwipeBlockedTarget(event.target, { blockButtons })) {
+      return;
+    }
+
+    pointerId = event.pointerId;
+    startX = event.clientX;
+    startY = event.clientY;
+  });
+
+  container.addEventListener("pointerup", (event) => {
+    if (pointerId !== event.pointerId) {
+      return;
+    }
+
+    const deltaX = event.clientX - startX;
+    const deltaY = Math.abs(event.clientY - startY);
+    pointerId = null;
+
+    if (!isSwipeNavigationEnabled()) {
+      return;
+    }
+    if (Math.abs(deltaX) < TAB_SWIPE_THRESHOLD_X || deltaY > TAB_SWIPE_MAX_DRIFT_Y) {
+      return;
+    }
+
+    shiftControlTab(deltaX < 0 ? 1 : -1);
+  });
+
+  container.addEventListener("pointercancel", () => {
+    pointerId = null;
+  });
+}
+
+bindTabSwipeNavigation(detailPanelEl, { blockButtons: true });
+bindTabSwipeNavigation(topbarNavSlotEl, { blockButtons: false });
+
+import { setupScene } from "./modules/scene-setup.js?v=20260328-mobileratio2";
 import { createConstellations } from "./modules/constellation-setup.js?v=20260326-seasonal-ecliptic1";
 import { createZodiacWheel } from "./modules/zodiac-wheel.js?v=20260326-seasonal-ecliptic1";
 const {
@@ -1857,7 +2026,7 @@ const rocketApi = createRocketController({
     setControlTab, createSolarEclipseState: eclipseApi.createSolarEclipseState, syncFullTrailVisibility: eclipseApi.syncFullTrailVisibility,
     resetDarkSunStageState: eclipseApi.resetDarkSunStageState, showSolarEclipseToast: eclipseApi.showSolarEclipseToast,
     resetDarkSunOcclusionMotion: eclipseApi.resetDarkSunOcclusionMotion, darkSunOcclusionState,
-    controlTabButtons, cameraPresetButtons, languageToggleEl, i18n, resetButton,
+    controlTabButtons, cameraPresetButtons, cameraViewToggleEl, syncCameraViewToggleUi, languageToggleEl, i18n, resetButton,
     exitFirstPersonMode, enterFirstPersonMode, walkerModeEl, resetWalkerButton,
     routeSelectEl, routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl,
     celestialSpeedPresetButtons,
