@@ -8,10 +8,28 @@ export function createTextureManager({
   statusEl,
   onTextureUpdated
 }) {
+  const isMobileViewport = typeof window !== "undefined"
+    ? (typeof window.matchMedia === "function"
+      ? window.matchMedia("(max-width: 1080px)").matches
+      : window.innerWidth <= 1080)
+    : false;
+  const isAppMode = typeof window !== "undefined"
+    && (
+      window.__APP_MODE__ === true
+      || new URLSearchParams(window?.location?.search || "").get("app") === "1"
+    );
+  const useMobileTextureProfile = isMobileViewport || isAppMode;
+  const textureSizeBudget = useMobileTextureProfile
+    ? Math.min(constants.MAP_TEXTURE_SIZE, 2048)
+    : constants.MAP_TEXTURE_SIZE;
   const targetTextureSize = Math.min(
-    constants.MAP_TEXTURE_SIZE,
-    renderer.capabilities.maxTextureSize || constants.MAP_TEXTURE_SIZE
+    textureSizeBudget,
+    renderer.capabilities.maxTextureSize || textureSizeBudget
   );
+  const maxAnisotropy = Math.max(renderer.capabilities.getMaxAnisotropy?.() || 1, 1);
+  const targetAnisotropy = useMobileTextureProfile
+    ? Math.min(maxAnisotropy, 2)
+    : maxAnisotropy;
   const nightLightsCanvas = document.createElement("canvas");
   nightLightsCanvas.width = constants.DAY_NIGHT_TEXTURE_SIZE;
   nightLightsCanvas.height = constants.DAY_NIGHT_TEXTURE_SIZE;
@@ -74,9 +92,14 @@ export function createTextureManager({
 
   function configureTexture(texture) {
     texture.colorSpace = THREE.SRGBColorSpace;
-    texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    texture.anisotropy = targetAnisotropy;
     texture.wrapS = THREE.ClampToEdgeWrapping;
     texture.wrapT = THREE.ClampToEdgeWrapping;
+    if (useMobileTextureProfile) {
+      texture.generateMipmaps = false;
+      texture.minFilter = THREE.LinearFilter;
+      texture.magFilter = THREE.LinearFilter;
+    }
     texture.needsUpdate = true;
     topMaterial.map = texture;
     topMaterial.needsUpdate = true;
