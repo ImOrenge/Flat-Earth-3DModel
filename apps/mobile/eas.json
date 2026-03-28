@@ -1,6 +1,7 @@
 {
   "cli": {
-    "version": ">= 15.0.0"
+    "version": "18.4.0",
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
@@ -10,7 +11,17 @@
     "preview": {
       "distribution": "internal"
     },
+    "preview-sim": {
+      "distribution": "internal",
+      "ios": {
+        "simulator": true
+      }
+    },
     "production": {
+      "autoIncrement": true
+    },
+    "testflight": {
+      "distribution": "store",
       "autoIncrement": true
     }
   },

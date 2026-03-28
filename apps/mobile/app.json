@@ -16,7 +16,10 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.flatearth.model"
+      "bundleIdentifier": "com.flatearth.model",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.flatearth.model",
@@ -27,13 +30,11 @@
         "backgroundColor": "#040711"
       }
     },
-    "plugins": [
-      "expo-gl"
-    ],
     "extra": {
       "eas": {
-        "projectId": "REPLACE_WITH_EAS_PROJECT_ID"
+        "projectId": "527a2054-fbdd-4a49-b43a-5c89bf8be1ac"
       }
-    }
+    },
+    "owner": "nicholas0913"
   }
 }

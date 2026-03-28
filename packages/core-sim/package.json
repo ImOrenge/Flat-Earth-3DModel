@@ -9,7 +9,6 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "@rollup/rollup-win32-x64-msvc": "^4.60.0",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
   }

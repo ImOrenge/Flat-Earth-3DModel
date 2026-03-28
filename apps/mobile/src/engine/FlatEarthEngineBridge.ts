@@ -12,7 +12,6 @@ import {
   type TimeMode
 } from "@flat-earth/core-sim";
 import type { ExpoWebGLRenderingContext } from "expo-gl";
-import { loadAsync, Renderer } from "expo-three";
 import * as THREE from "three";
 import type { EngineBridge, EngineInitParams } from "./EngineBridge";
 
@@ -32,7 +31,7 @@ function geoToWorld(latitudeDegrees: number, longitudeDegrees: number, y: number
 
 export class FlatEarthEngineBridge implements EngineBridge {
   private gl: ExpoWebGLRenderingContext | null = null;
-  private renderer: Renderer | null = null;
+  private renderer: THREE.WebGLRenderer | null = null;
   private scene: THREE.Scene | null = null;
   private camera: THREE.PerspectiveCamera | null = null;
   private discMesh: THREE.Mesh | null = null;
@@ -48,7 +47,16 @@ export class FlatEarthEngineBridge implements EngineBridge {
     const { gl, width, height, pixelRatio } = params;
     this.gl = gl;
 
-    const renderer = new Renderer({ gl });
+    const renderer = new THREE.WebGLRenderer({
+      canvas: {
+        width,
+        height,
+        style: {}
+      } as never,
+      context: gl as never,
+      antialias: true,
+      alpha: false
+    });
     renderer.setSize(width, height);
     renderer.setPixelRatio(pixelRatio);
     renderer.shadowMap.enabled = false;
@@ -83,17 +91,6 @@ export class FlatEarthEngineBridge implements EngineBridge {
     this.discMesh = new THREE.Mesh(discGeometry, discMaterial);
     scene.add(this.discMesh);
 
-    try {
-      const mapTexture = await loadAsync(require("../../../../assets/flat-earth-map-square.png"));
-      mapTexture.wrapS = THREE.ClampToEdgeWrapping;
-      mapTexture.wrapT = THREE.ClampToEdgeWrapping;
-      mapTexture.colorSpace = THREE.SRGBColorSpace;
-      discMaterial.map = mapTexture;
-      discMaterial.needsUpdate = true;
-    } catch (_error) {
-      // Keep fallback material when texture loading fails.
-    }
-
     const sunGeometry = new THREE.SphereGeometry(0.32, 32, 32);
     const sunMaterial = new THREE.MeshBasicMaterial({ color: 0xffd876 });
     this.sunMesh = new THREE.Mesh(sunGeometry, sunMaterial);
@@ -110,17 +107,6 @@ export class FlatEarthEngineBridge implements EngineBridge {
     });
     this.moonMesh = new THREE.Mesh(moonGeometry, moonMaterial);
     scene.add(this.moonMesh);
-
-    try {
-      const moonTexture = await loadAsync(require("../../../../assets/moon-phases-360-ko.png"));
-      moonTexture.wrapS = THREE.RepeatWrapping;
-      moonTexture.wrapT = THREE.ClampToEdgeWrapping;
-      moonTexture.colorSpace = THREE.SRGBColorSpace;
-      moonMaterial.map = moonTexture;
-      moonMaterial.needsUpdate = true;
-    } catch (_error) {
-      // Keep fallback material when texture loading fails.
-    }
 
     this.applyCameraState();
     this.syncSceneFromState();

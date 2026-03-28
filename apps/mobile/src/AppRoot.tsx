@@ -2,8 +2,10 @@ import type { HudState, TimeMode } from "@flat-earth/core-sim";
 import { AppState, type AppStateStatus, PixelRatio, type LayoutChangeEvent, PanResponder, StyleSheet, Text, View } from "react-native";
 import { GLView, type ExpoWebGLRenderingContext } from "expo-gl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ControlBar } from "./components/ControlBar";
-import { HudOverlay } from "./components/HudOverlay";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { HelpModal } from "./components/HelpModal";
+import { SettingsPanel } from "./components/SettingsPanel";
+import { WebTopbar } from "./components/WebTopbar";
 import { FlatEarthEngineBridge } from "./engine/FlatEarthEngineBridge";
 import { palette } from "./theme";
 
@@ -12,7 +14,9 @@ const HUD_UPDATE_INTERVAL_MS = 180;
 const INITIAL_HUD: HudState = {
   timeLabel: "--",
   solarLatitudeLabel: "--",
+  seasonStateLabel: "--",
   systemLabel: "Initializing",
+  observationTimeMs: Date.now(),
   timeMode: "live",
   qualityLevel: "auto"
 };
@@ -26,10 +30,12 @@ function getTouchDistance(touches: readonly { pageX: number; pageY: number }[]):
 }
 
 export function AppRoot() {
+  const insets = useSafeAreaInsets();
   const [surfaceSize, setSurfaceSize] = useState({ width: 1, height: 1 });
   const [hud, setHud] = useState<HudState>(INITIAL_HUD);
   const [fpsEstimate, setFpsEstimate] = useState(45);
-  const [timeMode, setTimeMode] = useState<TimeMode>("live");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const bridgeRef = useRef<FlatEarthEngineBridge | null>(null);
   const glReadyRef = useRef(false);
@@ -54,7 +60,6 @@ export function AppRoot() {
     }
     const snapshot = bridge.getHudSnapshot();
     setHud(snapshot);
-    setTimeMode(snapshot.timeMode);
     lastHudUpdateAtRef.current = timeMs;
   }, []);
 
@@ -115,6 +120,8 @@ export function AppRoot() {
       if (active) {
         startLoop();
       } else {
+        setSettingsOpen(false);
+        setHelpOpen(false);
         stopLoop();
       }
     });
@@ -196,48 +203,92 @@ export function AppRoot() {
     if (!bridge) {
       return;
     }
-    const nextMode: TimeMode = timeMode === "live" ? "manual" : "live";
+    const currentMode: TimeMode = hud.timeMode;
+    const nextMode: TimeMode = currentMode === "live" ? "manual" : "live";
     bridge.setTimeMode(nextMode);
     if (nextMode === "manual") {
-      bridge.setObservationTime(Date.now());
+      const targetMs = Number.isFinite(hud.observationTimeMs) ? hud.observationTimeMs : Date.now();
+      bridge.setObservationTime(targetMs);
     }
-    setTimeMode(nextMode);
-  }, [timeMode]);
+    setHud((previous) => ({
+      ...previous,
+      timeMode: nextMode,
+      systemLabel: "Applying time mode..."
+    }));
+  }, [hud.observationTimeMs, hud.timeMode]);
 
   const adjustManualHours = useCallback((offsetHours: number) => {
     const bridge = bridgeRef.current;
     if (!bridge) {
       return;
     }
-    const baseMs = Date.parse(hud.timeLabel.replace(" ", "T") + ":00.000Z");
-    const fallbackMs = Date.now();
-    const currentMs = Number.isNaN(baseMs) ? fallbackMs : baseMs;
-    bridge.setObservationTime(currentMs + (offsetHours * 60 * 60 * 1000));
-  }, [hud.timeLabel]);
+    const currentMs = Number.isFinite(hud.observationTimeMs) ? hud.observationTimeMs : Date.now();
+    const nextObservationMs = currentMs + (offsetHours * 60 * 60 * 1000);
+    bridge.setObservationTime(nextObservationMs);
+    setHud((previous) => ({
+      ...previous,
+      observationTimeMs: nextObservationMs,
+      timeMode: "manual",
+      timeLabel: new Date(nextObservationMs).toISOString().replace("T", " ").slice(0, 16)
+    }));
+  }, [hud.observationTimeMs]);
 
   const setNow = useCallback(() => {
     const bridge = bridgeRef.current;
     if (!bridge) {
       return;
     }
-    bridge.setObservationTime(Date.now());
-    if (timeMode === "live") {
+    const nowMs = Date.now();
+    bridge.setObservationTime(nowMs);
+    if (hud.timeMode === "live") {
       bridge.setTimeMode("live");
     }
-  }, [timeMode]);
+    setHud((previous) => ({
+      ...previous,
+      observationTimeMs: nowMs,
+      timeLabel: new Date(nowMs).toISOString().replace("T", " ").slice(0, 16)
+    }));
+  }, [hud.timeMode]);
+
+  const handleOpenSettings = useCallback(() => {
+    setHelpOpen(false);
+    setSettingsOpen(true);
+  }, []);
+
+  const handleOpenHelp = useCallback(() => {
+    setSettingsOpen(false);
+    setHelpOpen(true);
+  }, []);
+
+  const handleCloseSettings = useCallback(() => {
+    setSettingsOpen(false);
+  }, []);
+
+  const handleCloseHelp = useCallback(() => {
+    setHelpOpen(false);
+  }, []);
 
   return (
     <View style={styles.screen} onLayout={handleLayout}>
       <GLView style={styles.gl} onContextCreate={handleContextCreate} />
       <View style={StyleSheet.absoluteFill} {...panResponder.panHandlers} />
-      <HudOverlay hud={hud} fpsEstimate={fpsEstimate} />
-      <ControlBar
-        timeMode={timeMode}
-        onToggleMode={handleToggleMode}
-        onManualBackHour={() => adjustManualHours(-1)}
-        onManualForwardHour={() => adjustManualHours(1)}
-        onSetNow={setNow}
+      <WebTopbar
+        fpsEstimate={fpsEstimate}
+        hud={hud}
+        onOpenHelp={handleOpenHelp}
+        onOpenSettings={handleOpenSettings}
+        topInset={insets.top}
       />
+      <SettingsPanel
+        hud={hud}
+        onClose={handleCloseSettings}
+        onSetNow={setNow}
+        onShiftManualHour={adjustManualHours}
+        onToggleTimeMode={handleToggleMode}
+        topInset={insets.top}
+        visible={settingsOpen}
+      />
+      <HelpModal onClose={handleCloseHelp} visible={helpOpen} />
       {!glReadyRef.current && (
         <View style={styles.loading}>
           <Text style={styles.loadingText}>Preparing native GL scene...</Text>

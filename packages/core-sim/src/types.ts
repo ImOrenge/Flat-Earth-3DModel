@@ -64,7 +64,9 @@ export interface AdvanceContext {
 export interface HudState {
   timeLabel: string;
   solarLatitudeLabel: string;
+  seasonStateLabel: string;
   systemLabel: string;
+  observationTimeMs: number;
   timeMode: TimeMode;
   qualityLevel: QualityLevel;
 }

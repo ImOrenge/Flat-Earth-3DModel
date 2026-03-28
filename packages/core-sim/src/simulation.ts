@@ -87,6 +87,17 @@ function formatLatitude(latitudeDegrees: number): string {
   return `${absolute}deg${latitudeDegrees >= 0 ? "N" : "S"}`;
 }
 
+function getSeasonStateLabel(solarLatitudeDegrees: number): string {
+  const threshold = 0.6;
+  if (solarLatitudeDegrees > threshold) {
+    return "Northern summer / Southern winter";
+  }
+  if (solarLatitudeDegrees < -threshold) {
+    return "Northern winter / Southern summer";
+  }
+  return "Equinox transition";
+}
+
 export function computeCelestialPositions(
   time: Date | number | string,
   params: ComputeCelestialParams = {}
@@ -237,7 +248,9 @@ export function getHudState(state: SimulationState): HudState {
   return {
     timeLabel: observation.toISOString().replace("T", " ").slice(0, 16),
     solarLatitudeLabel: formatLatitude(state.celestial.sun.latitudeDegrees),
+    seasonStateLabel: getSeasonStateLabel(state.celestial.sun.latitudeDegrees),
     systemLabel: state.appActive ? "Simulation running" : "Paused in background",
+    observationTimeMs: state.currentObservationTimeMs,
     timeMode: state.config.timeMode,
     qualityLevel: state.config.qualityLevel
   };

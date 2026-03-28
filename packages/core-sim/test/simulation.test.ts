@@ -40,5 +40,42 @@ describe("simulation state", () => {
     const hud = getHudState(state);
     expect(hud.timeLabel.length).toBeGreaterThan(5);
     expect(hud.solarLatitudeLabel).toContain("deg");
+    expect(hud.seasonStateLabel.length).toBeGreaterThan(3);
+    expect(hud.observationTimeMs).toBe(state.currentObservationTimeMs);
+  });
+
+  it("keeps HUD labels stable for a fixed manual timestamp", () => {
+    const state = createSimulationState({
+      timeMode: "manual",
+      manualObservationTime: "2026-06-21T12:00:00.000Z"
+    });
+    const first = getHudState(state);
+    const second = getHudState(state);
+    expect(first.solarLatitudeLabel).toBe(second.solarLatitudeLabel);
+    expect(first.seasonStateLabel).toBe(second.seasonStateLabel);
+    expect(first.seasonStateLabel).toBe("Northern summer / Southern winter");
+    expect(first.observationTimeMs).toBe(second.observationTimeMs);
+  });
+
+  it("updates HUD observation time across manual and live transitions", () => {
+    const state = createSimulationState({
+      timeMode: "manual",
+      manualObservationTime: "2026-03-28T00:00:00.000Z"
+    });
+    const manualAdvanced = advanceSimulation(state, 3600, { appActive: true });
+    const manualHud = getHudState(manualAdvanced);
+    expect(manualHud.observationTimeMs - state.currentObservationTimeMs).toBe(3_600_000);
+
+    const liveState = {
+      ...manualAdvanced,
+      config: {
+        ...manualAdvanced.config,
+        timeMode: "live" as const
+      }
+    };
+    const liveNowMs = Date.parse("2026-03-28T09:15:00.000Z");
+    const liveAdvanced = advanceSimulation(liveState, 0, { appActive: true, nowMs: liveNowMs });
+    const liveHud = getHudState(liveAdvanced);
+    expect(liveHud.observationTimeMs).toBe(liveNowMs);
   });
 });
