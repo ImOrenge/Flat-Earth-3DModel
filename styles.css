@@ -2566,6 +2566,10 @@ body[data-layout-mode="hud"] .topbar-chip {
     bottom: var(--hud-compact-mobile-detail-bottom);
   }
 
+  body[data-layout-mode="hud"] .detail-panel-shell--collapsed {
+    transform: translate(-50%, 30px);
+  }
+
   body[data-layout-mode="hud"] .solar-eclipse-toast {
     top: 196px;
     width: min(420px, calc(100vw - 32px));

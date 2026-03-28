@@ -25,9 +25,10 @@ const ZOOM_HOLD_INTERVAL_MS = 48;
 const JOYSTICK_RADIUS = 54;
 const JOYSTICK_KNOB_RADIUS = 24;
 const JOYSTICK_DEADZONE = 10;
-const JOYSTICK_TICK_MS = 16;
+const JOYSTICK_TICK_MS = 24;
 const JOYSTICK_MAX_ROTATE_X = 5.8;
 const JOYSTICK_MAX_ROTATE_Y = 4.8;
+const JOYSTICK_UI_UPDATE_MIN_DELTA = 0.75;
 const ZOOM_DOCK_TOP_OFFSET = 92;
 const JOYSTICK_LIFT_OFFSET = JOYSTICK_RADIUS * 2;
 
@@ -97,44 +98,27 @@ const WEB_TOUCH_PATCH = `
 true;
 `;
 
-type CameraCommand =
-  | { type: "rotate"; dx: number; dy: number }
-  | { type: "zoom"; delta: number }
-  | { type: "preset"; preset: "top" | "angle" };
-
-type ZoomDirection = 1 | -1;
-
-function isAllowedNavigation(url: string): boolean {
-  if (!url) {
-    return false;
+const WEB_COMMAND_BRIDGE_BOOTSTRAP = `
+(function () {
+  if (window.__APP_MOBILE_DISPATCH_BOOTSTRAPPED__) {
+    return;
   }
-  if (url === "about:blank") {
-    return true;
-  }
-  try {
-    const parsed = new URL(url);
-    return (parsed.protocol === "http:" || parsed.protocol === "https:")
-      && ALLOWED_HOSTS.has(parsed.hostname);
-  } catch {
-    return false;
-  }
-}
+  window.__APP_MOBILE_DISPATCH_BOOTSTRAPPED__ = true;
 
-function clampJoystickVector(x: number, y: number): { x: number; y: number } {
-  const magnitude = Math.hypot(x, y);
-  if (magnitude <= JOYSTICK_RADIUS || magnitude === 0) {
-    return { x, y };
-  }
-  const scale = JOYSTICK_RADIUS / magnitude;
-  return { x: x * scale, y: y * scale };
-}
+  window.__APP_SYNTH_DRAG_STATE__ = window.__APP_SYNTH_DRAG_STATE__ || {
+    active: false,
+    pointerId: 7331,
+    x: 0,
+    y: 0,
+    releaseTimer: null
+  };
 
-function buildCameraCommandScript(command: CameraCommand): string {
-  const payload = JSON.stringify(command);
-  return `
-  (function () {
+  window.__APP_MOBILE_DISPATCH = function (command) {
     try {
-      var command = ${payload};
+      if (!command || typeof command !== "object") {
+        return;
+      }
+
       var bridge = window.__APP_CAMERA_BRIDGE__;
       if (bridge) {
         if (command.type === "rotate" && typeof bridge.rotateBy === "function") {
@@ -156,13 +140,7 @@ function buildCameraCommandScript(command: CameraCommand): string {
         return;
       }
 
-      var fallbackState = window.__APP_SYNTH_DRAG_STATE__ || (window.__APP_SYNTH_DRAG_STATE__ = {
-        active: false,
-        pointerId: 7331,
-        x: 0,
-        y: 0,
-        releaseTimer: null
-      });
+      var fallbackState = window.__APP_SYNTH_DRAG_STATE__;
 
       function dispatchPointer(type, x, y, buttons) {
         if (typeof PointerEvent !== "function") {
@@ -235,9 +213,46 @@ function buildCameraCommandScript(command: CameraCommand): string {
     } catch {
       // noop
     }
-  })();
-  true;
-  `;
+  };
+})();
+true;
+`;
+
+type CameraCommand =
+  | { type: "rotate"; dx: number; dy: number }
+  | { type: "zoom"; delta: number }
+  | { type: "preset"; preset: "top" | "angle" };
+
+type ZoomDirection = 1 | -1;
+
+function isAllowedNavigation(url: string): boolean {
+  if (!url) {
+    return false;
+  }
+  if (url === "about:blank") {
+    return true;
+  }
+  try {
+    const parsed = new URL(url);
+    return (parsed.protocol === "http:" || parsed.protocol === "https:")
+      && ALLOWED_HOSTS.has(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function clampJoystickVector(x: number, y: number): { x: number; y: number } {
+  const magnitude = Math.hypot(x, y);
+  if (magnitude <= JOYSTICK_RADIUS || magnitude === 0) {
+    return { x, y };
+  }
+  const scale = JOYSTICK_RADIUS / magnitude;
+  return { x: x * scale, y: y * scale };
+}
+
+function buildCameraCommandScript(command: CameraCommand): string {
+  const payload = JSON.stringify(command);
+  return `window.__APP_MOBILE_DISPATCH && window.__APP_MOBILE_DISPATCH(${payload}); true;`;
 }
 
 export default function App() {
@@ -252,6 +267,7 @@ export default function App() {
   const controlsEnabledRef = useRef(isControlsEnabled);
   const commandRef = useRef<(command: CameraCommand) => void>(() => undefined);
   const joystickVectorRef = useRef({ x: 0, y: 0 });
+  const joystickOffsetRef = useRef({ x: 0, y: 0 });
   const joystickLoopRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const zoomStartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const zoomIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -284,6 +300,7 @@ export default function App() {
 
   const releaseJoystick = useCallback(() => {
     joystickVectorRef.current = { x: 0, y: 0 };
+    joystickOffsetRef.current = { x: 0, y: 0 };
     setJoystickOffset({ x: 0, y: 0 });
     stopJoystickLoop();
   }, [stopJoystickLoop]);
@@ -322,6 +339,14 @@ export default function App() {
   const updateJoystick = useCallback((dx: number, dy: number) => {
     const clamped = clampJoystickVector(dx, dy);
     joystickVectorRef.current = clamped;
+    const previous = joystickOffsetRef.current;
+    if (
+      Math.abs(clamped.x - previous.x) < JOYSTICK_UI_UPDATE_MIN_DELTA
+      && Math.abs(clamped.y - previous.y) < JOYSTICK_UI_UPDATE_MIN_DELTA
+    ) {
+      return;
+    }
+    joystickOffsetRef.current = clamped;
     setJoystickOffset(clamped);
   }, []);
 
@@ -473,9 +498,10 @@ export default function App() {
             domStorageEnabled
             sharedCookiesEnabled
             thirdPartyCookiesEnabled
-            injectedJavaScriptBeforeContentLoaded={WEB_TOUCH_PATCH}
+            injectedJavaScriptBeforeContentLoaded={`${WEB_TOUCH_PATCH}\n${WEB_COMMAND_BRIDGE_BOOTSTRAP}`}
             allowsBackForwardNavigationGestures={false}
             mixedContentMode="always"
+            androidLayerType="hardware"
             setSupportMultipleWindows={false}
             scrollEnabled={false}
             bounces={false}
