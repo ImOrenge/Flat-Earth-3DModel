@@ -14,7 +14,7 @@ interface HelpSection {
 const SECTIONS: HelpSection[] = [
   {
     title: "Overview",
-    body: "This viewer runs from offline bundled assets and renders a native 3D Flat Earth disc scene. Mobile MVP prioritizes core simulation, HUD, and gesture flow."
+    body: "This viewer runs from offline bundled assets and renders a native 3D Flat Earth disc scene with tabbed detail controls."
   },
   {
     title: "Astronomy",
@@ -22,15 +22,15 @@ const SECTIONS: HelpSection[] = [
   },
   {
     title: "Routes",
-    body: "Route replay and transport datasets are moved to phase-two backlog in this mobile MVP."
+    body: "Routes tab provides bundled route playback, speed control, reset, and summary telemetry."
   },
   {
     title: "Constellations",
-    body: "Constellation interaction is also phase-two backlog. MVP keeps focus on disc, sun, moon, and time synchronization stability."
+    body: "Constellations tab controls layer and line visibility, selection, and directional/RA/Dec/zodiac-age info."
   },
   {
     title: "Rockets",
-    body: "Rocket simulation panels are out of scope for this first standalone mobile release."
+    body: "Rockets tab supports launch site and vehicle type selection, staged launch progression, and live telemetry."
   },
   {
     title: "Navigation & Camera",

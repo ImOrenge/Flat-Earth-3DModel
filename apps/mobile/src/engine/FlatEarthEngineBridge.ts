@@ -1,13 +1,22 @@
 import {
+  advanceFeatureRuntime,
   advanceSimulation,
   applyCameraGesture,
+  createFeatureRuntime,
   createSimulationState,
   DISC_RADIUS,
+  getDetailSnapshot,
   getHudState,
   MOON_ALTITUDE,
   projectedRadiusFromLatitude,
+  reduceDetailAction,
   SUN_ALTITUDE,
   toRadians,
+  type DetailAction,
+  type DetailSnapshot,
+  type DetailTab,
+  type FeatureRuntimeConfig,
+  type FeatureRuntimeState,
   type SimulationState,
   type TimeMode
 } from "@flat-earth/core-sim";
@@ -18,6 +27,20 @@ import type { EngineBridge, EngineInitParams } from "./EngineBridge";
 const DISC_THICKNESS = 0.24;
 const AUTO_QUALITY_TARGET_MS = 1000 / 45;
 const AUTO_QUALITY_RECOVERY_MS = 1000 / 55;
+const ROUTE_ALTITUDE = 0.18;
+const ROUTE_ARC_LIFT = 0.58;
+const ROUTE_SEGMENTS = 88;
+const CONSTELLATION_ALTITUDE = 3.6;
+const ROCKET_ALTITUDE_SCALE = 0.018;
+const CIRCUMFERENCE_KM = 40_075;
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+function mod1(value: number): number {
+  return ((value % 1) + 1) % 1;
+}
 
 function geoToWorld(latitudeDegrees: number, longitudeDegrees: number, y: number): THREE.Vector3 {
   const projectedRadius = projectedRadiusFromLatitude(latitudeDegrees, DISC_RADIUS);
@@ -29,6 +52,12 @@ function geoToWorld(latitudeDegrees: number, longitudeDegrees: number, y: number
   );
 }
 
+function raDecToWorld(raHours: number, decDegrees: number): THREE.Vector3 {
+  const longitudeDegrees = ((raHours / 24) * 360) - 180;
+  const latitudeDegrees = decDegrees;
+  return geoToWorld(latitudeDegrees, longitudeDegrees, CONSTELLATION_ALTITUDE);
+}
+
 export class FlatEarthEngineBridge implements EngineBridge {
   private gl: ExpoWebGLRenderingContext | null = null;
   private renderer: THREE.WebGLRenderer | null = null;
@@ -36,12 +65,25 @@ export class FlatEarthEngineBridge implements EngineBridge {
   private camera: THREE.PerspectiveCamera | null = null;
   private discMesh: THREE.Mesh | null = null;
   private sunMesh: THREE.Mesh | null = null;
+  private sunLight: THREE.PointLight | null = null;
   private moonMesh: THREE.Mesh | null = null;
   private state: SimulationState = createSimulationState();
+  private featureState: FeatureRuntimeState;
   private appActive = true;
   private lastTickMs: number | null = null;
   private avgFrameMs = AUTO_QUALITY_TARGET_MS;
   private dynamicPixelRatio = 1;
+  private routePath: THREE.Line | null = null;
+  private routeMarker: THREE.Mesh | null = null;
+  private routeLayer: THREE.Group | null = null;
+  private constellationLayer: THREE.Group | null = null;
+  private rocketMesh: THREE.Mesh | null = null;
+  private rocketTrail: THREE.Line | null = null;
+  private rocketTrailPoints: THREE.Vector3[] = [];
+
+  constructor(featureConfig: FeatureRuntimeConfig = {}) {
+    this.featureState = createFeatureRuntime(featureConfig);
+  }
 
   async init(params: EngineInitParams): Promise<void> {
     const { gl, width, height, pixelRatio } = params;
@@ -73,6 +115,7 @@ export class FlatEarthEngineBridge implements EngineBridge {
     scene.add(new THREE.AmbientLight(0xbfd8ff, 0.65));
 
     const sunLight = new THREE.PointLight(0xfff4c9, 2.4, 90, 2);
+    this.sunLight = sunLight;
     scene.add(sunLight);
 
     const rimGeometry = new THREE.TorusGeometry(DISC_RADIUS + 0.08, 0.12, 24, 128);
@@ -108,8 +151,48 @@ export class FlatEarthEngineBridge implements EngineBridge {
     this.moonMesh = new THREE.Mesh(moonGeometry, moonMaterial);
     scene.add(this.moonMesh);
 
+    this.routeLayer = new THREE.Group();
+    this.routeLayer.visible = false;
+    scene.add(this.routeLayer);
+    this.routePath = new THREE.Line(
+      new THREE.BufferGeometry(),
+      new THREE.LineBasicMaterial({
+        color: 0x86d6ff,
+        transparent: true,
+        opacity: 0.9
+      })
+    );
+    this.routeLayer.add(this.routePath);
+    this.routeMarker = new THREE.Mesh(
+      new THREE.SphereGeometry(0.08, 16, 14),
+      new THREE.MeshBasicMaterial({ color: 0xdff4ff })
+    );
+    this.routeLayer.add(this.routeMarker);
+
+    this.constellationLayer = new THREE.Group();
+    this.constellationLayer.visible = true;
+    scene.add(this.constellationLayer);
+    this.buildConstellationLines();
+
+    this.rocketMesh = new THREE.Mesh(
+      new THREE.ConeGeometry(0.09, 0.32, 10),
+      new THREE.MeshBasicMaterial({ color: 0xff6f59 })
+    );
+    this.rocketMesh.rotation.x = Math.PI;
+    scene.add(this.rocketMesh);
+    this.rocketTrail = new THREE.Line(
+      new THREE.BufferGeometry(),
+      new THREE.LineBasicMaterial({
+        color: 0xffd38f,
+        transparent: true,
+        opacity: 0.7
+      })
+    );
+    scene.add(this.rocketTrail);
+
     this.applyCameraState();
     this.syncSceneFromState();
+    this.syncFeatureScene();
     this.renderFrame();
   }
 
@@ -138,7 +221,13 @@ export class FlatEarthEngineBridge implements EngineBridge {
       appActive: this.appActive,
       nowMs: timeMs
     });
+    this.featureState = advanceFeatureRuntime(this.featureState, dtSeconds, {
+      observationTimeMs: this.state.currentObservationTimeMs,
+      appActive: this.appActive,
+      seasonalEclipticAngleRadians: this.state.celestial.seasonalEclipticAngleRadians
+    });
     this.syncSceneFromState();
+    this.syncFeatureScene();
     this.updateAutoQuality(dtSeconds);
     this.renderFrame();
   }
@@ -148,6 +237,12 @@ export class FlatEarthEngineBridge implements EngineBridge {
       observationTime: next,
       appActive: this.appActive
     });
+    this.featureState = advanceFeatureRuntime(this.featureState, 0, {
+      observationTimeMs: this.state.currentObservationTimeMs,
+      appActive: this.appActive,
+      seasonalEclipticAngleRadians: this.state.celestial.seasonalEclipticAngleRadians
+    });
+    this.syncFeatureScene();
   }
 
   setTimeMode(mode: TimeMode): void {
@@ -169,8 +264,24 @@ export class FlatEarthEngineBridge implements EngineBridge {
     this.applyCameraState();
   }
 
+  dispatchDetailAction(action: DetailAction): void {
+    this.featureState = reduceDetailAction(this.featureState, action);
+    if (this.featureState.pendingObservationTimeMs !== null) {
+      this.setObservationTime(this.featureState.pendingObservationTimeMs);
+      this.featureState = {
+        ...this.featureState,
+        pendingObservationTimeMs: null
+      };
+    }
+    this.syncFeatureScene();
+  }
+
   getHudSnapshot() {
     return getHudState(this.state);
+  }
+
+  getDetailSnapshot(tab?: DetailTab): DetailSnapshot {
+    return getDetailSnapshot(this.featureState, tab);
   }
 
   dispose(): void {
@@ -179,7 +290,15 @@ export class FlatEarthEngineBridge implements EngineBridge {
     this.camera = null;
     this.discMesh = null;
     this.sunMesh = null;
+    this.sunLight = null;
     this.moonMesh = null;
+    this.routePath = null;
+    this.routeMarker = null;
+    this.routeLayer = null;
+    this.constellationLayer = null;
+    this.rocketMesh = null;
+    this.rocketTrail = null;
+    this.rocketTrailPoints = [];
     this.gl = null;
     this.lastTickMs = null;
   }
@@ -214,8 +333,112 @@ export class FlatEarthEngineBridge implements EngineBridge {
       MOON_ALTITUDE
     );
     this.sunMesh.position.copy(sunPosition);
+    if (this.sunLight) {
+      this.sunLight.position.copy(sunPosition);
+    }
     this.moonMesh.position.copy(moonPosition);
+    if (this.discMesh) {
+      const mat = this.discMesh.material as THREE.MeshStandardMaterial;
+      const eclipseDim = clampNumber(this.featureState.eclipse.coveragePercent / 100, 0, 1);
+      mat.color.setHex(0x2b4f82).lerp(new THREE.Color(0x172a4a), eclipseDim * 0.7);
+      mat.needsUpdate = true;
+    }
     this.applyCameraState();
+  }
+
+  private buildConstellationLines(): void {
+    if (!this.constellationLayer) {
+      return;
+    }
+    this.constellationLayer.clear();
+    const material = new THREE.LineBasicMaterial({
+      color: 0x8fb8ff,
+      transparent: true,
+      opacity: 0.35
+    });
+    for (const entry of this.featureState.data.constellations) {
+      for (const segment of entry.segments) {
+        if (!Array.isArray(segment) || segment.length < 2) {
+          continue;
+        }
+        const points = segment.map((point) => raDecToWorld(point[0], point[1]));
+        const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), material);
+        this.constellationLayer.add(line);
+      }
+    }
+  }
+
+  private syncFeatureScene(): void {
+    this.syncRouteScene();
+    this.syncConstellationScene();
+    this.syncRocketScene();
+  }
+
+  private syncRouteScene(): void {
+    if (!this.routeLayer || !this.routePath || !this.routeMarker) {
+      return;
+    }
+    const route = this.featureState.routes;
+    if (!route.ready || !route.renderData) {
+      this.routeLayer.visible = false;
+      this.routePath.geometry.setFromPoints([]);
+      return;
+    }
+    this.routeLayer.visible = true;
+    const origin = geoToWorld(route.renderData.originLatitude, route.renderData.originLongitude, ROUTE_ALTITUDE);
+    const destination = geoToWorld(route.renderData.destinationLatitude, route.renderData.destinationLongitude, ROUTE_ALTITUDE);
+    const control = origin.clone().lerp(destination, 0.5);
+    control.y += ROUTE_ARC_LIFT;
+    const curve = new THREE.QuadraticBezierCurve3(origin, control, destination);
+    const points = curve.getPoints(ROUTE_SEGMENTS);
+    this.routePath.geometry.setFromPoints(points);
+    this.routeMarker.position.copy(curve.getPointAt(route.progressRatio));
+    this.routeMarker.visible = route.playing || route.progressRatio > 0;
+  }
+
+  private syncConstellationScene(): void {
+    if (!this.constellationLayer) {
+      return;
+    }
+    this.constellationLayer.visible = this.featureState.constellations.visible;
+    for (const child of this.constellationLayer.children) {
+      const line = child as THREE.Line;
+      const material = line.material as THREE.LineBasicMaterial;
+      material.opacity = this.featureState.constellations.linesVisible ? 0.36 : 0;
+      material.color.set(this.featureState.constellations.selectedName ? 0x9bc6ff : 0x6f8fb8);
+      material.needsUpdate = true;
+    }
+  }
+
+  private syncRocketScene(): void {
+    if (!this.rocketMesh || !this.rocketTrail) {
+      return;
+    }
+    const rocket = this.featureState.rockets;
+    if (!rocket.renderData || rocket.phase === "idle") {
+      this.rocketMesh.visible = false;
+      this.rocketTrail.visible = false;
+      this.rocketTrailPoints = [];
+      this.rocketTrail.geometry.setFromPoints([]);
+      return;
+    }
+    this.rocketMesh.visible = true;
+    this.rocketTrail.visible = true;
+    const position = geoToWorld(
+      rocket.renderData.latitudeDegrees,
+      rocket.renderData.longitudeDegrees,
+      ROUTE_ALTITUDE + (rocket.renderData.altitudeKm * ROCKET_ALTITUDE_SCALE)
+    );
+    this.rocketMesh.position.copy(position);
+    const downrangeProgress = mod1(rocket.telemetry.downrangeKm / CIRCUMFERENCE_KM);
+    const tangentLon = (rocket.renderData.longitudeDegrees + (downrangeProgress * 360)) % 360;
+    const ahead = geoToWorld(rocket.renderData.latitudeDegrees, tangentLon, ROUTE_ALTITUDE + (rocket.renderData.altitudeKm * ROCKET_ALTITUDE_SCALE));
+    this.rocketMesh.lookAt(ahead);
+    this.rocketTrailPoints.push(position.clone());
+    if (this.rocketTrailPoints.length > 96) {
+      this.rocketTrailPoints.shift();
+    }
+    this.rocketTrail.geometry.setFromPoints(this.rocketTrailPoints);
   }
 
   private renderFrame(): void {

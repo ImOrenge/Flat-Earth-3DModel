@@ -1,15 +1,18 @@
-import type { HudState, TimeMode } from "@flat-earth/core-sim";
+import type { DetailAction, DetailSnapshot, HudState, TimeMode } from "@flat-earth/core-sim";
 import { AppState, type AppStateStatus, PixelRatio, type LayoutChangeEvent, PanResponder, StyleSheet, Text, View } from "react-native";
 import { GLView, type ExpoWebGLRenderingContext } from "expo-gl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { DetailSheet } from "./components/DetailSheet";
 import { HelpModal } from "./components/HelpModal";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { WebTopbar } from "./components/WebTopbar";
+import { createMobileFeatureRuntimeConfig } from "./data/featureRuntimeConfig";
 import { FlatEarthEngineBridge } from "./engine/FlatEarthEngineBridge";
 import { palette } from "./theme";
 
 const HUD_UPDATE_INTERVAL_MS = 180;
+const DETAIL_UPDATE_INTERVAL_MS = 260;
 
 const INITIAL_HUD: HudState = {
   timeLabel: "--",
@@ -19,6 +22,90 @@ const INITIAL_HUD: HudState = {
   observationTimeMs: Date.now(),
   timeMode: "live",
   qualityLevel: "auto"
+};
+
+const INITIAL_DETAIL: DetailSnapshot = {
+  activeTab: "astronomy",
+  astronomy: {
+    eclipse: {
+      sourceLabel: "Loading",
+      kind: "solar",
+      selectedYear: null,
+      selectedEventId: null,
+      selectedEventIndex: -1,
+      timePoint: "peak",
+      availableYears: [],
+      eventOptions: [],
+      stageLabel: "Waiting",
+      coveragePercent: 0,
+      lightPercent: 100,
+      summary: "Loading detail data...",
+      selectedEventLabel: "-",
+      selectedEventLocalTimeLabel: "-",
+      selectedEventUtcTimeLabel: "-",
+      selectedEventMagnitudeLabel: "-",
+      previewTimeMs: null
+    }
+  },
+  constellations: {
+    visible: true,
+    linesVisible: true,
+    options: [],
+    selectedIndex: -1,
+    selectedName: "",
+    selectedCode: "",
+    directionLabel: "-",
+    centerRaLabel: "-",
+    centerDecLabel: "-",
+    hemisphereLabel: "-",
+    segmentCount: 0,
+    starCount: 0,
+    zodiacSignLabel: "-"
+  },
+  routes: {
+    ready: false,
+    playing: false,
+    speedMultiplier: 8,
+    selectedRouteId: "",
+    selectedRouteIndex: -1,
+    routeOptions: [],
+    progressRatio: 0,
+    progressPercent: 0,
+    legLabel: "-",
+    aircraftLabel: "-",
+    originLabel: "-",
+    destinationLabel: "-",
+    countriesLabel: "-",
+    durationLabel: "-",
+    routeProgressLabel: "-",
+    geoSummaryLabel: "-",
+    summary: "Loading detail data...",
+    renderData: null
+  },
+  rockets: {
+    backend: "fallback",
+    selectedSpaceportId: "",
+    selectedSpaceportIndex: -1,
+    spaceportOptions: [],
+    rocketType: "two-stage",
+    phase: "idle",
+    missionElapsedSeconds: 0,
+    phaseElapsedSeconds: 0,
+    canLaunch: true,
+    telemetry: {
+      phase: "idle",
+      elapsedSeconds: 0,
+      altitudeKm: 0,
+      speedKps: 0,
+      downrangeKm: 0,
+      statusLabel: "Ready"
+    },
+    renderData: {
+      latitudeDegrees: 0,
+      longitudeDegrees: 0,
+      altitudeKm: 0
+    }
+  }
 };
 
 function getTouchDistance(touches: readonly { pageX: number; pageY: number }[]): number {
@@ -33,6 +120,7 @@ export function AppRoot() {
   const insets = useSafeAreaInsets();
   const [surfaceSize, setSurfaceSize] = useState({ width: 1, height: 1 });
   const [hud, setHud] = useState<HudState>(INITIAL_HUD);
+  const [detail, setDetail] = useState<DetailSnapshot>(INITIAL_DETAIL);
   const [fpsEstimate, setFpsEstimate] = useState(45);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -43,6 +131,8 @@ export function AppRoot() {
   const animationRef = useRef<number | null>(null);
   const lastFrameTimeRef = useRef<number | null>(null);
   const lastHudUpdateAtRef = useRef(0);
+  const lastDetailUpdateAtRef = useRef(0);
+  const activeDetailTabRef = useRef<DetailSnapshot["activeTab"]>(INITIAL_DETAIL.activeTab);
   const lastTapAtRef = useRef(0);
   const deltaRef = useRef({ dx: 0, dy: 0, pinch: 0 });
 
@@ -53,14 +143,22 @@ export function AppRoot() {
     }
   }, []);
 
-  const updateHud = useCallback((timeMs: number) => {
+  const updateOverlaySnapshots = useCallback((timeMs: number) => {
     const bridge = bridgeRef.current;
-    if (!bridge || (timeMs - lastHudUpdateAtRef.current) < HUD_UPDATE_INTERVAL_MS) {
+    if (!bridge) {
       return;
     }
-    const snapshot = bridge.getHudSnapshot();
-    setHud(snapshot);
-    lastHudUpdateAtRef.current = timeMs;
+    if ((timeMs - lastHudUpdateAtRef.current) >= HUD_UPDATE_INTERVAL_MS) {
+      const hudSnapshot = bridge.getHudSnapshot();
+      setHud(hudSnapshot);
+      lastHudUpdateAtRef.current = timeMs;
+    }
+    if ((timeMs - lastDetailUpdateAtRef.current) >= DETAIL_UPDATE_INTERVAL_MS) {
+      const detailSnapshot = bridge.getDetailSnapshot(activeDetailTabRef.current);
+      activeDetailTabRef.current = detailSnapshot.activeTab;
+      setDetail(detailSnapshot);
+      lastDetailUpdateAtRef.current = timeMs;
+    }
   }, []);
 
   const renderLoop = useCallback((timeMs: number) => {
@@ -75,9 +173,9 @@ export function AppRoot() {
     }
     lastFrameTimeRef.current = timeMs;
     bridge.tick(timeMs);
-    updateHud(timeMs);
+    updateOverlaySnapshots(timeMs);
     animationRef.current = requestAnimationFrame(renderLoop);
-  }, [updateHud]);
+  }, [updateOverlaySnapshots]);
 
   const startLoop = useCallback(() => {
     if (animationRef.current !== null) {
@@ -92,7 +190,7 @@ export function AppRoot() {
       return;
     }
     glReadyRef.current = true;
-    const bridge = new FlatEarthEngineBridge();
+    const bridge = new FlatEarthEngineBridge(createMobileFeatureRuntimeConfig());
     bridgeRef.current = bridge;
     await bridge.init({
       gl,
@@ -102,6 +200,9 @@ export function AppRoot() {
     });
     bridge.setAppActive(appStateRef.current === "active");
     setHud(bridge.getHudSnapshot());
+    const detailSnapshot = bridge.getDetailSnapshot(activeDetailTabRef.current);
+    activeDetailTabRef.current = detailSnapshot.activeTab;
+    setDetail(detailSnapshot);
     startLoop();
   }, [startLoop, surfaceSize.height, surfaceSize.width]);
 
@@ -250,6 +351,21 @@ export function AppRoot() {
     }));
   }, [hud.timeMode]);
 
+  const handleDetailAction = useCallback((action: DetailAction) => {
+    const bridge = bridgeRef.current;
+    if (!bridge) {
+      return;
+    }
+    bridge.dispatchDetailAction(action);
+    if (action.type === "set_active_tab") {
+      activeDetailTabRef.current = action.tab;
+    }
+    const detailSnapshot = bridge.getDetailSnapshot(activeDetailTabRef.current);
+    activeDetailTabRef.current = detailSnapshot.activeTab;
+    setDetail(detailSnapshot);
+    setHud(bridge.getHudSnapshot());
+  }, []);
+
   const handleOpenSettings = useCallback(() => {
     setHelpOpen(false);
     setSettingsOpen(true);
@@ -287,6 +403,11 @@ export function AppRoot() {
         onToggleTimeMode={handleToggleMode}
         topInset={insets.top}
         visible={settingsOpen}
+      />
+      <DetailSheet
+        bottomInset={insets.bottom}
+        onAction={handleDetailAction}
+        snapshot={detail}
       />
       <HelpModal onClose={handleCloseHelp} visible={helpOpen} />
       {!glReadyRef.current && (

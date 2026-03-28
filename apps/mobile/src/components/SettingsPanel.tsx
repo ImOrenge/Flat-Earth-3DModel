@@ -98,10 +98,10 @@ export function SettingsPanel({
 
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Overlay Controls</Text>
-              <Text style={styles.copy}>These controls are UI placeholders in v1. Engine wiring is intentionally deferred to backlog.</Text>
-              <ToggleRow title="Day/Night Overlay" value="Backlog" />
-              <ToggleRow title="Ground Analemma" value="Backlog" />
-              <ToggleRow title="Magnetic Field" value="Backlog" />
+              <Text style={styles.copy}>Backlog controls now live in the Detail Sheet tabs (Astronomy, Routes, Constellations, Rockets).</Text>
+              <ToggleRow title="Eclipse Controls" value="Enabled" disabled={false} />
+              <ToggleRow title="Route Playback" value="Enabled" disabled={false} />
+              <ToggleRow title="Rocket Telemetry" value="Enabled" disabled={false} />
             </View>
 
             <View style={styles.section}>

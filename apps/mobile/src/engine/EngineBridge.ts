@@ -1,4 +1,4 @@
-import type { CameraGestureInput, HudState, TimeMode } from "@flat-earth/core-sim";
+import type { CameraGestureInput, DetailAction, DetailSnapshot, DetailTab, HudState, TimeMode } from "@flat-earth/core-sim";
 import type { ExpoWebGLRenderingContext } from "expo-gl";
 
 export interface EngineInitParams {
@@ -16,6 +16,8 @@ export interface EngineBridge {
   setTimeMode(mode: TimeMode): void;
   setAppActive(active: boolean): void;
   setCameraGesture(input: CameraGestureInput): void;
+  dispatchDetailAction(action: DetailAction): void;
   getHudSnapshot(): HudState;
+  getDetailSnapshot(tab?: DetailTab): DetailSnapshot;
   dispose(): void;
 }

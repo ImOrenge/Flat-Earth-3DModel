@@ -1,0 +1,13 @@
+[
+  { "id": "icn-hnd", "originIcao": "RKSI", "destinationIcao": "RJTT", "aircraftTypeCode": "A21N", "callsign": "OFF001", "durationHours": 2.2, "cruiseSpeedKts": 450, "cruiseAltitudeFt": 36000 },
+  { "id": "icn-lax", "originIcao": "RKSI", "destinationIcao": "KLAX", "aircraftTypeCode": "B77W", "callsign": "OFF002", "durationHours": 11.0, "cruiseSpeedKts": 490, "cruiseAltitudeFt": 39000 },
+  { "id": "hnd-sin", "originIcao": "RJTT", "destinationIcao": "WSSS", "aircraftTypeCode": "B789", "callsign": "OFF003", "durationHours": 6.8, "cruiseSpeedKts": 485, "cruiseAltitudeFt": 38000 },
+  { "id": "lhr-jfk", "originIcao": "EGLL", "destinationIcao": "KJFK", "aircraftTypeCode": "A359", "callsign": "OFF004", "durationHours": 7.6, "cruiseSpeedKts": 480, "cruiseAltitudeFt": 37000 },
+  { "id": "cdg-dxb", "originIcao": "LFPG", "destinationIcao": "OMDB", "aircraftTypeCode": "A388", "callsign": "OFF005", "durationHours": 6.7, "cruiseSpeedKts": 488, "cruiseAltitudeFt": 40000 },
+  { "id": "dxb-syd", "originIcao": "OMDB", "destinationIcao": "YSSY", "aircraftTypeCode": "A388", "callsign": "OFF006", "durationHours": 13.8, "cruiseSpeedKts": 490, "cruiseAltitudeFt": 41000 },
+  { "id": "fra-jnb", "originIcao": "EDDF", "destinationIcao": "FAOR", "aircraftTypeCode": "A359", "callsign": "OFF007", "durationHours": 10.6, "cruiseSpeedKts": 482, "cruiseAltitudeFt": 39000 },
+  { "id": "gru-jfk", "originIcao": "SBGR", "destinationIcao": "KJFK", "aircraftTypeCode": "B789", "callsign": "OFF008", "durationHours": 9.8, "cruiseSpeedKts": 484, "cruiseAltitudeFt": 38000 },
+  { "id": "lax-syd", "originIcao": "KLAX", "destinationIcao": "YSSY", "aircraftTypeCode": "B789", "callsign": "OFF009", "durationHours": 14.4, "cruiseSpeedKts": 488, "cruiseAltitudeFt": 40000 },
+  { "id": "sin-cdg", "originIcao": "WSSS", "destinationIcao": "LFPG", "aircraftTypeCode": "A359", "callsign": "OFF010", "durationHours": 13.4, "cruiseSpeedKts": 485, "cruiseAltitudeFt": 39000 },
+  { "id": "syd-scl", "originIcao": "YSSY", "destinationIcao": "SCEL", "aircraftTypeCode": "B789", "callsign": "OFF011", "durationHours": 12.5, "cruiseSpeedKts": 486, "cruiseAltitudeFt": 40000 }
+]
