@@ -26,6 +26,11 @@ export function createCameraController({
   cameraState.targetTrackingElevation = cameraState.targetTrackingElevation ?? constants.CAMERA_TRACKING_DEFAULT_ELEVATION;
   cameraState.targetTrackingDistance = cameraState.targetTrackingDistance ?? constants.CAMERA_TRACKING_DEFAULT_DISTANCE;
 
+  function getResponsivePixelRatio() {
+    const maxRatio = window.innerWidth <= 1080 ? 1.5 : 2;
+    return Math.min(window.devicePixelRatio || 1, maxRatio);
+  }
+
   function clampCamera() {
     cameraState.targetPhi = Math.min(
       Math.max(cameraState.targetPhi, constants.CAMERA_FREE_MIN_PHI),
@@ -134,8 +139,10 @@ export function createCameraController({
   }
 
   function resize() {
-    const width = window.innerWidth;
-    const height = window.innerWidth <= 820 ? Math.round(window.innerHeight * 0.66) : window.innerHeight;
+    const canvas = renderer.domElement;
+    const width = Math.max(Math.round(canvas?.clientWidth || window.innerWidth), 1);
+    const height = Math.max(Math.round(canvas?.clientHeight || window.innerHeight), 1);
+    renderer.setPixelRatio(getResponsivePixelRatio());
     renderer.setSize(width, height, false);
     camera.aspect = width / height;
     camera.updateProjectionMatrix();

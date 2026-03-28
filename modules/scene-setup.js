@@ -183,8 +183,11 @@ const {
   CAMERA_DEFAULT_FOV,
   CAMERA_WALKER_FOV,
   CAMERA_TOPDOWN_DEFAULT_RADIUS,
+  CAMERA_TOPDOWN_FULL_RADIUS,
   CAMERA_TOPDOWN_MIN_RADIUS,
   CAMERA_TOPDOWN_MAX_RADIUS,
+  CAMERA_TOPDOWN_EXACT_THETA,
+  CAMERA_TOPDOWN_EXACT_PHI,
   CAMERA_TRACKING_DEFAULT_DISTANCE,
   CAMERA_TRACKING_MIN_DISTANCE,
   CAMERA_TRACKING_MAX_DISTANCE,
@@ -244,12 +247,33 @@ const {
 } = constants;
 
 export function setupScene({ canvas }) {
+  function getResponsivePixelRatio() {
+    const maxRatio = window.innerWidth <= 1080 ? 1.5 : 2;
+    return Math.min(window.devicePixelRatio || 1, maxRatio);
+  }
+
+  function getResponsiveTopdownDefaults() {
+    const viewportWidth = Math.max(window.innerWidth || 0, 1);
+    const viewportHeight = Math.max(window.innerHeight || 0, 1);
+    const isMobileViewport = viewportWidth <= 1080;
+    const aspectRatio = viewportWidth / viewportHeight;
+    const portraitTightness = isMobileViewport
+      ? THREE.MathUtils.clamp((0.68 - aspectRatio) / 0.28, 0, 1)
+      : 0;
+
+    return {
+      theta: CAMERA_TOPDOWN_EXACT_THETA,
+      phi: THREE.MathUtils.lerp(CAMERA_TOPDOWN_EXACT_PHI, 0.022, portraitTightness),
+      radius: CAMERA_TOPDOWN_FULL_RADIUS * THREE.MathUtils.lerp(1, 0.82, portraitTightness)
+    };
+  }
+
   const renderer = new THREE.WebGLRenderer({
     canvas,
     antialias: true,
     alpha: true
   });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setPixelRatio(getResponsivePixelRatio());
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   
   const scene = new THREE.Scene();
@@ -259,17 +283,18 @@ export function setupScene({ canvas }) {
   
   const camera = new THREE.PerspectiveCamera(CAMERA_DEFAULT_FOV, 1, 0.1, scaleDimension(100));
   const defaultCameraLookTarget = new THREE.Vector3(0, SURFACE_Y * (5 / 6), 0);
+  const responsiveTopdown = getResponsiveTopdownDefaults();
   
   const cameraState = {
     lookTarget: defaultCameraLookTarget.clone(),
     mode: "free",
-    radius: constants.CAMERA_TOPDOWN_FULL_RADIUS,
-    theta: constants.CAMERA_TOPDOWN_EXACT_THETA,
-    phi: constants.CAMERA_TOPDOWN_EXACT_PHI,
+    radius: responsiveTopdown.radius,
+    theta: responsiveTopdown.theta,
+    phi: responsiveTopdown.phi,
     targetLookTarget: defaultCameraLookTarget.clone(),
-    targetTheta: constants.CAMERA_TOPDOWN_EXACT_THETA,
-    targetPhi: constants.CAMERA_TOPDOWN_EXACT_PHI,
-    targetRadius: constants.CAMERA_TOPDOWN_FULL_RADIUS,
+    targetTheta: responsiveTopdown.theta,
+    targetPhi: responsiveTopdown.phi,
+    targetRadius: responsiveTopdown.radius,
     trackingAzimuth: CAMERA_TRACKING_DEFAULT_AZIMUTH,
     trackingDistance: CAMERA_TRACKING_DEFAULT_DISTANCE,
     trackingElevation: CAMERA_TRACKING_DEFAULT_ELEVATION,

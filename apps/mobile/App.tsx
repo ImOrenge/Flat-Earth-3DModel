@@ -40,191 +40,32 @@ const WEB_TOUCH_PATCH = `
         document.head.appendChild(style);
       }
 
-      var pinchDistance = null;
-      var pinchTarget = null;
-      var dragTouchId = null;
-      var dragTarget = null;
-      var dragPointerId = 101;
-
-      function isUiElement(target) {
+      function shouldBlockGesture(target) {
         if (!(target instanceof Element)) {
+          return true;
+        }
+        if (target.closest("button,a,input,select,textarea,label,[role='button'],[data-ui-interactive]")) {
           return false;
         }
-        return Boolean(target.closest("button, a, input, select, textarea, label, [role='button'], [data-ui-interactive]"));
+        return Boolean(target.closest("#scene, canvas"));
       }
-
-      function distance(touches) {
-        var a = touches[0];
-        var b = touches[1];
-        return Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
-      }
-
-      function getTouchByIdentifier(touchList, identifier) {
-        for (var i = 0; i < touchList.length; i += 1) {
-          if (touchList[i].identifier === identifier) {
-            return touchList[i];
-          }
-        }
-        return null;
-      }
-
-      function getTargetCanvas() {
-        return document.getElementById("scene") || document.querySelector("canvas");
-      }
-
-      function createWheelEvent(deltaY) {
-        try {
-          return new WheelEvent("wheel", {
-            deltaY: deltaY,
-            bubbles: true,
-            cancelable: true
-          });
-        } catch {
-          var event = document.createEvent("Event");
-          event.initEvent("wheel", true, true);
-          event.deltaY = deltaY;
-          return event;
-        }
-      }
-
-      function dispatchPointerFromTouch(type, touch, target) {
-        if (!target || !touch) {
-          return;
-        }
-
-        var baseEvent = {
-          bubbles: true,
-          cancelable: true,
-          composed: true,
-          clientX: touch.clientX,
-          clientY: touch.clientY,
-          screenX: touch.screenX,
-          screenY: touch.screenY
-        };
-
-        if (window.PointerEvent) {
-          var pointerEvent = new PointerEvent(type, Object.assign({}, baseEvent, {
-            pointerId: dragPointerId,
-            pointerType: "touch",
-            isPrimary: true,
-            button: type === "pointerdown" ? 0 : -1,
-            buttons: type === "pointerup" || type === "pointercancel" ? 0 : 1,
-            pressure: type === "pointerup" || type === "pointercancel" ? 0 : 0.5
-          }));
-          target.dispatchEvent(pointerEvent);
-          return;
-        }
-
-        var mouseType = "mousemove";
-        if (type === "pointerdown") {
-          mouseType = "mousedown";
-        } else if (type === "pointerup" || type === "pointercancel") {
-          mouseType = "mouseup";
-        }
-        var mouseEvent = new MouseEvent(mouseType, Object.assign({}, baseEvent, {
-          button: 0,
-          buttons: type === "pointerup" || type === "pointercancel" ? 0 : 1
-        }));
-        target.dispatchEvent(mouseEvent);
-      }
-
-      function cancelDragTouch(changedTouches) {
-        if (dragTouchId === null || !dragTarget) {
-          dragTouchId = null;
-          dragTarget = null;
-          return;
-        }
-        var touch = getTouchByIdentifier(changedTouches, dragTouchId);
-        if (touch) {
-          dispatchPointerFromTouch("pointercancel", touch, dragTarget);
-        }
-        dragTouchId = null;
-        dragTarget = null;
-      }
-
-      document.addEventListener("touchstart", function (event) {
-        if (event.touches.length === 1 && dragTouchId === null) {
-          if (isUiElement(event.target)) {
-            return;
-          }
-          var startTouch = event.touches[0];
-          dragTarget = getTargetCanvas();
-          if (dragTarget) {
-            dragTouchId = startTouch.identifier;
-            dispatchPointerFromTouch("pointerdown", startTouch, dragTarget);
-            event.preventDefault();
-            return;
-          }
-        }
-
-        if (event.touches.length !== 2) {
-          return;
-        }
-        cancelDragTouch(event.changedTouches);
-        pinchTarget = getTargetCanvas();
-        if (!pinchTarget) {
-          return;
-        }
-        pinchDistance = distance(event.touches);
-        event.preventDefault();
-      }, { passive: false });
 
       document.addEventListener("touchmove", function (event) {
-        if (dragTouchId !== null && event.touches.length === 1 && dragTarget) {
-          var dragTouch = getTouchByIdentifier(event.touches, dragTouchId);
-          if (dragTouch) {
-            dispatchPointerFromTouch("pointermove", dragTouch, dragTarget);
-            event.preventDefault();
-            return;
-          }
+        if (event.touches.length > 1 && shouldBlockGesture(event.target)) {
+          event.preventDefault();
         }
-
-        if (event.touches.length !== 2) {
-          return;
-        }
-        if (!pinchTarget) {
-          pinchTarget = getTargetCanvas();
-        }
-        if (!pinchTarget) {
-          return;
-        }
-
-        var nextDistance = distance(event.touches);
-        if (pinchDistance !== null) {
-          var delta = nextDistance - pinchDistance;
-          pinchTarget.dispatchEvent(createWheelEvent(-delta * 4));
-        }
-        pinchDistance = nextDistance;
-        event.preventDefault();
-      }, { passive: false });
-
-      document.addEventListener("touchend", function (event) {
-        if (dragTouchId !== null && dragTarget) {
-          var endTouch = getTouchByIdentifier(event.changedTouches, dragTouchId);
-          if (endTouch) {
-            dispatchPointerFromTouch("pointerup", endTouch, dragTarget);
-            dragTouchId = null;
-            dragTarget = null;
-            event.preventDefault();
-          }
-        }
-        if (event.touches.length < 2) {
-          pinchDistance = null;
-          pinchTarget = null;
-        }
-      }, { passive: false });
-
-      document.addEventListener("touchcancel", function (event) {
-        cancelDragTouch(event.changedTouches);
-        pinchDistance = null;
-        pinchTarget = null;
       }, { passive: false });
 
       document.addEventListener("gesturestart", function (event) {
-        event.preventDefault();
+        if (shouldBlockGesture(event.target)) {
+          event.preventDefault();
+        }
       }, { passive: false });
+
       document.addEventListener("gesturechange", function (event) {
-        event.preventDefault();
+        if (shouldBlockGesture(event.target)) {
+          event.preventDefault();
+        }
       }, { passive: false });
     } catch {
       // noop

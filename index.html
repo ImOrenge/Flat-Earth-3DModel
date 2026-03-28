@@ -47,7 +47,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="./styles.css?v=20260327-mobilehud1">
+    <link rel="stylesheet" href="./styles.css?v=20260328-mobiletouch10">
 </head>
 <body>
   <div class="app-shell">
@@ -85,11 +85,17 @@
         <button type="button" class="onboarding-skip" id="onboarding-skip" data-i18n="onboardingSkip">Click anywhere to skip</button>
       </div>
     </div>
+    <div class="settings-backdrop" id="settings-backdrop" hidden aria-hidden="true"></div>
     <header class="app-topbar" id="app-topbar">
       <div class="topbar-left">
         <div class="topbar-brand">
-          <p class="eyebrow topbar-eyebrow" data-i18n="summaryEyebrow">3D MODEL</p>
-          <strong class="topbar-title" data-i18n="summaryTitle">Flat Earth Disc</strong>
+          <div class="topbar-brand-head">
+            <div class="topbar-brand-copy">
+              <p class="eyebrow topbar-eyebrow" data-i18n="summaryEyebrow">3D MODEL</p>
+              <strong class="topbar-title" data-i18n="summaryTitle">Flat Earth Disc</strong>
+            </div>
+            <div class="topbar-brand-settings-slot" id="topbar-brand-settings-slot"></div>
+          </div>
         </div>
         <div class="topbar-status-slot" id="topbar-status-home">
           <div class="topbar-status" id="topbar-status" aria-live="polite">
@@ -125,6 +131,7 @@
           <div class="topbar-help-slot" id="topbar-help-home">
             <button class="button secondary compact-button topbar-action" id="help-open" type="button" data-i18n="helpButtonLabel">Help</button>
           </div>
+          <div class="topbar-settings-home" id="topbar-settings-home">
           <div class="settings-anchor" id="settings-anchor">
             <button class="button secondary compact-button topbar-action settings-toggle-button" id="settings-toggle" type="button">
               <span class="settings-icon" aria-hidden="true">&#9881;</span>
@@ -183,6 +190,7 @@
                 </section>
               </div>
             </div>
+          </div>
           </div>
         </div>
       </div>
@@ -293,8 +301,16 @@
             <button class="button secondary" id="reset-camera" type="button" data-i18n="resetCameraButton">Reset Camera</button>
           </div>
           <div class="button-row compact camera-preset-row" id="camera-preset-row">
-            <button class="button secondary compact-button" data-camera-preset="top" type="button" data-i18n="cameraPresetTop">Top View</button>
-            <button class="button secondary compact-button" data-camera-preset="angle" type="button" data-i18n="cameraPresetAngle">Angle View</button>
+            <div class="camera-view-toggle" id="camera-view-toggle-wrap">
+              <span class="camera-view-mode active" id="camera-view-mode-top" data-i18n="cameraPresetTop">Top View</span>
+              <label class="camera-view-switch" for="camera-view-toggle">
+                <input id="camera-view-toggle" type="checkbox" role="switch" />
+                <span class="camera-view-track" aria-hidden="true">
+                  <span class="camera-view-thumb"></span>
+                </span>
+              </label>
+              <span class="camera-view-mode" id="camera-view-mode-angle" data-i18n="cameraPresetAngle">Angle View</span>
+            </div>
           </div>
         </div>
 
@@ -934,6 +950,6 @@
     </div>
   </div>
 
-  <script type="module" src="./app.js?v=20260327-mobilehud7"></script>
+  <script type="module" src="./app.js?v=20260328-mobileratio2"></script>
   </body>
 </html>
