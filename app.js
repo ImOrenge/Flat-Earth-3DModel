@@ -311,6 +311,7 @@ const topbarUtilitySlotEl = document.getElementById("topbar-utility-slot");
 const topbarLayoutHomeEl = document.getElementById("topbar-layout-home");
 const topbarHelpHomeEl = document.getElementById("topbar-help-home");
 const topbarBrandSettingsSlotEl = document.getElementById("topbar-brand-settings-slot");
+const topbarBrandNavSlotEl = document.getElementById("topbar-brand-nav-slot");
 const topbarSettingsHomeEl = document.getElementById("topbar-settings-home");
 const settingsAnchorEl = document.getElementById("settings-anchor");
 const settingsToggleButtonEl = document.getElementById("settings-toggle");
@@ -580,6 +581,7 @@ function syncResponsiveTopbarAnchors() {
     moveNodeToSlot(helpOpenButtonEl, settingsPrimarySlotEl);
     moveNodeToSlot(topbarStatusEl, settingsStatusSlotEl);
     moveNodeToSlot(settingsAnchorEl, topbarBrandSettingsSlotEl);
+    moveNodeToSlot(detailTabsEl, topbarBrandNavSlotEl || topbarNavSlotEl);
     moveNodeToSlot(settingsPopoverEl, appShellEl);
     return;
   }
@@ -588,6 +590,7 @@ function syncResponsiveTopbarAnchors() {
   moveNodeToSlot(helpOpenButtonEl, topbarHelpHomeEl);
   moveNodeToSlot(topbarStatusEl, topbarStatusHomeEl);
   moveNodeToSlot(settingsAnchorEl, topbarSettingsHomeEl);
+  moveNodeToSlot(detailTabsEl, currentLayoutMode === "hud" ? topbarNavSlotEl : detailTabsHomeEl);
   moveNodeToSlot(settingsPopoverEl, settingsAnchorEl);
 }
 
@@ -2019,7 +2022,7 @@ const rocketApi = createRocketController({
   } = celestialVisualsApi;
 
 
-  setupInputHandlers({
+  const inputHandlersApi = setupInputHandlers({
     constants, canvas, cameraApi, walkerApi, celestialTrackingCameraApi, magneticFieldApi,
     routeSimulationApi, astronomyApi, rocketApi, ui, renderState, walkerState, cameraState,
     movementState, simulationState, astronomyState, celestialControlState, isUiBlocking, skyTexture, scene,
@@ -2044,6 +2047,51 @@ const rocketApi = createRocketController({
     skyAnalemmaOverlayEl, skyAnalemmaState, orbitModeButtons, cameraTrackButtons,
     seasonalYearEl, seasonalEventButtons
   });
+
+  function shouldBlockAppCameraBridgeInput() {
+    return renderState.preparing
+      || walkerState.enabled
+      || settingsPanelOpen
+      || helpModalOpen
+      || isUiBlocking?.();
+  }
+
+  function clampFiniteNumber(value, fallback = 0) {
+    const numericValue = Number(value);
+    return Number.isFinite(numericValue) ? numericValue : fallback;
+  }
+
+  if (APP_MODE && typeof window !== "undefined") {
+    window.__APP_CAMERA_BRIDGE__ = {
+      rotateBy(deltaX = 0, deltaY = 0) {
+        if (!inputHandlersApi?.applyDragDelta || shouldBlockAppCameraBridgeInput()) {
+          return false;
+        }
+
+        const safeDeltaX = THREE.MathUtils.clamp(clampFiniteNumber(deltaX), -64, 64);
+        const safeDeltaY = THREE.MathUtils.clamp(clampFiniteNumber(deltaY), -64, 64);
+        inputHandlersApi.applyDragDelta(safeDeltaX, safeDeltaY, "touch");
+        return true;
+      },
+      zoomBy(delta = 0) {
+        if (!inputHandlersApi?.applyZoomDelta || shouldBlockAppCameraBridgeInput()) {
+          return false;
+        }
+
+        const safeDelta = THREE.MathUtils.clamp(clampFiniteNumber(delta), -180, 180);
+        inputHandlersApi.applyZoomDelta(safeDelta);
+        return true;
+      },
+      setPreset(mode = "top") {
+        if (!inputHandlersApi?.applyCameraPreset || shouldBlockAppCameraBridgeInput()) {
+          return false;
+        }
+
+        inputHandlersApi.applyCameraPreset(mode === "angle" ? "angle" : "top");
+        return true;
+      }
+    };
+  }
 
 function getBodyBandProgressStep(body) {
   const normalizedBody = body === "darkSun" ? "sun" : body;

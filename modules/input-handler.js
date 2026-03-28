@@ -1171,4 +1171,10 @@ export function setupInputHandlers(deps) {
       }
     });
   }
+
+  return {
+    applyCameraPreset,
+    applyDragDelta,
+    applyZoomDelta
+  };
 }
