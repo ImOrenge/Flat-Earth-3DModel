@@ -2571,7 +2571,7 @@ body[data-layout-mode="hud"] .topbar-chip {
   }
 
   body[data-layout-mode="hud"] .detail-panel-shell--collapsed {
-    transform: translate(-50%, 30px);
+    transform: translate(-50%, 76px);
   }
 
   body[data-layout-mode="hud"] .solar-eclipse-toast {
