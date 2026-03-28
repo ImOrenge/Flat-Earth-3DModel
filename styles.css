@@ -37,6 +37,7 @@
   --hud-compact-side-card-padding: 8px;
   --hud-compact-side-card-radius: 16px;
   --hud-compact-mobile-detail-max-height: min(56svh, 560px);
+  --hud-compact-mobile-detail-max-height-dynamic: 9999px;
   --hud-compact-mobile-detail-padding: 14px 12px 14px;
   --hud-compact-mobile-detail-radius: 22px 22px 0 0;
   --hud-compact-mobile-detail-bottom: calc(env(safe-area-inset-bottom, 0px) + 86px);
@@ -2555,7 +2556,10 @@ body[data-layout-mode="hud"] .topbar-chip {
     right: 0;
     bottom: 0;
     width: 100vw;
-    max-height: var(--hud-compact-mobile-detail-max-height);
+    max-height: min(
+      var(--hud-compact-mobile-detail-max-height),
+      var(--hud-compact-mobile-detail-max-height-dynamic)
+    );
     padding: var(--hud-compact-mobile-detail-padding);
     margin: 0;
     border-radius: var(--hud-compact-mobile-detail-radius);

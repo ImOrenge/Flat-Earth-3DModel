@@ -324,6 +324,7 @@ const settingsStatusSlotEl = document.getElementById("settings-status-slot");
 const detailTabsHomeEl = document.getElementById("detail-tabs-home");
 const detailTabsEl = document.getElementById("detail-tabs");
 const detailPanelEl = document.querySelector(".detail-panel");
+const detailPanelShellEl = document.querySelector(".detail-panel-shell");
 const helpOpenButtonEl = document.getElementById("help-open");
 const helpModalLayerEl = document.getElementById("help-modal-layer");
 const helpModalBackdropEl = document.getElementById("help-modal-backdrop");
@@ -602,6 +603,30 @@ function syncHudMovablePanels() {
   moveNodeToSlot(solarEclipsePanelEl, eclipseTargetSlot);
 }
 
+function syncHudDetailPanelVerticalClearance() {
+  const rootStyle = document.documentElement?.style;
+  if (!rootStyle) {
+    return;
+  }
+
+  if (!isMobileViewport() || currentLayoutMode !== "hud" || !detailPanelShellEl || !cameraPresetRowEl) {
+    rootStyle.setProperty("--hud-compact-mobile-detail-max-height-dynamic", "9999px");
+    return;
+  }
+
+  const viewportHeight = Math.max(window.innerHeight || 0, 1);
+  const cameraRowRect = cameraPresetRowEl.getBoundingClientRect();
+  const shellStyle = window.getComputedStyle(detailPanelShellEl);
+  const shellBottom = Math.max(Number.parseFloat(shellStyle.bottom) || 0, 0);
+  const topSafetyGap = 12;
+  const topBoundary = cameraRowRect.bottom + topSafetyGap;
+  const availableHeight = Math.max(viewportHeight - shellBottom - topBoundary, 180);
+  rootStyle.setProperty(
+    "--hud-compact-mobile-detail-max-height-dynamic",
+    `${Math.floor(availableHeight)}px`
+  );
+}
+
 function syncHudSideCard() {
   const allCardConfigs = [];
   for (const config of Object.values(HUD_SIDE_CARD_CONFIG)) {
@@ -722,6 +747,10 @@ function applyLayoutMode() {
   syncLayoutSwitchUi();
   syncHudStatusChips();
   syncHudPanelSections();
+  syncHudDetailPanelVerticalClearance();
+  window.requestAnimationFrame(() => {
+    syncHudDetailPanelVerticalClearance();
+  });
 }
 
 function setLayoutMode(layoutMode, { persist = true } = {}) {
