@@ -1,4 +1,21 @@
 {
+  "name": "flat-earth-monorepo",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "web:serve": "py -m http.server 8000",
+    "mobile:start": "npm --prefix apps/mobile run start",
+    "mobile:start:lan": "npm --prefix apps/mobile run start -- --host lan",
+    "mobile:start:localhost": "npm --prefix apps/mobile run start -- --host localhost",
+    "mobile:start:usb": "adb reverse tcp:8082 tcp:8082 && npm --prefix apps/mobile run start -- --host localhost",
+    "mobile:start:tunnel": "npm --prefix apps/mobile run start -- --tunnel",
+    "mobile:android": "npm --prefix apps/mobile run android",
+    "mobile:ios": "npm --prefix apps/mobile run ios",
+    "core-sim:test": "npm --prefix packages/core-sim run test"
+  },
   "dependencies": {
     "@vercel/analytics": "^2.0.1",
     "playwright": "^1.58.2"

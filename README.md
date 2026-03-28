@@ -18,6 +18,8 @@ The preview loads the bundled SVG by default. The model toolchain keeps the PNG 
 - `scripts/generate-flat-earth-obj.ps1`: OBJ/MTL generation script
 - `models/flat-earth-disc.obj`: generated mesh
 - `models/flat-earth-disc.mtl`: material file referencing the square PNG texture
+- `apps/mobile`: Expo 독립형 iOS/Android 앱
+- `packages/core-sim`: 모바일/웹 공용 시뮬레이션 코어
 
 ## Use
 
@@ -34,6 +36,28 @@ py -m http.server 8000
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\generate-flat-earth-obj.ps1
+```
+
+## Mobile App (Expo)
+
+1. Install dependencies:
+
+```powershell
+cd .\apps\mobile
+npm install
+```
+
+2. Start the native app:
+
+```powershell
+npm run start
+```
+
+3. For Android/iOS local run:
+
+```powershell
+npm run android
+npm run ios
 ```
 
 ## Notes

@@ -1,0 +1,7 @@
+node_modules/
+apps/mobile/node_modules/
+packages/*/node_modules/
+apps/mobile/.expo/
+apps/mobile/dist/
+apps/mobile/web-build/
+*.log
