@@ -40,7 +40,7 @@
   --hud-compact-mobile-detail-max-height-dynamic: 9999px;
   --hud-compact-mobile-detail-padding: 14px 12px 14px;
   --hud-compact-mobile-detail-radius: 22px 22px 0 0;
-  --hud-compact-mobile-detail-bottom: calc(env(safe-area-inset-bottom, 0px) + 86px);
+  --hud-compact-mobile-detail-bottom: calc(env(safe-area-inset-bottom, 0px) + 56px);
   --hud-compact-mobile-subtabs-gap: 6px;
   --hud-compact-mobile-subtabs-margin: 0 0 8px;
   --hud-compact-mobile-subtabs-padding: 3px;
