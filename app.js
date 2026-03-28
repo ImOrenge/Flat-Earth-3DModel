@@ -269,6 +269,17 @@ const {
 
 const APP_MODE = window.__APP_MODE__ === true
   || new URLSearchParams(window?.location?.search || "").get("app") === "1";
+
+if (APP_MODE) {
+  const viewportMeta = document.querySelector('meta[name="viewport"]');
+  if (viewportMeta) {
+    viewportMeta.setAttribute(
+      "content",
+      "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    );
+  }
+}
+
 const appShellEl = document.querySelector(".app-shell");
 const canvas = document.getElementById("scene");
 const firstPersonOverlayEl = document.getElementById("first-person-overlay");
