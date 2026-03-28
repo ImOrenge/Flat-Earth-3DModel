@@ -267,6 +267,8 @@ const {
   ORBIT_RADIUS_AMPLITUDE
 } = constants;
 
+const APP_MODE = window.__APP_MODE__ === true
+  || new URLSearchParams(window?.location?.search || "").get("app") === "1";
 const appShellEl = document.querySelector(".app-shell");
 const canvas = document.getElementById("scene");
 const firstPersonOverlayEl = document.getElementById("first-person-overlay");
@@ -298,6 +300,7 @@ const settingsAnchorEl = document.getElementById("settings-anchor");
 const settingsToggleButtonEl = document.getElementById("settings-toggle");
 const settingsPopoverEl = document.getElementById("settings-popover");
 const privacyChoicesButtonEl = document.getElementById("privacy-choices-button");
+const settingsPrivacyGroupEl = document.getElementById("settings-privacy-group");
 const settingsPrimarySlotEl = document.getElementById("settings-primary-slot");
 const settingsStatusSlotEl = document.getElementById("settings-status-slot");
 const detailTabsHomeEl = document.getElementById("detail-tabs-home");
@@ -747,6 +750,9 @@ function resetMovementInputs() {
 }
 
 function openGooglePrivacyChoices() {
+  if (APP_MODE) {
+    return;
+  }
   const googlefc = window.googlefc;
   const usStatesOptOutApi = googlefc?.usstatesoptout;
 
@@ -977,6 +983,10 @@ if (privacyChoicesButtonEl) {
   privacyChoicesButtonEl.addEventListener("click", () => {
     openGooglePrivacyChoices();
   });
+}
+
+if (APP_MODE && settingsPrivacyGroupEl) {
+  settingsPrivacyGroupEl.hidden = true;
 }
 
 helpOpenButtonEl.addEventListener("click", () => {
