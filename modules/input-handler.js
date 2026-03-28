@@ -61,10 +61,18 @@ export function setupInputHandlers(deps) {
   } = constants;
 
   let isDragging = false;
-  
+  let dragPointerId = null;
   let previousX = 0;
-  
   let previousY = 0;
+  let pinchDistance = null;
+  const activePointers = new Map();
+  let lastTapTime = 0;
+  let lastTapX = 0;
+  let lastTapY = 0;
+  const DOUBLE_TAP_MAX_DELAY_MS = 280;
+  const DOUBLE_TAP_MAX_DISTANCE_PX = 32;
+  const TAP_MOVE_TOLERANCE_PX = 14;
+  const PINCH_TO_WHEEL_FACTOR = 4;
 
   function applyCameraPreset(preset = "top") {
     if (walkerState.enabled || renderState.preparing) {
@@ -89,134 +97,220 @@ export function setupInputHandlers(deps) {
   
   
   
-  canvas.addEventListener("pointerdown", (event) => {
-  
-    if (renderState.preparing || isUiBlocking?.()) {
-  
-      return;
-  
+  function getCurrentPinchDistance() {
+    if (activePointers.size < 2) {
+      return null;
     }
-  
-    isDragging = true;
-  
-    previousX = event.clientX;
-  
-    previousY = event.clientY;
-  
-    canvas.setPointerCapture(event.pointerId);
-  
-  });
-  
-  
-  
-  canvas.addEventListener("pointermove", (event) => {
-  
-    if (!isDragging || renderState.preparing || isUiBlocking?.()) {
-  
-      return;
-  
-    }
-  
-  
-  
-    const deltaX = event.clientX - previousX;
-  
-    const deltaY = event.clientY - previousY;
-  
-  
-  
-    if (walkerState.enabled) {
-  
-      walkerState.heading -= deltaX * 0.005;
-  
-      walkerState.pitch = THREE.MathUtils.clamp(
-  
-        walkerState.pitch - (deltaY * 0.004),
-  
-        constants.WALKER_PITCH_MIN,
-  
-        constants.WALKER_PITCH_MAX
-  
-      );
-  
-    } else if (cameraState.mode === "tracking") {
-  
-      cameraState.targetTrackingAzimuth -= deltaX * 0.008;
-  
-      cameraState.targetTrackingElevation -= deltaY * 0.006;
-  
-      cameraApi.clampCamera();
-  
-    } else {
-  
-      cameraState.targetTheta -= deltaX * 0.008;
-  
-      cameraState.targetPhi += deltaY * 0.006;
-  
-      cameraApi.clampCamera();
-  
-    }
-  
-  
-  
-    previousX = event.clientX;
-  
-    previousY = event.clientY;
-  
-  });
-  
-  
-  
-  function stopDrag(event) {
-  
-    if (!isDragging) {
-  
-      return;
-  
-    }
-  
-    isDragging = false;
-  
-    if (event) {
-  
-      canvas.releasePointerCapture(event.pointerId);
-  
-    }
-  
+
+    const pointers = Array.from(activePointers.values());
+    const first = pointers[0];
+    const second = pointers[1];
+    return Math.hypot(second.x - first.x, second.y - first.y);
   }
-  
-  
-  
-  canvas.addEventListener("pointerup", stopDrag);
-  
-  canvas.addEventListener("pointerleave", stopDrag);
-  
-  canvas.addEventListener("pointercancel", stopDrag);
-  
-  
-  
-  canvas.addEventListener("wheel", (event) => {
-  
-    if (walkerState.enabled || renderState.preparing || isUiBlocking?.()) {
-  
+
+  function applyDragDelta(deltaX, deltaY) {
+    if (walkerState.enabled) {
+      walkerState.heading -= deltaX * 0.005;
+      walkerState.pitch = THREE.MathUtils.clamp(
+        walkerState.pitch - (deltaY * 0.004),
+        constants.WALKER_PITCH_MIN,
+        constants.WALKER_PITCH_MAX
+      );
       return;
-  
     }
-  
-    event.preventDefault();
-  
+
     if (cameraState.mode === "tracking") {
-  
-      cameraState.targetTrackingDistance += event.deltaY * 0.01;
-  
-    } else {
-  
-      cameraState.targetRadius += event.deltaY * 0.01;
-  
+      cameraState.targetTrackingAzimuth -= deltaX * 0.008;
+      cameraState.targetTrackingElevation -= deltaY * 0.006;
+      cameraApi.clampCamera();
+      return;
     }
-  
+
+    cameraState.targetTheta -= deltaX * 0.008;
+    cameraState.targetPhi += deltaY * 0.006;
     cameraApi.clampCamera();
-  
+  }
+
+  function applyZoomDelta(deltaY) {
+    if (walkerState.enabled || renderState.preparing || isUiBlocking?.()) {
+      return;
+    }
+
+    if (cameraState.mode === "tracking") {
+      cameraState.targetTrackingDistance += deltaY * 0.01;
+    } else {
+      cameraState.targetRadius += deltaY * 0.01;
+    }
+
+    cameraApi.clampCamera();
+  }
+
+  function stopDraggingPointer(pointerId = null) {
+    if (!isDragging) {
+      return;
+    }
+    if (pointerId !== null && dragPointerId !== pointerId) {
+      return;
+    }
+    isDragging = false;
+    dragPointerId = null;
+  }
+
+  function releasePointerCaptureSafely(pointerId) {
+    if (typeof canvas.releasePointerCapture !== "function") {
+      return;
+    }
+    try {
+      if (typeof canvas.hasPointerCapture !== "function" || canvas.hasPointerCapture(pointerId)) {
+        canvas.releasePointerCapture(pointerId);
+      }
+    } catch {
+      // noop
+    }
+  }
+
+  canvas.addEventListener("pointerdown", (event) => {
+    if (renderState.preparing || isUiBlocking?.()) {
+      return;
+    }
+
+    activePointers.set(event.pointerId, {
+      x: event.clientX,
+      y: event.clientY,
+      startX: event.clientX,
+      startY: event.clientY,
+      startTime: performance.now(),
+      pointerType: event.pointerType
+    });
+
+    if (typeof canvas.setPointerCapture === "function") {
+      try {
+        canvas.setPointerCapture(event.pointerId);
+      } catch {
+        // noop
+      }
+    }
+
+    if (event.pointerType === "touch") {
+      event.preventDefault();
+    }
+
+    if (activePointers.size === 1) {
+      isDragging = true;
+      dragPointerId = event.pointerId;
+      previousX = event.clientX;
+      previousY = event.clientY;
+      pinchDistance = null;
+      return;
+    }
+
+    stopDraggingPointer();
+    pinchDistance = getCurrentPinchDistance();
+  });
+
+  canvas.addEventListener("pointermove", (event) => {
+    const pointer = activePointers.get(event.pointerId);
+    if (!pointer) {
+      return;
+    }
+
+    pointer.x = event.clientX;
+    pointer.y = event.clientY;
+
+    if (renderState.preparing || isUiBlocking?.()) {
+      return;
+    }
+
+    if (activePointers.size >= 2) {
+      const nextPinchDistance = getCurrentPinchDistance();
+      if (nextPinchDistance !== null) {
+        if (pinchDistance !== null) {
+          const pinchDelta = nextPinchDistance - pinchDistance;
+          if (Math.abs(pinchDelta) > 0.5) {
+            applyZoomDelta(-pinchDelta * PINCH_TO_WHEEL_FACTOR);
+          }
+        }
+        pinchDistance = nextPinchDistance;
+      }
+      event.preventDefault();
+      return;
+    }
+
+    if (!isDragging || dragPointerId !== event.pointerId) {
+      return;
+    }
+
+    const deltaX = event.clientX - previousX;
+    const deltaY = event.clientY - previousY;
+    applyDragDelta(deltaX, deltaY);
+
+    previousX = event.clientX;
+    previousY = event.clientY;
+  });
+
+  function handlePointerEnd(event) {
+    const pointer = activePointers.get(event.pointerId);
+    const wasSingleTouch = activePointers.size === 1;
+
+    if (
+      pointer &&
+      wasSingleTouch &&
+      pointer.pointerType === "touch" &&
+      event.type === "pointerup"
+    ) {
+      const elapsedMs = performance.now() - pointer.startTime;
+      const movedDistance = Math.hypot(
+        event.clientX - pointer.startX,
+        event.clientY - pointer.startY
+      );
+      if (elapsedMs <= DOUBLE_TAP_MAX_DELAY_MS && movedDistance <= TAP_MOVE_TOLERANCE_PX) {
+        const now = performance.now();
+        const sinceLastTap = now - lastTapTime;
+        const tapDistance = Math.hypot(event.clientX - lastTapX, event.clientY - lastTapY);
+        if (sinceLastTap <= DOUBLE_TAP_MAX_DELAY_MS && tapDistance <= DOUBLE_TAP_MAX_DISTANCE_PX) {
+          applyCameraPreset("top");
+          lastTapTime = 0;
+          lastTapX = 0;
+          lastTapY = 0;
+        } else {
+          lastTapTime = now;
+          lastTapX = event.clientX;
+          lastTapY = event.clientY;
+        }
+      }
+    }
+
+    activePointers.delete(event.pointerId);
+    stopDraggingPointer(event.pointerId);
+    releasePointerCaptureSafely(event.pointerId);
+
+    if (activePointers.size >= 2) {
+      pinchDistance = getCurrentPinchDistance();
+      return;
+    }
+
+    pinchDistance = null;
+
+    if (activePointers.size === 1) {
+      const [remainingPointerId, remainingPointer] = activePointers.entries().next().value;
+      isDragging = true;
+      dragPointerId = remainingPointerId;
+      previousX = remainingPointer.x;
+      previousY = remainingPointer.y;
+    }
+  }
+
+  canvas.addEventListener("pointerup", handlePointerEnd);
+  canvas.addEventListener("pointerleave", handlePointerEnd);
+  canvas.addEventListener("pointercancel", handlePointerEnd);
+
+  canvas.addEventListener("wheel", (event) => {
+    if (walkerState.enabled || renderState.preparing || isUiBlocking?.()) {
+      return;
+    }
+
+    event.preventDefault();
+    applyZoomDelta(event.deltaY);
   }, { passive: false });
   
   

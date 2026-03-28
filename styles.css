@@ -74,6 +74,18 @@ body {
   overflow: hidden;
 }
 
+html.app-mode,
+html.app-mode body {
+  overscroll-behavior: none;
+}
+
+html.app-mode #scene {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
 body.help-modal-open {
   overflow: hidden !important;
 }
