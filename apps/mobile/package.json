@@ -10,18 +10,14 @@
     "lint": "expo lint"
   },
   "dependencies": {
-    "@flat-earth/core-sim": "file:../../packages/core-sim",
     "expo": "55.0.10-canary-20260327-0789fbc",
-    "expo-gl": "55.0.11-canary-20260327-0789fbc",
     "expo-status-bar": "55.0.5-canary-20260327-0789fbc",
     "react": "19.2.0",
     "react-native": "0.83.4",
-    "react-native-safe-area-context": "~5.6.2",
-    "three": "^0.166.1"
+    "react-native-webview": "^13.16.0"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
-    "@types/three": "^0.166.0",
     "typescript": "~5.9.2"
   }
 }

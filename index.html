@@ -3,12 +3,29 @@
   
 <head>
   <script>
-    window.googlefc = window.googlefc || {};
-    window.googlefc.callbackQueue = window.googlefc.callbackQueue || [];
-    window.googlefc.usstatesoptout = window.googlefc.usstatesoptout || {};
+    (function () {
+      const params = new URLSearchParams(window.location.search || "");
+      const appMode = params.get("app") === "1";
+      window.__APP_MODE__ = appMode;
+      if (appMode) {
+        document.documentElement.classList.add("app-mode");
+        return;
+      }
+      window.googlefc = window.googlefc || {};
+      window.googlefc.callbackQueue = window.googlefc.callbackQueue || [];
+      window.googlefc.usstatesoptout = window.googlefc.usstatesoptout || {};
+      const adScript = document.createElement("script");
+      adScript.async = true;
+      adScript.src = "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4006284492158024";
+      adScript.crossOrigin = "anonymous";
+      document.head.appendChild(adScript);
+    })();
   </script>
-  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4006284492158024"
-     crossorigin="anonymous"></script>
+  <style>
+    .app-mode .settings-privacy-group {
+      display: none !important;
+    }
+  </style>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Flat Earth Disc 3D Model</title>
@@ -148,7 +165,7 @@
                     </label>
                   </div>
                 </div>
-                <section class="settings-privacy-group overlay-row" aria-labelledby="privacy-choices-title">
+                <section class="settings-privacy-group overlay-row" id="settings-privacy-group" aria-labelledby="privacy-choices-title">
                   <span class="sync-title" id="privacy-choices-title" data-i18n="privacyChoicesTitle">Privacy & consent</span>
                   <p class="sync-copy subtle" data-i18n="privacyChoicesCopy">
                     Read the site's privacy policy or reopen Google's consent message for supported regions.
