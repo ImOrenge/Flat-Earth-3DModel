@@ -180,6 +180,7 @@ export function createEclipseController(deps) {
   const STRICT_ECLIPSE_INGRESS_SHARE = 0.25;
   const STRICT_ECLIPSE_TOTALITY_SHARE = 0.25;
   const STRICT_ECLIPSE_EGRESS_SHARE = 0.3;
+  const ECLIPSE_EVENT_BOUNDARY_TOLERANCE_MS = 60_000;
 
   function getStrictEventProgress(dateMs, event) {
     if (!Number.isFinite(dateMs) || !event) {
@@ -3578,6 +3579,65 @@ export function createEclipseController(deps) {
     };
   }
 
+  function isWithinEventWindowWithTolerance(dateMs, event, toleranceMs = ECLIPSE_EVENT_BOUNDARY_TOLERANCE_MS) {
+    if (!Number.isFinite(dateMs) || !event) {
+      return false;
+    }
+    const startMs = Number(event.startMs);
+    const endMs = Number(event.endMs);
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) {
+      return false;
+    }
+    return dateMs >= (startMs - toleranceMs) && dateMs <= (endMs + toleranceMs);
+  }
+
+  function resolveLunarEventGate(dateMs) {
+    const selectedMeta = astronomyApi.getSelectedEclipseMeta?.() ?? null;
+    const selectedLunarEvent = selectedMeta?.event?.kind === "lunar"
+      ? selectedMeta.event
+      : null;
+    const catalog = astronomyApi.getRuntimeEclipseCatalog?.();
+    const catalogEvent = Number.isFinite(dateMs)
+      ? getActiveEclipseEvent(dateMs, "lunar", catalog)
+      : null;
+    const catalogStrictMode = isCatalogStrictEclipseMode();
+    let activeLunarEvent = catalogEvent;
+    let lunarGateReason = catalogEvent ? "catalog-active" : "catalog-none";
+
+    if (selectedLunarEvent && Number.isFinite(dateMs)) {
+      if (isWithinEventWindowWithTolerance(dateMs, selectedLunarEvent)) {
+        activeLunarEvent = selectedLunarEvent;
+        lunarGateReason = catalogEvent?.id === selectedLunarEvent.id
+          ? "selected-active-match"
+          : "selected-active-priority";
+      } else if (!catalogEvent) {
+        lunarGateReason = "selected-outside-window";
+      }
+    } else if (selectedLunarEvent) {
+      lunarGateReason = "selected-no-date";
+    }
+
+    return {
+      activeLunarEvent,
+      catalogStrictMode,
+      lunarGateReason,
+      selectedLunarEvent
+    };
+  }
+
+  function decorateLunarEclipseState(
+    baseState,
+    { activeLunarEvent = null, catalogStrictMode = false, lunarGateReason = "", selectedLunarEvent = null } = {}
+  ) {
+    return {
+      ...baseState,
+      activeLunarEventId: activeLunarEvent?.id ?? null,
+      selectedLunarEventId: selectedLunarEvent?.id ?? null,
+      catalogStrictMode: Boolean(catalogStrictMode),
+      lunarGateReason
+    };
+  }
+
   function evaluateLunarEclipse(snapshot) {
     if (window.__E2E_DEBUG_LUNAR) console.log("LUNAR_EVAL_ENTERED", !!snapshot);
 
@@ -3603,29 +3663,44 @@ export function createEclipseController(deps) {
     // Lunar eclipse (blood moon) only occurs during a full moon.
     // illuminationFraction peaks at 1.0 on a full moon (phaseProgress ~0.5).
     // Allow a tolerance window of ±~2 days (illumination > 0.85).
-    const activeLunarEvent = Number.isFinite(snapshot?.date?.getTime?.())
-      ? getActiveEclipseEvent(
-        snapshot.date.getTime(),
-        "lunar",
-        astronomyApi.getRuntimeEclipseCatalog?.()
-      )
+    const snapshotDateMs = Number.isFinite(snapshot?.date?.getTime?.())
+      ? snapshot.date.getTime()
       : null;
-    const catalogStrictMode = isCatalogStrictEclipseMode();
+    const {
+      activeLunarEvent,
+      catalogStrictMode,
+      lunarGateReason,
+      selectedLunarEvent
+    } = resolveLunarEventGate(snapshotDateMs);
     const moonIllumination = snapshot.moonPhase?.illuminationFraction ?? 1;
     const isNearFullMoon = moonIllumination >= 0.85;
+    snapshot.activeLunarEventId = activeLunarEvent?.id ?? null;
+    snapshot.selectedLunarEventId = selectedLunarEvent?.id ?? null;
+    snapshot.catalogStrictMode = Boolean(catalogStrictMode);
+    snapshot.lunarGateReason = lunarGateReason;
     if (catalogStrictMode && !simulationState.darkSunLunarStageLock && !activeLunarEvent) {
-      snapshot.activeLunarEclipseData = createLunarEclipseState({
+      snapshot.activeLunarEclipseData = decorateLunarEclipseState(createLunarEclipseState({
         rawStageKey: "idle",
         stageKey: "idle",
         stageLabelKey: "idle"
+      }), {
+        activeLunarEvent,
+        catalogStrictMode,
+        lunarGateReason,
+        selectedLunarEvent
       });
       return decayLunarEclipseVisuals(snapshot);
     }
     if (!catalogStrictMode && !activeLunarEvent && !isNearFullMoon) {
-      snapshot.activeLunarEclipseData = createLunarEclipseState({
+      snapshot.activeLunarEclipseData = decorateLunarEclipseState(createLunarEclipseState({
         rawStageKey: "idle",
         stageKey: "idle",
         stageLabelKey: "idle"
+      }), {
+        activeLunarEvent,
+        catalogStrictMode,
+        lunarGateReason,
+        selectedLunarEvent
       });
       return decayLunarEclipseVisuals(snapshot);
     }
@@ -3657,7 +3732,7 @@ export function createEclipseController(deps) {
       const isTotal = rawStageKey === "totality";
       const isActive = rawStageKey === "partialIngress" || rawStageKey === "totality" || rawStageKey === "partialEgress";
 
-      snapshot.activeLunarEclipseData = {
+      snapshot.activeLunarEclipseData = decorateLunarEclipseState({
         active: isActive,
         total: isTotal,
         coverage: Math.max(stagedShadow, stagedTint),
@@ -3668,7 +3743,12 @@ export function createEclipseController(deps) {
         stageKey: rawStageKey,
         stageLabelKey: rawStageKey === "idle" ? "idle" : (isTotal ? "totalLunarEclipse" : "partialLunarEclipse"),
         visibleInView: true
-      };
+      }, {
+        activeLunarEvent,
+        catalogStrictMode,
+        lunarGateReason,
+        selectedLunarEvent
+      });
 
       snapshot.lunarEclipseApproachFactor = isActive || rawStageKey === "approach" ? 1.0 : 0.0;
 
@@ -3715,7 +3795,7 @@ export function createEclipseController(deps) {
     if (catalogStrictMode && activeLunarEvent) {
       const strictProgress = getStrictEventProgress(snapshot.date.getTime(), activeLunarEvent);
       const strictStageKeyRaw = getStrictStageFromProgress(strictProgress);
-      const strictStageKey = strictStageKeyRaw === "complete" ? "idle" : strictStageKeyRaw;
+      const strictStageKey = strictStageKeyRaw === "complete" ? "partialEgress" : strictStageKeyRaw;
       const strictCoverage = getStrictCoverageFromProgress(strictProgress, SOLAR_ECLIPSE_TOTAL_COVERAGE);
       const strictDirection = strictProgress < 0.5 ? "ingress" : "egress";
       const strictTotal = strictStageKey === "totality";
@@ -3738,7 +3818,7 @@ export function createEclipseController(deps) {
       lunarEclipseState.previousRawStageKey = strictStageKey;
       lunarEclipseState.previousCoverage = strictCoverage;
 
-      snapshot.activeLunarEclipseData = createLunarEclipseState({
+      snapshot.activeLunarEclipseData = decorateLunarEclipseState(createLunarEclipseState({
         active: strictActive,
         total: strictTotal,
         coverage: strictCoverage,
@@ -3755,6 +3835,11 @@ export function createEclipseController(deps) {
           : THREE.MathUtils.clamp(strictCoverage, 0, 1),
         eventWindowActive: strictStageKey !== "idle",
         visibleInView: true
+      }), {
+        activeLunarEvent,
+        catalogStrictMode,
+        lunarGateReason,
+        selectedLunarEvent
       });
       snapshot.lunarEclipseShadowStrength = lunarEclipseState.currentShadowStrength;
       snapshot.lunarEclipseTint = lunarEclipseState.currentTint;
@@ -3878,7 +3963,7 @@ export function createEclipseController(deps) {
     // Attach structured metrics to snapshot for UI toast handling later
     // The UI handles 'solarEclipse' property specifically to draw toasts
     // To minimize rewriting UI bindings, we provide the identical object structure here, but label it specifically
-    snapshot.activeLunarEclipseData = {
+    snapshot.activeLunarEclipseData = decorateLunarEclipseState({
       active,
       total,
       coverage: effectiveCoverage,
@@ -3889,7 +3974,12 @@ export function createEclipseController(deps) {
       stageKey: rawStageKey,
       stageLabelKey: rawStageKey === "idle" ? "idle" : (total ? "totalLunarEclipse" : "partialLunarEclipse"),
       visibleInView
-    };
+    }, {
+      activeLunarEvent,
+      catalogStrictMode,
+      lunarGateReason,
+      selectedLunarEvent
+    });
 
     // Calculate precise mask tint strength depending on the active stage.
     let shadowTarget = 0;

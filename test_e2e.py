@@ -139,6 +139,27 @@ def test_builtin_lunar_timepoints_update_preview(page: Page, server_url: str):
     assert snapshot["activeLunarEclipseData"]["visibleInView"] is True
 
 
+def test_selected_lunar_event_stays_non_idle_on_start_peak_end(page: Page, server_url: str):
+    open_eclipse_panel(page, server_url)
+
+    page.locator("#eclipse-kind-select").select_option("lunar")
+    page.locator("#eclipse-year-select").select_option("2026")
+    page.locator("#eclipse-event-select").select_option("LE-09708")
+
+    for timepoint in ("start", "peak", "end"):
+        page.locator("#eclipse-timepoint-select").select_option(timepoint)
+        page.wait_for_function(
+            "() => Boolean(window.__E2E_SNAPSHOT?.activeLunarEclipseData?.selectedLunarEventId)"
+        )
+        state = page.evaluate("window.__E2E_SNAPSHOT?.activeLunarEclipseData ?? null")
+        assert state is not None
+        assert state["selectedLunarEventId"] == "LE-09708"
+        assert state["activeLunarEventId"] == "LE-09708"
+        assert state["catalogStrictMode"] is True
+        assert state["stageKey"] != "idle"
+        assert state["lunarGateReason"] in ("selected-active-match", "selected-active-priority")
+
+
 def test_lunar_peak_phase_uses_real_full_moon_geometry(page: Page, server_url: str):
     page.goto(server_url)
     page.locator("#scene").wait_for(state="attached")

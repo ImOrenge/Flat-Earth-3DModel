@@ -215,13 +215,9 @@ function getMoonPhaseOffset() {
   if (cachedMoonPhaseOffset !== null) {
     return cachedMoonPhaseOffset;
   }
-  const anchorDate = new Date(MOON_PHASE_ANCHOR_ISO);
-  if (Number.isNaN(anchorDate.getTime())) {
-    cachedMoonPhaseOffset = 0;
-    return cachedMoonPhaseOffset;
-  }
-  const anchorProgress = getRawMoonPhaseProgress(anchorDate);
-  cachedMoonPhaseOffset = THREE.MathUtils.euclideanModulo(-anchorProgress, 1);
+  // Raw sun/moon longitude phase already tracks eclipse/full-moon timing better
+  // than a fixed anchor in this model. Keep zero-offset to avoid calendar drift.
+  cachedMoonPhaseOffset = 0;
   return cachedMoonPhaseOffset;
 }
 
