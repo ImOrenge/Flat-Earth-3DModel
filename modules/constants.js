@@ -3,6 +3,7 @@ import { projectedRadiusFromLatitude } from "./geo-utils.js";
 
 export const DEFAULT_MAP_PATH = "./assets/flat-earth-map-square.svg";
 export const DEFAULT_MAP_LABEL = "assets/flat-earth-map-square.svg";
+export const DEFAULT_GLOBE_TEXTURE_PATH = "./assets/nasa-blue-marble-5400x2700.jpg";
 export const DEFAULT_MOON_TEXTURE_PATH = "./output/imagegen/moon-full-source.png";
 export const DEFAULT_MOON_TEXTURE_FALLBACK_PATH = "./assets/moon-phases-360-ko.png";
 export const MODEL_SCALE = 2;
@@ -199,6 +200,9 @@ export const CAMERA_ANGLED_DEFAULT_RADIUS = CAMERA_TOPDOWN_DEFAULT_RADIUS;
 export const CAMERA_TOPDOWN_FULL_RADIUS = scaleDimension(18);
 export const CAMERA_TOPDOWN_MIN_RADIUS = scaleDimension(5.9);
 export const CAMERA_TOPDOWN_MAX_RADIUS = scaleDimension(24);
+export const CAMERA_GLOBE_DEFAULT_RADIUS = scaleDimension(12.4);
+export const CAMERA_GLOBE_MIN_RADIUS = scaleDimension(6.8);
+export const CAMERA_GLOBE_MAX_RADIUS = scaleDimension(29);
 export const CAMERA_TOPDOWN_EXACT_THETA = 0;
 export const CAMERA_TOPDOWN_EXACT_PHI = 0.05;
 export const CAMERA_ANGLED_DEFAULT_THETA = -0.55;

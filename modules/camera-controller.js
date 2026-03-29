@@ -32,13 +32,20 @@ export function createCameraController({
   }
 
   function clampCamera() {
+    const isGlobeView = cameraState.earthModelView === "spherical";
+    const minRadius = isGlobeView
+      ? (constants.CAMERA_GLOBE_MIN_RADIUS ?? constants.CAMERA_TOPDOWN_MIN_RADIUS)
+      : constants.CAMERA_TOPDOWN_MIN_RADIUS;
+    const maxRadius = isGlobeView
+      ? (constants.CAMERA_GLOBE_MAX_RADIUS ?? constants.CAMERA_TOPDOWN_MAX_RADIUS)
+      : constants.CAMERA_TOPDOWN_MAX_RADIUS;
     cameraState.targetPhi = Math.min(
       Math.max(cameraState.targetPhi, constants.CAMERA_FREE_MIN_PHI),
       constants.CAMERA_FREE_MAX_PHI
     );
     cameraState.targetRadius = Math.min(
-      Math.max(cameraState.targetRadius, constants.CAMERA_TOPDOWN_MIN_RADIUS),
-      constants.CAMERA_TOPDOWN_MAX_RADIUS
+      Math.max(cameraState.targetRadius, minRadius),
+      maxRadius
     );
     cameraState.targetTrackingElevation = Math.min(
       Math.max(cameraState.targetTrackingElevation, constants.CAMERA_TRACKING_MIN_ELEVATION),

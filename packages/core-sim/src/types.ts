@@ -1,5 +1,7 @@
 export type TimeMode = "live" | "manual";
 export type QualityLevel = "auto" | "high" | "medium" | "low";
+export type EarthModel = "flat" | "spherical";
+export type ComparisonCategory = "routes" | "eclipses" | "orbit" | "rotation";
 
 export interface SimulationConfig {
   timeMode?: TimeMode;
@@ -76,7 +78,77 @@ export interface ComputeCelestialParams {
   observerLongitudeDegrees?: number;
 }
 
-export type DetailTab = "astronomy" | "routes" | "constellations" | "rockets";
+export interface ComparisonThresholds {
+  routeRelativeError: number;
+  eclipsePeakMinutes: number;
+  orbitDeclinationRmseDeg: number;
+  orbitDayLengthRmseMinutes: number;
+  rotationSpeedMpe: number;
+}
+
+export interface ComparisonDeclinationSample {
+  iso: string;
+  expectedDeclinationDegrees: number;
+}
+
+export interface ComparisonDayLengthSample {
+  iso: string;
+  latitudeDegrees: number;
+  expectedHours: number;
+}
+
+export interface ComparisonRotationSample {
+  latitudeDegrees: number;
+  expectedSpeedKph: number;
+}
+
+export interface ComparisonBenchmarks {
+  declination: ComparisonDeclinationSample[];
+  dayLength: ComparisonDayLengthSample[];
+  rotation: ComparisonRotationSample[];
+}
+
+export interface ContradictionFlag {
+  contradiction: boolean;
+  reason: string;
+  observedValue: number;
+  thresholdValue: number;
+  unit: string;
+}
+
+export interface ComparisonEvidenceRow {
+  label: string;
+  observed: number | string;
+  flat: number | string;
+  spherical: number | string;
+  unit?: string;
+}
+
+export interface ComparisonMetric {
+  category: ComparisonCategory;
+  title: string;
+  flatScore: number;
+  sphericalScore: number;
+  flatFlag: ContradictionFlag;
+  sphericalFlag: ContradictionFlag;
+  evidence: ComparisonEvidenceRow[];
+}
+
+export interface ComparisonSnapshot {
+  timestampMs: number;
+  timestampIso: string;
+  thresholds: ComparisonThresholds;
+  metrics: ComparisonMetric[];
+  flatTotalScore: number;
+  sphericalTotalScore: number;
+}
+
+export interface ComparisonDetailState {
+  activeModel: EarthModel;
+  snapshot: ComparisonSnapshot | null;
+}
+
+export type DetailTab = "astronomy" | "routes" | "constellations" | "rockets" | "comparison";
 export type EclipseKind = "solar" | "lunar";
 export type EclipseTimePoint = "start" | "peak" | "end";
 export type RocketType = "two-stage" | "single";
@@ -269,6 +341,7 @@ export interface DetailSnapshot {
   constellations: ConstellationDetailState;
   routes: RouteDetailState;
   rockets: RocketDetailState;
+  comparison: ComparisonDetailState;
 }
 
 export interface FeatureRuntimeState {
@@ -280,6 +353,7 @@ export interface FeatureRuntimeState {
   constellations: ConstellationDetailState;
   routes: RouteDetailState;
   rockets: RocketDetailState;
+  comparison: ComparisonDetailState;
   data: {
     eclipseSolarEvents: EclipseEvent[];
     eclipseLunarEvents: EclipseEvent[];
@@ -288,6 +362,8 @@ export interface FeatureRuntimeState {
     airportsByIcao: Record<string, RouteAirport>;
     aircraftByCode: Record<string, RouteAircraftType>;
     routesById: Record<string, RouteDefinition>;
+    comparisonBenchmarks: ComparisonBenchmarks;
+    comparisonThresholds: ComparisonThresholds;
   };
 }
 
@@ -308,7 +384,8 @@ export type DetailAction =
   | { type: "rockets_select_spaceport"; spaceportId: string }
   | { type: "rockets_select_type"; rocketType: RocketType }
   | { type: "rockets_launch" }
-  | { type: "rockets_reset" };
+  | { type: "rockets_reset" }
+  | { type: "comparison_set_model"; model: EarthModel };
 
 export interface FeatureRuntimeConfig {
   eclipse?: {
@@ -328,6 +405,11 @@ export interface FeatureRuntimeConfig {
   rockets?: {
     spaceports?: RocketSpaceport[];
     backend?: RocketPhysicsBackend;
+  };
+  comparison?: {
+    benchmarks?: ComparisonBenchmarks;
+    thresholds?: Partial<ComparisonThresholds>;
+    activeModel?: EarthModel;
   };
 }
 

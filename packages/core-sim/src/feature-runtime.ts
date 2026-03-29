@@ -1,9 +1,17 @@
 import { clamp, euclideanModulo } from "./math";
+import {
+  computeModelComparison,
+  DEFAULT_COMPARISON_BENCHMARKS,
+  DEFAULT_COMPARISON_THRESHOLDS,
+} from "./comparison";
 import type {
+  ComparisonBenchmarks,
+  ComparisonThresholds,
   ConstellationEntry,
   DetailAction,
   DetailSnapshot,
   DetailTab,
+  EarthModel,
   EclipseEvent,
   FeatureAdvanceContext,
   FeatureRuntimeConfig,
@@ -144,6 +152,27 @@ function stageLabel(phase: RocketLaunchPhase): string {
   return "Ready";
 }
 
+function resolveBenchmarks(benchmarks?: ComparisonBenchmarks): ComparisonBenchmarks {
+  return {
+    declination: benchmarks?.declination?.length
+      ? benchmarks.declination
+      : DEFAULT_COMPARISON_BENCHMARKS.declination,
+    dayLength: benchmarks?.dayLength?.length
+      ? benchmarks.dayLength
+      : DEFAULT_COMPARISON_BENCHMARKS.dayLength,
+    rotation: benchmarks?.rotation?.length
+      ? benchmarks.rotation
+      : DEFAULT_COMPARISON_BENCHMARKS.rotation,
+  };
+}
+
+function resolveThresholds(thresholds?: Partial<ComparisonThresholds>): ComparisonThresholds {
+  return {
+    ...DEFAULT_COMPARISON_THRESHOLDS,
+    ...(thresholds ?? {}),
+  };
+}
+
 function createBaseState(config: FeatureRuntimeConfig): FeatureRuntimeState {
   const solarEvents = normalizeEvents(config.eclipse?.solarEvents, "solar");
   const lunarEvents = normalizeEvents(config.eclipse?.lunarEvents, "lunar");
@@ -155,6 +184,9 @@ function createBaseState(config: FeatureRuntimeConfig): FeatureRuntimeState {
     const next = normalizeRoute(route, index);
     return [next.id, next];
   }));
+  const comparisonBenchmarks = resolveBenchmarks(config.comparison?.benchmarks);
+  const comparisonThresholds = resolveThresholds(config.comparison?.thresholds);
+  const comparisonActiveModel: EarthModel = config.comparison?.activeModel === "spherical" ? "spherical" : "flat";
   const spaceports = config.rockets?.spaceports?.length ? config.rockets.spaceports : DEFAULT_SPACEPORTS;
   const nowMs = Date.now();
   const firstSpaceport = spaceports[0];
@@ -242,6 +274,10 @@ function createBaseState(config: FeatureRuntimeConfig): FeatureRuntimeState {
         altitudeKm: 0
       }
     },
+    comparison: {
+      activeModel: comparisonActiveModel,
+      snapshot: null,
+    },
     data: {
       eclipseSolarEvents: solarEvents,
       eclipseLunarEvents: lunarEvents,
@@ -249,7 +285,9 @@ function createBaseState(config: FeatureRuntimeConfig): FeatureRuntimeState {
       countriesByCode: countriesByCode as FeatureRuntimeState["data"]["countriesByCode"],
       airportsByIcao: airportsByIcao as FeatureRuntimeState["data"]["airportsByIcao"],
       aircraftByCode: aircraftByCode as FeatureRuntimeState["data"]["aircraftByCode"],
-      routesById: routesById as FeatureRuntimeState["data"]["routesById"]
+      routesById: routesById as FeatureRuntimeState["data"]["routesById"],
+      comparisonBenchmarks,
+      comparisonThresholds,
     }
   };
 }
@@ -431,6 +469,14 @@ function recomputeDerived(state: FeatureRuntimeState, seasonalEclipticAngleRadia
       altitudeKm
     }
   };
+  const comparisonSnapshot = computeModelComparison(state.observationTimeMs, {
+    routes: Object.values(state.data.routesById),
+    airportsByIcao: state.data.airportsByIcao,
+    solarEvents: state.data.eclipseSolarEvents,
+    lunarEvents: state.data.eclipseLunarEvents,
+    benchmarks: state.data.comparisonBenchmarks,
+    thresholds: state.data.comparisonThresholds,
+  });
 
   return {
     ...state,
@@ -452,7 +498,11 @@ function recomputeDerived(state: FeatureRuntimeState, seasonalEclipticAngleRadia
     },
     constellations: constellationState,
     routes: routesState,
-    rockets: rocketsState
+    rockets: rocketsState,
+    comparison: {
+      ...state.comparison,
+      snapshot: comparisonSnapshot,
+    },
   };
 }
 
@@ -523,6 +573,14 @@ export function reduceDetailAction(state: FeatureRuntimeState, action: DetailAct
       return recomputeDerived({ ...state, rockets: { ...state.rockets, phase: "stage1", missionElapsedSeconds: 0, phaseElapsedSeconds: 0 } });
     case "rockets_reset":
       return recomputeDerived({ ...state, rockets: { ...state.rockets, phase: "idle", missionElapsedSeconds: 0, phaseElapsedSeconds: 0 } });
+    case "comparison_set_model":
+      return recomputeDerived({
+        ...state,
+        comparison: {
+          ...state.comparison,
+          activeModel: action.model,
+        },
+      });
     default:
       return state;
   }
@@ -569,6 +627,21 @@ export function getDetailSnapshot(state: FeatureRuntimeState, tab?: DetailTab): 
       ...state.routes,
       routeOptions: state.routes.routeOptions.map((option) => ({ ...option })),
       renderData: state.routes.renderData ? { ...state.routes.renderData } : null
+    },
+    comparison: {
+      activeModel: state.comparison.activeModel,
+      snapshot: state.comparison.snapshot
+        ? {
+          ...state.comparison.snapshot,
+          thresholds: { ...state.comparison.snapshot.thresholds },
+          metrics: state.comparison.snapshot.metrics.map((metric) => ({
+            ...metric,
+            flatFlag: { ...metric.flatFlag },
+            sphericalFlag: { ...metric.sphericalFlag },
+            evidence: metric.evidence.map((row) => ({ ...row })),
+          })),
+        }
+        : null,
     },
     rockets: {
       ...state.rockets,

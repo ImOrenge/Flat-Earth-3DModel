@@ -4,6 +4,7 @@ import * as constants from "./constants.js?v=20260322-topview-zodiac4";
 const {
   DEFAULT_MAP_PATH,
   DEFAULT_MAP_LABEL,
+  DEFAULT_GLOBE_TEXTURE_PATH,
   DEFAULT_MOON_TEXTURE_PATH,
   DEFAULT_MOON_TEXTURE_FALLBACK_PATH,
   MODEL_SCALE,
@@ -286,6 +287,7 @@ export function setupScene({ canvas }) {
   const responsiveTopdown = getResponsiveTopdownDefaults();
   
   const cameraState = {
+    earthModelView: "flat",
     lookTarget: defaultCameraLookTarget.clone(),
     mode: "free",
     radius: responsiveTopdown.radius,
@@ -307,6 +309,9 @@ export function setupScene({ canvas }) {
   scene.add(stage);
   const scalableStage = new THREE.Group();
   stage.add(scalableStage);
+  const globeStage = new THREE.Group();
+  globeStage.visible = false;
+  stage.add(globeStage);
   
   const topMaterial = new THREE.MeshStandardMaterial({
     color: 0xffffff,
@@ -331,6 +336,122 @@ export function setupScene({ canvas }) {
     [sideMaterial, topMaterial, bottomMaterial]
   );
   scalableStage.add(disc);
+
+  const globeRadius = DISC_RADIUS * 0.82;
+  const globeSurfaceMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    roughness: 0.62,
+    metalness: 0.04,
+  });
+  const globeSurface = new THREE.Mesh(
+    new THREE.SphereGeometry(globeRadius, 96, 72),
+    globeSurfaceMaterial
+  );
+  globeSurface.position.set(0, SURFACE_Y * 0.2, 0);
+  globeStage.add(globeSurface);
+
+  const globeAtmosphere = new THREE.Mesh(
+    new THREE.SphereGeometry(globeRadius * 1.03, 72, 48),
+    new THREE.MeshBasicMaterial({
+      color: 0x7fc8ff,
+      transparent: true,
+      opacity: 0.16,
+      blending: THREE.AdditiveBlending,
+      side: THREE.BackSide,
+      depthWrite: false,
+    })
+  );
+  globeAtmosphere.position.copy(globeSurface.position);
+  globeStage.add(globeAtmosphere);
+
+  const globeGridGroup = new THREE.Group();
+  globeGridGroup.position.copy(globeSurface.position);
+  globeStage.add(globeGridGroup);
+
+  function createLatitudeRing(latitudeDeg, color = 0x6ab7ff, opacity = 0.42) {
+    const latitudeRad = THREE.MathUtils.degToRad(latitudeDeg);
+    const radius = globeRadius * Math.cos(latitudeRad);
+    if (radius < 0.0001) {
+      return null;
+    }
+    const y = globeRadius * Math.sin(latitudeRad);
+    const geometry = new THREE.TorusGeometry(radius, scaleDimension(0.006), 8, 92);
+    const material = new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity,
+      depthWrite: false,
+    });
+    const ring = new THREE.Mesh(geometry, material);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = y;
+    return ring;
+  }
+
+  function createMeridian(longitudeDeg, color = 0xa2d9ff, opacity = 0.35) {
+    const points = [];
+    const lonRad = THREE.MathUtils.degToRad(longitudeDeg);
+    for (let latDeg = -90; latDeg <= 90; latDeg += 3) {
+      const latRad = THREE.MathUtils.degToRad(latDeg);
+      const x = globeRadius * Math.cos(latRad) * Math.cos(lonRad);
+      const y = globeRadius * Math.sin(latRad);
+      const z = globeRadius * Math.cos(latRad) * Math.sin(lonRad);
+      points.push(new THREE.Vector3(x, y, z));
+    }
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    const material = new THREE.LineBasicMaterial({
+      color,
+      transparent: true,
+      opacity,
+      depthWrite: false,
+      depthTest: true,
+    });
+    return new THREE.Line(geometry, material);
+  }
+
+  for (let latitude = -75; latitude <= 75; latitude += 15) {
+    const ring = createLatitudeRing(latitude);
+    if (ring) {
+      globeGridGroup.add(ring);
+    }
+  }
+  for (let longitude = 0; longitude < 180; longitude += 15) {
+    globeGridGroup.add(createMeridian(longitude));
+  }
+
+  const globeEquatorGuide = new THREE.Mesh(
+    new THREE.TorusGeometry(globeRadius * 1.09, scaleDimension(0.012), 10, 120),
+    new THREE.MeshBasicMaterial({
+      color: 0xffc46c,
+      transparent: true,
+      opacity: 0.38,
+      depthWrite: false,
+    })
+  );
+  globeEquatorGuide.rotation.x = Math.PI / 2;
+  globeEquatorGuide.position.copy(globeSurface.position);
+  globeStage.add(globeEquatorGuide);
+
+  const globeTiltGuide = globeEquatorGuide.clone();
+  globeTiltGuide.material = globeTiltGuide.material.clone();
+  globeTiltGuide.material.color.set(0x7ad7ff);
+  globeTiltGuide.rotation.z = THREE.MathUtils.degToRad(23.44);
+  globeTiltGuide.material.opacity = 0.28;
+  globeStage.add(globeTiltGuide);
+
+  const globeTextureLoader = new THREE.TextureLoader();
+  globeTextureLoader.load(
+    DEFAULT_GLOBE_TEXTURE_PATH,
+    (texture) => {
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      texture.needsUpdate = true;
+      globeSurfaceMaterial.map = texture;
+      globeSurfaceMaterial.needsUpdate = true;
+    },
+    undefined,
+    () => {}
+  );
   
   const transparentSurfaceMaterial = new THREE.MeshBasicMaterial({
     color: 0xffffff,
@@ -1797,6 +1918,19 @@ export function setupScene({ canvas }) {
   scalableStage.add(createOrbitTrack(EQUATOR_RADIUS, 0x7fd8ff, 0.78, ORBIT_SUN_HEIGHT));
   scalableStage.add(createOrbitTrack(TROPIC_CAPRICORN_RADIUS, 0xff93b6, 0.88, ORBIT_SUN_HEIGHT_SOUTH));
 
+  function setEarthModelView(mode = "flat") {
+    const spherical = mode === "spherical";
+    cameraState.earthModelView = spherical ? "spherical" : "flat";
+    scalableStage.visible = !spherical;
+    globeStage.visible = spherical;
+    if (!spherical) {
+      globeStage.rotation.set(0, 0, 0);
+    }
+    return cameraState.earthModelView;
+  }
+
+  setEarthModelView("flat");
+
   return {
     renderer,
     scene,
@@ -1806,6 +1940,7 @@ export function setupScene({ canvas }) {
     cameraState,
     stage,
     scalableStage,
+    globeStage,
     topMaterial,
     sideMaterial,
     bottomMaterial,
@@ -1944,6 +2079,12 @@ export function setupScene({ canvas }) {
     createMoonAuraSprite,
     createSunRayTexture,
     createSunRayMesh,
-    createOrbitTrack
+    createOrbitTrack,
+    globeSurface,
+    globeAtmosphere,
+    globeGridGroup,
+    globeEquatorGuide,
+    globeTiltGuide,
+    setEarthModelView,
   };
 }

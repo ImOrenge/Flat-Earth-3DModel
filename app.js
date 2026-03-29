@@ -17,6 +17,7 @@ import { createCelestialTrackingCameraController } from "./modules/celestial-tra
 import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js?v=20260312-darksun-eclipse1";
 import { createI18n } from "./modules/i18n.js?v=20260327-mobilehud1";
 import { createMagneticFieldController } from "./modules/magnetic-field-controller.js?v=20260314-magnetic-pinecone3";
+import { createModelComparisonController } from "./modules/model-comparison-controller.js?v=20260329-compare1";
 import { createRouteSimulationController } from "./modules/route-simulation-controller.js";
 import { createTextureManager } from "./modules/texture-manager.js?v=20260311-gpu-daynight";
 import { createWalkerController } from "./modules/walker-controller.js?v=20260324-moon-cycle28";
@@ -346,6 +347,7 @@ const rocketLaunchBtn       = document.getElementById("rocket-launch-btn");
 const controlTabButtons = [...document.querySelectorAll("[data-control-tab]")];
 const cameraPresetButtons = [...document.querySelectorAll("[data-camera-preset]")];
 const controlTabPanels = [...document.querySelectorAll("[data-control-panel]")];
+const comparisonPanelEl = document.querySelector('[data-control-panel="comparison"]');
 const hudSubtabButtons = [...document.querySelectorAll("[data-hud-panel-tab]")];
 const translatableTextEls = [...document.querySelectorAll("[data-i18n]")];
 const translatableHtmlEls = [...document.querySelectorAll("[data-i18n-html]")];
@@ -478,11 +480,12 @@ const LAYOUT_STORAGE_KEY = "flat-earth-layout-mode";
 const MOBILE_LAYOUT_BREAKPOINT = 1080;
 const TAB_SWIPE_THRESHOLD_X = 48;
 const TAB_SWIPE_MAX_DRIFT_Y = 24;
-const TAB_ORDER_FALLBACK = ["astronomy", "routes", "constellations", "rockets"];
+const TAB_ORDER_FALLBACK = ["astronomy", "routes", "constellations", "comparison", "rockets"];
 const HUD_PANEL_SECTION_DEFAULTS = {
   astronomy: "time",
   routes: "playback",
   constellations: "controls",
+  comparison: "routes",
   rockets: "launch"
 };
 const HUD_SIDE_CARD_CONFIG = {
@@ -1174,6 +1177,7 @@ function shiftControlTab(direction) {
 }
 
 let constellationTabApi;
+let comparisonApi;
 
 for (let i = 0; i < SPACEPORTS.length; i++) {
   const option = document.createElement("option");
@@ -1184,6 +1188,7 @@ for (let i = 0; i < SPACEPORTS.length; i++) {
 
 function setControlTab(tabKey) {
   currentControlTab = tabKey;
+  const isComparisonTab = tabKey === "comparison";
 
   for (const button of controlTabButtons) {
     button.classList.toggle("active", button.dataset.controlTab === tabKey);
@@ -1197,6 +1202,7 @@ function setControlTab(tabKey) {
 
   syncHudPanelSections();
   constellationTabApi?.setPanelActive(tabKey === "constellations");
+  comparisonApi?.setPanelActive(isComparisonTab);
   scrollActiveControlTabIntoView();
 }
 
@@ -1284,6 +1290,7 @@ const {
   cameraState,
   stage,
   scalableStage,
+  globeStage,
   topMaterial,
   sideMaterial,
   bottomMaterial,
@@ -1422,7 +1429,8 @@ const {
   createMoonAuraSprite,
   createSunRayTexture,
   createSunRayMesh,
-  createOrbitTrack
+  createOrbitTrack,
+  setEarthModelView
 } = setupScene({ canvas });
 
 // Add constellations
@@ -1787,6 +1795,16 @@ const routeSimulationApi = createRouteSimulationController({
   }
 });
 
+comparisonApi = createModelComparisonController({
+  i18n,
+  constants,
+  panelEl: comparisonPanelEl,
+  cameraState,
+  cameraApi,
+  setEarthModelView,
+});
+comparisonApi.initialize();
+
 let celestialTrackingCameraApi;
 
 function focusCameraOnConstellation(entry) {
@@ -1869,6 +1887,7 @@ constellationTabApi = createConstellationTabController({
 
 i18n.subscribe(() => {
   constellationTabApi.refreshLocalizedUi();
+  comparisonApi?.applyTranslations();
   syncHudSideCard();
 });
 
@@ -2374,6 +2393,10 @@ function animate() {
     astronomyApi.updateAstronomyUi(snapshot);
   }
 
+  if (currentControlTab === "comparison") {
+    comparisonApi?.refresh(projectionDate);
+  }
+
   const constellationSeasonalAngle = (
     astronomyState.enabled || simulationState.useRealityTimelineInDemo !== false
   )
@@ -2567,6 +2590,7 @@ function runOnboarding() {
     { tab: "astronomy",      key: "onboardingAstronomy" },
     { tab: "routes",         key: "onboardingRoutes" },
     { tab: "constellations", key: "onboardingConstellations" },
+    { tab: "comparison",     key: "onboardingComparison" },
     { tab: "rockets",        key: "onboardingRockets" },
   ];
 
