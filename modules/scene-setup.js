@@ -1914,9 +1914,14 @@ export function setupScene({ canvas }) {
     return trackGroup;
   }
   
-  scalableStage.add(createOrbitTrack(TROPIC_CANCER_RADIUS, 0xffc96c, 0.88, ORBIT_SUN_HEIGHT_NORTH));
-  scalableStage.add(createOrbitTrack(EQUATOR_RADIUS, 0x7fd8ff, 0.78, ORBIT_SUN_HEIGHT));
-  scalableStage.add(createOrbitTrack(TROPIC_CAPRICORN_RADIUS, 0xff93b6, 0.88, ORBIT_SUN_HEIGHT_SOUTH));
+  const orbitGuideGroups = {
+    north: createOrbitTrack(TROPIC_CANCER_RADIUS, 0xffc96c, 0.88, ORBIT_SUN_HEIGHT_NORTH),
+    equator: createOrbitTrack(EQUATOR_RADIUS, 0x7fd8ff, 0.78, ORBIT_SUN_HEIGHT),
+    south: createOrbitTrack(TROPIC_CAPRICORN_RADIUS, 0xff93b6, 0.88, ORBIT_SUN_HEIGHT_SOUTH)
+  };
+  scalableStage.add(orbitGuideGroups.north);
+  scalableStage.add(orbitGuideGroups.equator);
+  scalableStage.add(orbitGuideGroups.south);
 
   function setEarthModelView(mode = "flat") {
     const spherical = mode === "spherical";
@@ -2080,6 +2085,7 @@ export function setupScene({ canvas }) {
     createSunRayTexture,
     createSunRayMesh,
     createOrbitTrack,
+    orbitGuideGroups,
     globeSurface,
     globeAtmosphere,
     globeGridGroup,

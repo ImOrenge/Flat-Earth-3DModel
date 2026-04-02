@@ -24,10 +24,14 @@ export function createCelestialTrackingCameraController({
     }
   };
   const state = {
-    mode: "free",
-    targetKey: "off",
     customLookTarget: null,
-    customLookTargetResolver: null
+    customLookTargetResolver: null,
+    customTrackingLookTarget: null,
+    customTrackingResolver: null,
+    customTrackingSummaryKey: null,
+    customTrackingSummaryText: "",
+    mode: "free",
+    targetKey: "off"
   };
 
   cameraState.mode = cameraState.mode ?? "free";
@@ -43,31 +47,46 @@ export function createCelestialTrackingCameraController({
     cameraState.mode = state.mode;
   }
 
+  function resolveTrackedCustomTarget() {
+    if (state.customTrackingResolver) {
+      return state.customTrackingResolver();
+    }
+    return state.customTrackingLookTarget;
+  }
+
+  function resolveFreeCustomTarget() {
+    if (state.customLookTargetResolver) {
+      return state.customLookTargetResolver();
+    }
+    return state.customLookTarget;
+  }
+
+  function setTempPositionFromValue(value, fallbackValue = defaultLookTarget) {
+    const source = value ?? fallbackValue;
+    tempWorldPosition.set(
+      source?.x ?? 0,
+      source?.y ?? 0,
+      source?.z ?? 0
+    );
+  }
+
   function updateLookTarget({ immediate = false } = {}) {
     const config = targets[state.targetKey];
-    const hasTrackableTarget = state.targetKey !== "off" && Boolean(config?.object);
+    const hasNamedTrackableTarget = state.targetKey !== "off" && Boolean(config?.object);
+    const trackedCustomTarget = hasNamedTrackableTarget ? null : resolveTrackedCustomTarget();
+    const hasTrackableTarget = hasNamedTrackableTarget || Boolean(trackedCustomTarget);
 
-    if (!hasTrackableTarget) {
-      if (state.customLookTargetResolver) {
-        const resolvedTarget = state.customLookTargetResolver();
-        if (resolvedTarget) {
-          tempWorldPosition.set(
-            resolvedTarget.x ?? 0,
-            resolvedTarget.y ?? 0,
-            resolvedTarget.z ?? 0
-          );
-        } else if (state.customLookTarget) {
-          tempWorldPosition.copy(state.customLookTarget);
-        } else {
-          tempWorldPosition.copy(defaultLookTarget);
-        }
-      } else if (state.customLookTarget) {
-        tempWorldPosition.copy(state.customLookTarget);
+    if (hasNamedTrackableTarget) {
+      config.object.getWorldPosition(tempWorldPosition);
+    } else if (trackedCustomTarget) {
+      setTempPositionFromValue(trackedCustomTarget);
+    } else {
+      const freeCustomTarget = resolveFreeCustomTarget();
+      if (freeCustomTarget) {
+        setTempPositionFromValue(freeCustomTarget);
       } else {
         tempWorldPosition.copy(defaultLookTarget);
       }
-    } else {
-      config.object.getWorldPosition(tempWorldPosition);
     }
 
     syncMode(hasTrackableTarget);
@@ -78,30 +97,63 @@ export function createCelestialTrackingCameraController({
     }
   }
 
+  function getSummaryText() {
+    if (state.customTrackingSummaryText) {
+      return state.customTrackingSummaryText;
+    }
+    if (state.customTrackingSummaryKey) {
+      return i18n.t(state.customTrackingSummaryKey);
+    }
+    return i18n.t(targets[state.targetKey].summaryKey);
+  }
+
   function syncUi() {
     for (const button of buttons) {
       button.classList.toggle("active", button.dataset.cameraTrack === state.targetKey);
     }
 
     if (summaryEl) {
-      summaryEl.textContent = i18n.t(targets[state.targetKey].summaryKey);
+      summaryEl.textContent = getSummaryText();
     }
+  }
+
+  function clearCustomTrackingState() {
+    state.customTrackingLookTarget = null;
+    state.customTrackingResolver = null;
+    state.customTrackingSummaryKey = null;
+    state.customTrackingSummaryText = "";
+  }
+
+  function clearFreeCustomTargetState() {
+    state.customLookTarget = null;
+    state.customLookTargetResolver = null;
   }
 
   function setTarget(nextTargetKey, options = {}) {
     state.targetKey = resolveTargetKey(nextTargetKey);
     if (state.targetKey !== "off") {
-      state.customLookTarget = null;
-      state.customLookTargetResolver = null;
+      clearFreeCustomTargetState();
+      clearCustomTrackingState();
     }
     updateLookTarget(options);
     syncUi();
   }
 
   function clearTracking(options = {}) {
-    state.customLookTarget = null;
-    state.customLookTargetResolver = null;
+    clearFreeCustomTargetState();
+    clearCustomTrackingState();
     setTarget("off", options);
+  }
+
+  function clearCustomTracking(options = {}) {
+    clearCustomTrackingState();
+    if (state.targetKey !== "off") {
+      updateLookTarget(options);
+      syncUi();
+      return;
+    }
+    updateLookTarget(options);
+    syncUi();
   }
 
   function setCustomLookTarget(nextTarget, options = {}) {
@@ -116,6 +168,7 @@ export function createCelestialTrackingCameraController({
 
     state.customLookTargetResolver = null;
     state.customLookTarget.set(nextTarget.x ?? 0, nextTarget.y ?? 0, nextTarget.z ?? 0);
+    clearCustomTrackingState();
     state.targetKey = "off";
     updateLookTarget(options);
     syncUi();
@@ -128,6 +181,58 @@ export function createCelestialTrackingCameraController({
     }
 
     state.customLookTargetResolver = resolver;
+    clearCustomTrackingState();
+    state.targetKey = "off";
+    updateLookTarget(options);
+    syncUi();
+  }
+
+  function setTrackedCustomTarget(nextTarget, summaryKeyOrText = null, options = {}) {
+    if (!nextTarget) {
+      clearCustomTracking(options);
+      return;
+    }
+
+    if (!state.customTrackingLookTarget) {
+      state.customTrackingLookTarget = new THREE.Vector3();
+    }
+
+    state.customTrackingLookTarget.set(nextTarget.x ?? 0, nextTarget.y ?? 0, nextTarget.z ?? 0);
+    state.customTrackingResolver = null;
+    state.customTrackingSummaryKey = null;
+    state.customTrackingSummaryText = "";
+    if (summaryKeyOrText) {
+      if (typeof summaryKeyOrText === "string" && Object.prototype.hasOwnProperty.call(targets, summaryKeyOrText)) {
+        state.customTrackingSummaryKey = summaryKeyOrText;
+      } else if (typeof summaryKeyOrText === "string" && summaryKeyOrText.startsWith("track")) {
+        state.customTrackingSummaryKey = summaryKeyOrText;
+      } else if (typeof summaryKeyOrText === "string") {
+        state.customTrackingSummaryText = summaryKeyOrText;
+      }
+    }
+    clearFreeCustomTargetState();
+    state.targetKey = "off";
+    updateLookTarget(options);
+    syncUi();
+  }
+
+  function setTrackedCustomTargetResolver(resolver, summaryKeyOrText = null, options = {}) {
+    if (typeof resolver !== "function") {
+      clearCustomTracking(options);
+      return;
+    }
+
+    state.customTrackingResolver = resolver;
+    state.customTrackingSummaryKey = null;
+    state.customTrackingSummaryText = "";
+    if (typeof summaryKeyOrText === "string") {
+      if (summaryKeyOrText.startsWith("track") || summaryKeyOrText.startsWith("rocket")) {
+        state.customTrackingSummaryKey = summaryKeyOrText;
+      } else {
+        state.customTrackingSummaryText = summaryKeyOrText;
+      }
+    }
+    clearFreeCustomTargetState();
     state.targetKey = "off";
     updateLookTarget(options);
     syncUi();
@@ -139,12 +244,14 @@ export function createCelestialTrackingCameraController({
 
   function update() {
     updateLookTarget();
+    syncUi();
   }
 
   updateLookTarget({ immediate: true });
   syncUi();
 
   return {
+    clearCustomTracking,
     clearTracking,
     getMode() {
       return state.mode;
@@ -159,6 +266,8 @@ export function createCelestialTrackingCameraController({
     setCustomLookTarget,
     setCustomLookTargetResolver,
     setTarget,
+    setTrackedCustomTarget,
+    setTrackedCustomTargetResolver,
     update
   };
 }

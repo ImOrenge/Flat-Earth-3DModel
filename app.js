@@ -343,7 +343,9 @@ const hudSideCardTitleEl = document.getElementById("hud-side-card-title");
 const hudSideCardSlotEl = document.getElementById("hud-side-card-slot");
 const rocketSpaceportSelect = document.getElementById("rocket-spaceport-select");
 const rocketTypeSelect      = document.getElementById("rocket-type-select");
+const rocketStandbyBtn      = document.getElementById("rocket-standby-btn");
 const rocketLaunchBtn       = document.getElementById("rocket-launch-btn");
+const rocketCameraSummaryEl = document.getElementById("rocket-camera-summary");
 const controlTabButtons = [...document.querySelectorAll("[data-control-tab]")];
 const cameraPresetButtons = [...document.querySelectorAll("[data-camera-preset]")];
 const controlTabPanels = [...document.querySelectorAll("[data-control-panel]")];
@@ -1430,6 +1432,7 @@ const {
   createSunRayTexture,
   createSunRayMesh,
   createOrbitTrack,
+  orbitGuideGroups,
   setEarthModelView
 } = setupScene({ canvas });
 
@@ -1652,6 +1655,8 @@ const ui = {
   walkerSummaryEl,
   rocketSpaceportSelect,
   rocketTypeSelect,
+  rocketStandbyBtn,
+  rocketCameraSummaryEl,
   rocketLaunchBtn
 };
 
@@ -1916,6 +1921,273 @@ const rocketApi = createRocketController({
   scalableStage,
   constants
 });
+
+const rocketCameraUiState = {
+  activeProfileKey: "",
+  engaged: false,
+  lastEndedLaunchpadName: ""
+};
+const rocketCameraTempRadial = new THREE.Vector3();
+const rocketCameraTempTangent = new THREE.Vector3();
+const rocketCameraTempHeading = new THREE.Vector3();
+const rocketCameraLockedPosition = new THREE.Vector3();
+const ROCKET_FRONT_VIEW_TRANSITION_SECONDS = 1.15;
+const ROCKET_FIXED_CAMERA_HEIGHT = SURFACE_Y + scaleDimension(0.18);
+const ROCKET_CAMERA_COPY = {
+  en: {
+    idle: "Choose a launchpad and stage a rocket to preview the pad camera.",
+    standby: "Standby camera is locked on {launchpad}. Launch when ready.",
+    standbyButton: "Stage Standby",
+    states: {
+      FALL: "Fall",
+      LAUNCH: "Launch",
+      PITCHOVER: "Pitchover",
+      SCRAPE: "Dome Scrape",
+      SEPARATION: "Stage Separation",
+      STAGE1: "Stage 1 Burn",
+      STAGE2: "Stage 2 Burn",
+      STANDBY: "Standby"
+    },
+    tracking: "Tracking the {launchpad} launch through {stage}. Drag and zoom stay enabled.",
+    ended: "Tracking finished for the {launchpad} launch. Stage another rocket to preview a pad again."
+  },
+  ko: {
+    idle: "발사대를 선택하고 로켓을 스탠바이로 배치하면 발사장 카메라 미리보기가 시작됩니다.",
+    standby: "{launchpad}에 스탠바이 카메라를 고정했습니다. 준비되면 발사하세요.",
+    standbyButton: "스탠바이 배치",
+    states: {
+      FALL: "낙하",
+      LAUNCH: "발사",
+      PITCHOVER: "자세 전환",
+      SCRAPE: "궁창 접촉",
+      SEPARATION: "단 분리",
+      STAGE1: "1단 연소",
+      STAGE2: "2단 연소",
+      STANDBY: "스탠바이"
+    },
+    tracking: "{launchpad} 발사를 {stage} 단계까지 추적 중입니다. 드래그와 줌은 계속 사용할 수 있습니다.",
+    ended: "{launchpad} 발사 추적이 종료되었습니다. 다음 발사를 미리 보려면 다시 스탠바이를 배치하세요."
+  }
+};
+
+function getRocketCameraCopy() {
+  return ROCKET_CAMERA_COPY[i18n.getLanguage()] ?? ROCKET_CAMERA_COPY.en;
+}
+
+function getRocketStateLabelKey(state) {
+  return getRocketCameraCopy().states[state] ?? state;
+}
+
+function getRocketStateLabel(state) {
+  return getRocketStateLabelKey(state);
+}
+
+function wrapTrackingAngle(angle) {
+  return Math.atan2(Math.sin(angle), Math.cos(angle));
+}
+
+function lerpTrackingAngle(fromAngle, toAngle, alpha) {
+  const delta = wrapTrackingAngle(toAngle - fromAngle);
+  return wrapTrackingAngle(fromAngle + delta * alpha);
+}
+
+function getRocketFrontViewAzimuth(snapshot) {
+  rocketCameraTempRadial.set(snapshot?.position?.x ?? 0, 0, snapshot?.position?.z ?? 0);
+  if (rocketCameraTempRadial.lengthSq() < 0.0001) {
+    rocketCameraTempRadial.set(0, 0, 1);
+  } else {
+    rocketCameraTempRadial.normalize();
+  }
+
+  rocketCameraTempTangent.set(-rocketCameraTempRadial.z, 0, rocketCameraTempRadial.x);
+  const headingSource = snapshot?.headingDirection?.lengthSq?.() > 0.0001
+    ? snapshot.headingDirection
+    : snapshot?.forward;
+  rocketCameraTempHeading.set(headingSource?.x ?? 0, 0, headingSource?.z ?? 0);
+
+  if (rocketCameraTempHeading.lengthSq() < 0.0001) {
+    return -0.38;
+  }
+
+  rocketCameraTempHeading.normalize();
+  return Math.atan2(
+    rocketCameraTempHeading.dot(rocketCameraTempTangent),
+    rocketCameraTempHeading.dot(rocketCameraTempRadial)
+  );
+}
+
+function blendRocketTrackingProfile(fromProfile, toProfile, alpha) {
+  return {
+    azimuth: lerpTrackingAngle(fromProfile.azimuth, toProfile.azimuth, alpha),
+    distance: THREE.MathUtils.lerp(fromProfile.distance, toProfile.distance, alpha),
+    elevation: THREE.MathUtils.lerp(fromProfile.elevation, toProfile.elevation, alpha)
+  };
+}
+
+function shouldContinuouslyUpdateRocketProfile(snapshot) {
+  return Boolean(
+    snapshot
+    && (snapshot.state === "STAGE1" || snapshot.state === "LAUNCH")
+    && (snapshot.stageTimer ?? 0) < ROCKET_FRONT_VIEW_TRANSITION_SECONDS
+  );
+}
+
+function getRocketTrackingSummary(snapshot) {
+  const copy = getRocketCameraCopy();
+  if (!snapshot) {
+    return copy.idle;
+  }
+
+  if (snapshot.state === "STANDBY") {
+    return copy.standby.replace("{launchpad}", snapshot.launchpadName ?? "");
+  }
+
+  return copy.tracking
+    .replace("{launchpad}", snapshot.launchpadName ?? "")
+    .replace("{stage}", getRocketStateLabel(snapshot.state));
+}
+
+function getRocketTrackingProfile(snapshot) {
+  switch (snapshot?.state) {
+    case "STANDBY": {
+      return {
+        azimuth: getRocketFrontViewAzimuth(snapshot),
+        distance: constants.CAMERA_TRACKING_MIN_DISTANCE * 1.12,
+        elevation: 0.16
+      };
+    }
+    case "STAGE1":
+    case "LAUNCH": {
+      const frontProfile = {
+        azimuth: getRocketFrontViewAzimuth(snapshot),
+        distance: constants.CAMERA_TRACKING_MIN_DISTANCE * 1.18,
+        elevation: 0.18
+      };
+      const followProfile = {
+        azimuth: -0.9,
+        distance: constants.CAMERA_TRACKING_DEFAULT_DISTANCE * 0.96,
+        elevation: 0.5
+      };
+      const rawProgress = THREE.MathUtils.clamp(
+        (snapshot.stageTimer ?? 0) / ROCKET_FRONT_VIEW_TRANSITION_SECONDS,
+        0,
+        1
+      );
+      const progress = THREE.MathUtils.smootherstep(rawProgress, 0, 1);
+      return blendRocketTrackingProfile(frontProfile, followProfile, progress);
+    }
+    case "SEPARATION":
+      return {
+        azimuth: -0.64,
+        distance: constants.CAMERA_TRACKING_DEFAULT_DISTANCE * 1.18,
+        elevation: 0.74
+      };
+    case "STAGE2":
+      return {
+        azimuth: -0.52,
+        distance: constants.CAMERA_TRACKING_DEFAULT_DISTANCE * 0.88,
+        elevation: 0.68
+      };
+    case "SCRAPE":
+    case "FALL":
+      return {
+        azimuth: -0.44,
+        distance: constants.CAMERA_TRACKING_DEFAULT_DISTANCE * 1.3,
+        elevation: 0.82
+      };
+    default:
+      return {
+        azimuth: constants.CAMERA_TRACKING_DEFAULT_AZIMUTH,
+        distance: constants.CAMERA_TRACKING_DEFAULT_DISTANCE,
+        elevation: constants.CAMERA_TRACKING_DEFAULT_ELEVATION
+      };
+  }
+}
+
+function syncRocketCameraAndUi() {
+  const activeSnapshot = rocketApi.getActiveRocketSnapshot();
+  const standbySnapshot = activeSnapshot ? null : rocketApi.getStandbySnapshot();
+  const snapshot = activeSnapshot ?? standbySnapshot;
+  const completedLaunchpadName = rocketApi.getLastCompletedLaunchpadName();
+  const copy = getRocketCameraCopy();
+  const shouldHideOrbitGuides = Boolean(activeSnapshot);
+
+  if (orbitGuideGroups) {
+    orbitGuideGroups.north.visible = !shouldHideOrbitGuides;
+    orbitGuideGroups.equator.visible = !shouldHideOrbitGuides;
+    orbitGuideGroups.south.visible = !shouldHideOrbitGuides;
+  }
+
+  if (rocketStandbyBtn) {
+    rocketStandbyBtn.textContent = copy.standbyButton;
+  }
+
+  if (snapshot) {
+    const summaryText = getRocketTrackingSummary(snapshot);
+    const profileKey = `${snapshot.state}:${snapshot.spaceportIndex ?? "none"}:${snapshot.rocketType ?? "default"}`;
+    celestialTrackingCameraApi.setTrackedCustomTargetResolver(
+      () => {
+        const latestActive = rocketApi.getActiveRocketSnapshot();
+        const latestStandby = latestActive ? null : rocketApi.getStandbySnapshot();
+        return latestActive?.lookTarget ?? latestStandby?.lookTarget ?? null;
+      },
+      summaryText,
+      { immediate: !rocketCameraUiState.engaged || rocketCameraUiState.activeProfileKey !== profileKey }
+    );
+
+    const profile = getRocketTrackingProfile(snapshot);
+    if (shouldContinuouslyUpdateRocketProfile(snapshot) || rocketCameraUiState.activeProfileKey !== profileKey) {
+      cameraState.targetTrackingAzimuth = profile.azimuth;
+      cameraState.targetTrackingElevation = profile.elevation;
+      cameraState.targetTrackingDistance = profile.distance;
+      cameraState.targetTrackingGroundLocked = true;
+      cameraState.targetTrackingGroundHeight = ROCKET_FIXED_CAMERA_HEIGHT;
+      cameraApi.clampCamera();
+      rocketCameraUiState.activeProfileKey = profileKey;
+    }
+
+    if (activeSnapshot) {
+      if (!cameraState.targetTrackingPositionLocked) {
+        rocketCameraLockedPosition.copy(camera.position);
+        rocketCameraLockedPosition.y = Math.max(rocketCameraLockedPosition.y, ROCKET_FIXED_CAMERA_HEIGHT);
+        cameraState.targetTrackingLockedPosition.copy(rocketCameraLockedPosition);
+      }
+      cameraState.targetTrackingPositionLocked = true;
+    } else {
+      cameraState.targetTrackingPositionLocked = false;
+    }
+
+    rocketCameraUiState.engaged = true;
+    rocketCameraUiState.lastEndedLaunchpadName = "";
+    if (rocketCameraSummaryEl) {
+      rocketCameraSummaryEl.textContent = summaryText;
+    }
+    return;
+  }
+
+  if (completedLaunchpadName) {
+    rocketCameraUiState.lastEndedLaunchpadName = completedLaunchpadName;
+  }
+
+  if (rocketCameraUiState.engaged) {
+    celestialTrackingCameraApi.clearCustomTracking({ immediate: false });
+    rocketCameraUiState.engaged = false;
+    rocketCameraUiState.activeProfileKey = "";
+  }
+  cameraState.targetTrackingGroundLocked = false;
+  cameraState.trackingGroundLocked = false;
+  cameraState.targetTrackingGroundHeight = ROCKET_FIXED_CAMERA_HEIGHT;
+  cameraState.targetTrackingPositionLocked = false;
+  cameraState.trackingPositionLocked = false;
+
+  if (!rocketCameraSummaryEl) {
+    return;
+  }
+
+  rocketCameraSummaryEl.textContent = rocketCameraUiState.lastEndedLaunchpadName
+    ? copy.ended.replace("{launchpad}", rocketCameraUiState.lastEndedLaunchpadName)
+    : copy.idle;
+}
 
 
   const eclipseApi = createEclipseController({
@@ -2422,24 +2694,20 @@ function animate() {
   walkerApi.updateFirstPersonOverlay();
   routeSimulationApi.update(deltaSeconds);
   rocketApi.update(deltaSeconds);
-  // ── 로켓 텔레메트리 UI 업데이트 ──
   (function updateRocketTelemetry() {
-    const panel = document.getElementById('rocket-telemetry-panel');
+    const panel = document.getElementById("rocket-telemetry-panel");
     if (!panel) return;
     const tel = rocketApi.getTelemetry();
-    if (!tel) { panel.style.display = 'none'; return; }
-    panel.style.display = '';
-    const STATE_KO = {
-      STAGE1: '1단 연소', PITCHOVER: '자세 제어', SEPARATION: '단 분리',
-      STAGE2: '2단 점화', SCRAPE: '궁창 접촉', FALL: '낙하', LAUNCH: '발사'
-    };
-    document.getElementById('tel-state').textContent    = STATE_KO[tel.state] ?? tel.state;
-    document.getElementById('tel-alt').textContent      = tel.altitude + '%';
-    document.getElementById('tel-speed').textContent    = tel.speed + ' u/s';
-    document.getElementById('tel-stage-t').textContent  = tel.stageTimer + 's';
-    document.getElementById('tel-scrape-t').textContent = tel.state === 'SCRAPE' ? tel.scrapeTimer + 's' : '—';
-    document.getElementById('tel-debris').textContent   = tel.debrisCount + '개';
+    if (!tel) { panel.style.display = "none"; return; }
+    panel.style.display = "";
+    document.getElementById("tel-state").textContent = getRocketStateLabel(tel.state);
+    document.getElementById("tel-alt").textContent = `${tel.altitude}%`;
+    document.getElementById("tel-speed").textContent = `${tel.speed} u/s`;
+    document.getElementById("tel-stage-t").textContent = `${tel.stageTimer}s`;
+    document.getElementById("tel-scrape-t").textContent = tel.state === "SCRAPE" ? `${tel.scrapeTimer}s` : "-";
+    document.getElementById("tel-debris").textContent = `${tel.debrisCount}`;
   })();
+  syncRocketCameraAndUi();
   astronomyApi.syncSeasonalSunUi();
   if (snapshot) {
     walkerApi.updateWalkerUi(snapshot);

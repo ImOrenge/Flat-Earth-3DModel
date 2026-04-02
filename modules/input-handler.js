@@ -46,7 +46,7 @@ export function setupInputHandlers(deps) {
     seasonalEventButtons
   } = deps;
 
-  const { rocketSpaceportSelect, rocketTypeSelect, rocketLaunchBtn } = ui;
+  const { rocketSpaceportSelect, rocketTypeSelect, rocketLaunchBtn, rocketStandbyBtn } = ui;
 
   const {
     WALKER_PITCH_MIN,
@@ -127,6 +127,30 @@ export function setupInputHandlers(deps) {
       cameraViewToggleEl.checked = preset === "angle";
       syncCameraViewToggleUi();
     }
+  }
+
+  function getSelectedRocketConfig() {
+    if (!rocketSpaceportSelect) {
+      return null;
+    }
+
+    const index = Number.parseInt(rocketSpaceportSelect.value, 10);
+    if (Number.isNaN(index)) {
+      return null;
+    }
+
+    return {
+      index,
+      rocketType: rocketTypeSelect ? rocketTypeSelect.value : "two-stage"
+    };
+  }
+
+  function stageSelectedRocket() {
+    const config = getSelectedRocketConfig();
+    if (!config) {
+      return null;
+    }
+    return rocketApi.enterStandby(config.index, config.rocketType);
   }
   
   
@@ -1162,13 +1186,35 @@ export function setupInputHandlers(deps) {
     }
   });
 
+  if (rocketStandbyBtn && rocketSpaceportSelect) {
+    rocketStandbyBtn.addEventListener("click", () => {
+      stageSelectedRocket();
+    });
+  }
+
+  if (rocketSpaceportSelect) {
+    rocketSpaceportSelect.addEventListener("change", () => {
+      if (rocketApi.getStandbySnapshot() && !rocketApi.getActiveRocketSnapshot()) {
+        stageSelectedRocket();
+      }
+    });
+  }
+
+  if (rocketTypeSelect) {
+    rocketTypeSelect.addEventListener("change", () => {
+      if (rocketApi.getStandbySnapshot() && !rocketApi.getActiveRocketSnapshot()) {
+        stageSelectedRocket();
+      }
+    });
+  }
+
   if (rocketLaunchBtn && rocketSpaceportSelect) {
     rocketLaunchBtn.addEventListener("click", () => {
-      const index     = parseInt(rocketSpaceportSelect.value, 10);
-      const rocketType = rocketTypeSelect ? rocketTypeSelect.value : "two-stage";
-      if (!isNaN(index)) {
-        rocketApi.launchRocket(index, rocketType);
+      const config = getSelectedRocketConfig();
+      if (!config) {
+        return;
       }
+      rocketApi.launchRocket(config.index, config.rocketType);
     });
   }
 
