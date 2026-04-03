@@ -1,6 +1,20 @@
 import * as THREE from "../vendor/three.module.js";
 import { getProjectedPositionFromGeo } from "./geo-utils.js";
 
+const DEFAULT_MISSION_PROFILE_ID = "default";
+const ARTEMIS_II_MISSION_PROFILE_ID = "artemis-ii";
+const ARTEMIS_II_SPACEPORT = {
+  name: "LC-39B / Kennedy Space Center",
+  lat: 28.608,
+  lon: -80.604,
+  heading: 90
+};
+
+export const ROCKET_MISSION_PROFILES = [
+  { id: DEFAULT_MISSION_PROFILE_ID, label: "Default Launch" },
+  { id: ARTEMIS_II_MISSION_PROFILE_ID, label: "Artemis II" }
+];
+
 export const SPACEPORTS = [
   { name: "Cape Canaveral, USA (East)", lat: 28.39, lon: -80.60, heading: 90 },
   { name: "Vandenberg, USA (Polar)", lat: 34.74, lon: -120.57, heading: 180 },
@@ -13,7 +27,7 @@ export const SPACEPORTS = [
 ];
 
 // ─── Rapier async load ───
-let RAPIER = null;
+  let RAPIER = null;
 const rapierReadyPromise = (async () => {
   try {
     const mod = await import("../vendor/rapier-physics.js");
@@ -37,6 +51,16 @@ export function createRocketController({
   let lastCompletedLaunchpadName = "";
 
   const S = v => constants.scaleDimension(v);
+  function getRocketLaunchDisplayName(record) {
+    if (!record) {
+      return "";
+    }
+
+    return record.missionLabel
+      ? `${record.missionLabel} · ${record.launchpadName ?? ""}`
+      : (record.launchpadName ?? "");
+  }
+
   function getRocketVelocity(r) {
     if (r.rigidBody) {
       const velocity = r.rigidBody.linvel();
@@ -84,6 +108,8 @@ export function createRocketController({
       headingDirection: record.targetFlightDir.clone(),
       launchpadName: record.launchpadName,
       lookTarget: tempSnapshotLookTarget.clone(),
+      missionLabel: record.missionLabel ?? "",
+      missionProfile: record.missionProfile ?? DEFAULT_MISSION_PROFILE_ID,
       position: record.position.clone(),
       rocketType: record.rocketType,
       scrapeTimer: record.scrapeTimer ?? 0,
@@ -92,6 +118,7 @@ export function createRocketController({
       state: snapshotState,
       trackingEligible: Boolean(record.trackingEligible),
       up: tempSnapshotUp.clone(),
+      vehicleLabel: record.vehicleLabel ?? "",
       velocity: velocity.clone()
     };
   }
@@ -115,7 +142,7 @@ export function createRocketController({
     scalableStage.remove(r.mesh);
     rockets.splice(arrayIndex, 1);
     if (rockets.length === 0 && !standbyRocket) {
-      lastCompletedLaunchpadName = r.launchpadName ?? "";
+      lastCompletedLaunchpadName = getRocketLaunchDisplayName(r);
     }
     return true;
   }
@@ -333,6 +360,38 @@ export function createRocketController({
     return record.velocity;
   }
 
+  function getRocketFlightProfile(record) {
+    return record?.flightProfile ?? {};
+  }
+
+  function getRocketStage1AltTrigger(record) {
+    return getRocketFlightProfile(record).stage1AltTrigger ?? STAGE1_ALT_TRIGGER;
+  }
+
+  function getRocketPitchoverSeparationAngle(record) {
+    return getRocketFlightProfile(record).pitchoverSeparationAngle ?? PITCHOVER_SEP_ANGLE;
+  }
+
+  function getRocketMaxPitchAngle(record) {
+    return getRocketFlightProfile(record).maxPitchAngle ?? PITCHOVER_ANGLE;
+  }
+
+  function getRocketStage1TurnRate(record) {
+    return getRocketFlightProfile(record).stage1TurnRate ?? STAGE1_TURN_RATE;
+  }
+
+  function getRocketStage2TurnRate(record) {
+    return getRocketFlightProfile(record).stage2TurnRate ?? STAGE2_TURN_RATE;
+  }
+
+  function getRocketStage1Speed(record) {
+    return ROCKET_SPEED * (getRocketFlightProfile(record).stage1SpeedMultiplier ?? 1);
+  }
+
+  function getRocketStage2Speed(record) {
+    return STAGE2_SPEED * (getRocketFlightProfile(record).stage2SpeedMultiplier ?? 1);
+  }
+
   function captureFlightDirectionFromVelocity(record, velocityLike, fallbackDirection = record.targetFlightDir) {
     tempVelocityDirection.set(
       velocityLike?.x ?? 0,
@@ -384,12 +443,52 @@ export function createRocketController({
     return body;
   }
 
-  function getLaunchProfile(spaceportIndex) {
-    if (spaceportIndex < 0 || spaceportIndex >= SPACEPORTS.length) {
+  function getMissionProfileConfig(missionProfile = DEFAULT_MISSION_PROFILE_ID) {
+    if (missionProfile === ARTEMIS_II_MISSION_PROFILE_ID) {
+      return {
+        id: ARTEMIS_II_MISSION_PROFILE_ID,
+        launchpadName: ARTEMIS_II_SPACEPORT.name,
+        maxFlightDistance: S(2.25),
+        maxPitchAngle: Math.PI / 2 * 0.9,
+        missionLabel: "Artemis II",
+        pitchoverSeparationAngle: Math.PI / 180 * 24,
+        rocketType: "sls",
+        spaceport: ARTEMIS_II_SPACEPORT,
+        stage1AltTrigger: 0.9,
+        stage1SpeedMultiplier: 0.96,
+        stage1TurnRate: 2.1,
+        stage2SpeedMultiplier: 1.12,
+        stage2TurnRate: 1.55,
+        vehicleLabel: "SLS / Orion"
+      };
+    }
+
+    return {
+      id: DEFAULT_MISSION_PROFILE_ID,
+      launchpadName: null,
+      maxFlightDistance: S(1.5),
+      maxPitchAngle: PITCHOVER_ANGLE,
+      missionLabel: "",
+      pitchoverSeparationAngle: PITCHOVER_SEP_ANGLE,
+      rocketType: null,
+      spaceport: null,
+      stage1AltTrigger: STAGE1_ALT_TRIGGER,
+      stage1SpeedMultiplier: 1,
+      stage1TurnRate: STAGE1_TURN_RATE,
+      stage2SpeedMultiplier: 1,
+      stage2TurnRate: STAGE2_TURN_RATE,
+      vehicleLabel: ""
+    };
+  }
+
+  function getLaunchProfile(spaceportIndex, rocketType = "two-stage", missionProfile = DEFAULT_MISSION_PROFILE_ID) {
+    const mission = getMissionProfileConfig(missionProfile);
+    const missionSpaceport = mission.spaceport;
+    if (!missionSpaceport && (spaceportIndex < 0 || spaceportIndex >= SPACEPORTS.length)) {
       return null;
     }
 
-    const spaceport = SPACEPORTS[spaceportIndex];
+    const spaceport = missionSpaceport ?? SPACEPORTS[spaceportIndex];
     const startPosGeo = getProjectedPositionFromGeo(
       spaceport.lat,
       spaceport.lon,
@@ -404,17 +503,30 @@ export function createRocketController({
       .addScaledVector(localNorthDir, Math.cos(headingRad))
       .addScaledVector(localEastDir, Math.sin(headingRad))
       .normalize();
-    const maxFlightDistance = S(1.5);
+    const maxFlightDistance = mission.maxFlightDistance;
     const targetDropOffProjected = startPos.clone().addScaledVector(targetFlightDir, maxFlightDistance);
 
     return {
+      effectiveRocketType: mission.rocketType ?? rocketType,
+      flightProfile: {
+        maxPitchAngle: mission.maxPitchAngle,
+        pitchoverSeparationAngle: mission.pitchoverSeparationAngle,
+        stage1AltTrigger: mission.stage1AltTrigger,
+        stage1SpeedMultiplier: mission.stage1SpeedMultiplier,
+        stage1TurnRate: mission.stage1TurnRate,
+        stage2SpeedMultiplier: mission.stage2SpeedMultiplier,
+        stage2TurnRate: mission.stage2TurnRate
+      },
       headingRad,
       maxFlightDistance,
+      missionLabel: mission.missionLabel,
+      missionProfile: mission.id,
       spaceport,
       spaceportIndex,
       startPos,
       targetDropOffProjected,
-      targetFlightDir
+      targetFlightDir,
+      vehicleLabel: mission.vehicleLabel || (rocketType === "single" ? "Single Stage" : "2-Stage Rocket")
     };
   }
 
@@ -427,7 +539,7 @@ export function createRocketController({
   // Orientation is done via quaternion.setFromUnitVectors(UP, dir) where UP=(0,1,0).
 
   function getLaunchTowerDimensions(rocketType) {
-    if (rocketType === "two-stage") {
+    if (rocketType === "two-stage" || rocketType === "sls") {
       return {
         armHeight: S(-0.01),
         armLength: S(0.034),
@@ -756,6 +868,129 @@ export function createRocketController({
     return { group, membraneMesh, flame1, flame2, stage1Group, stage2Group, interstage };
   }
 
+  function buildSlsRocket() {
+    const group = new THREE.Group();
+    const orangeMat = new THREE.MeshBasicMaterial({ color: 0xc86e2d });
+    const darkOrangeMat = new THREE.MeshBasicMaterial({ color: 0x8c4f24 });
+    const whiteMat = new THREE.MeshBasicMaterial({ color: 0xf0f2f8 });
+    const grayMat = new THREE.MeshBasicMaterial({ color: 0x8a9098 });
+    const blackMat = new THREE.MeshBasicMaterial({ color: 0x1e2127 });
+
+    const stage1Group = new THREE.Group();
+    const stage2Group = new THREE.Group();
+    const coreHeight = S(0.098);
+    const coreRadius = S(0.0125);
+    const boosterHeight = S(0.104);
+    const boosterRadius = S(0.0055);
+    const upperStageHeight = S(0.052);
+    const upperStageRadius = S(0.0075);
+
+    const coreStage = new THREE.Mesh(
+      new THREE.CylinderGeometry(coreRadius, coreRadius * 1.08, coreHeight, 12),
+      orangeMat
+    );
+    stage1Group.add(coreStage);
+
+    const engineSection = new THREE.Mesh(
+      new THREE.CylinderGeometry(coreRadius * 1.02, coreRadius * 1.18, S(0.016), 12),
+      darkOrangeMat
+    );
+    engineSection.position.y = -(coreHeight / 2 + S(0.008));
+    stage1Group.add(engineSection);
+
+    for (const side of [-1, 1]) {
+      const booster = new THREE.Mesh(
+        new THREE.CylinderGeometry(boosterRadius, boosterRadius * 1.04, boosterHeight, 10),
+        whiteMat
+      );
+      booster.position.set(side * S(0.016), S(0.002), 0);
+      stage1Group.add(booster);
+
+      const boosterNose = new THREE.Mesh(
+        new THREE.ConeGeometry(boosterRadius * 0.94, S(0.018), 10),
+        blackMat
+      );
+      boosterNose.position.set(side * S(0.016), boosterHeight / 2 + S(0.009), 0);
+      stage1Group.add(boosterNose);
+
+      const boosterNozzle = new THREE.Mesh(
+        new THREE.CylinderGeometry(boosterRadius * 0.78, boosterRadius * 1.18, S(0.014), 10),
+        grayMat
+      );
+      boosterNozzle.position.set(side * S(0.016), -(boosterHeight / 2 + S(0.007)), 0);
+      stage1Group.add(boosterNozzle);
+    }
+
+    const flame1 = new THREE.Mesh(
+      new THREE.ConeGeometry(S(0.02), S(0.07), 12),
+      new THREE.MeshBasicMaterial({ color: 0xffa033 })
+    );
+    flame1.rotation.z = Math.PI;
+    flame1.position.y = -(coreHeight / 2 + S(0.055));
+    stage1Group.add(flame1);
+
+    const interstage = new THREE.Mesh(
+      new THREE.CylinderGeometry(coreRadius * 0.92, coreRadius * 1.08, S(0.018), 12),
+      grayMat
+    );
+    interstage.position.y = S(0.01);
+
+    const upperStage = new THREE.Mesh(
+      new THREE.CylinderGeometry(upperStageRadius, upperStageRadius * 0.96, upperStageHeight, 10),
+      whiteMat
+    );
+    stage2Group.add(upperStage);
+
+    const orionAdapter = new THREE.Mesh(
+      new THREE.CylinderGeometry(upperStageRadius * 0.72, upperStageRadius * 0.94, S(0.016), 10),
+      grayMat
+    );
+    orionAdapter.position.y = upperStageHeight / 2 + S(0.008);
+    stage2Group.add(orionAdapter);
+
+    const orionCapsule = new THREE.Mesh(
+      new THREE.ConeGeometry(upperStageRadius * 1.08, S(0.03), 10),
+      whiteMat
+    );
+    orionCapsule.position.y = upperStageHeight / 2 + S(0.028);
+    stage2Group.add(orionCapsule);
+
+    const serviceModule = new THREE.Mesh(
+      new THREE.CylinderGeometry(upperStageRadius * 0.82, upperStageRadius * 0.82, S(0.02), 10),
+      darkOrangeMat
+    );
+    serviceModule.position.y = upperStageHeight / 2 - S(0.008);
+    stage2Group.add(serviceModule);
+
+    const flame2 = new THREE.Mesh(
+      new THREE.ConeGeometry(S(0.008), S(0.04), 10),
+      new THREE.MeshBasicMaterial({ color: 0x7dc8ff })
+    );
+    flame2.rotation.z = Math.PI;
+    flame2.position.y = -(upperStageHeight / 2 + S(0.03));
+    flame2.visible = false;
+    stage2Group.add(flame2);
+
+    const membraneMesh = new THREE.Mesh(
+      new THREE.ConeGeometry(S(0.024), S(0.11), 16, 1, true),
+      new THREE.MeshBasicMaterial({
+        color: 0x88ccff, transparent: true, opacity: 0.5,
+        side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false
+      })
+    );
+    membraneMesh.position.y = upperStageHeight / 2 + S(0.07);
+    membraneMesh.visible = false;
+    stage2Group.add(membraneMesh);
+
+    stage2Group.position.y = S(0.076);
+    stage1Group.position.y = -S(0.018);
+    group.add(stage2Group);
+    group.add(interstage);
+    group.add(stage1Group);
+
+    return { group, membraneMesh, flame1, flame2, stage1Group, stage2Group, interstage };
+  }
+
   // ─── 1단 분리 (두동강) ───
   function startStageSeparation(r) {
     if (!r.stage1Group) return;
@@ -876,7 +1111,7 @@ export function createRocketController({
   }
 
   function createRocketRecord(profile, rocketType = "two-stage", parts = null) {
-    const isTwoStage = rocketType === "two-stage";
+    const isTwoStage = rocketType === "two-stage" || rocketType === "sls";
     const {
       group,
       membraneMesh,
@@ -885,7 +1120,11 @@ export function createRocketController({
       stage1Group,
       stage2Group,
       interstage
-    } = parts ?? (isTwoStage ? buildTwoStageRocket() : buildSingleStageRocket());
+    } = parts ?? (
+      rocketType === "sls"
+        ? buildSlsRocket()
+        : (isTwoStage ? buildTwoStageRocket() : buildSingleStageRocket())
+    );
 
     group.position.copy(profile.startPos);
     orientRocketForStandby(group, profile.headingRad);
@@ -894,6 +1133,7 @@ export function createRocketController({
     return {
       flame1,
       flame2,
+      flightProfile: { ...profile.flightProfile },
       headingRad: profile.headingRad,
       interstage,
       isTwoStage,
@@ -901,8 +1141,10 @@ export function createRocketController({
       maxFlightDistance: profile.maxFlightDistance,
       membraneMesh,
       mesh: group,
+      missionLabel: profile.missionLabel ?? "",
+      missionProfile: profile.missionProfile ?? DEFAULT_MISSION_PROFILE_ID,
       position: profile.startPos.clone(),
-      rocketType,
+      rocketType: profile.effectiveRocketType ?? rocketType,
       launchTower: tower.launchTower,
       towerAnimationState: tower.towerAnimationState,
       towerPieces: tower.towerPieces,
@@ -924,6 +1166,7 @@ export function createRocketController({
       targetFlightDir: profile.targetFlightDir.clone(),
       thrustDir: new THREE.Vector3(0, 1, 0),
       trackingEligible: false,
+      vehicleLabel: profile.vehicleLabel ?? "",
       velocity: new THREE.Vector3(),
       wakeTimer: 0
     };
@@ -945,8 +1188,10 @@ export function createRocketController({
       scrapeDir: record.scrapeDir?.clone?.() ?? record.targetFlightDir.clone(),
       desiredFlightDir: record.desiredFlightDir?.clone?.() ?? new THREE.Vector3(0, 1, 0),
       flightDir: record.flightDir?.clone?.() ?? new THREE.Vector3(0, 1, 0),
+      flightProfile: { ...(record.flightProfile ?? {}) },
       thrustDir: record.thrustDir?.clone?.() ?? new THREE.Vector3(0, 1, 0),
       trackingEligible: true,
+      vehicleLabel: record.vehicleLabel ?? "",
       velocity: new THREE.Vector3(0, 0, 0),
       wakeTimer: 0
     };
@@ -971,14 +1216,14 @@ export function createRocketController({
     standbyRocket = null;
   }
 
-  function enterStandby(spaceportIndex, rocketType = "two-stage") {
-    const profile = getLaunchProfile(spaceportIndex);
+  function enterStandby(spaceportIndex, rocketType = "two-stage", missionProfile = DEFAULT_MISSION_PROFILE_ID) {
+    const profile = getLaunchProfile(spaceportIndex, rocketType, missionProfile);
     if (!profile) {
       return null;
     }
 
     removeStandbyMesh();
-    standbyRocket = createRocketRecord(profile, rocketType);
+    standbyRocket = createRocketRecord(profile, profile.effectiveRocketType ?? rocketType);
     setRocketStandbyVisuals(standbyRocket);
     scalableStage.add(standbyRocket.launchTower);
     scalableStage.add(standbyRocket.mesh);
@@ -1000,13 +1245,15 @@ export function createRocketController({
     removeStandbyMesh();
   }
 
-  function launchRocketWithStandby(spaceportIndex, rocketType = "two-stage") {
+  function launchRocketWithStandby(spaceportIndex, rocketType = "two-stage", missionProfile = DEFAULT_MISSION_PROFILE_ID) {
+    const nextRocketType = getMissionProfileConfig(missionProfile).rocketType ?? rocketType;
     const shouldRestage = !standbyRocket
       || standbyRocket.spaceportIndex !== spaceportIndex
-      || standbyRocket.rocketType !== rocketType;
+      || standbyRocket.rocketType !== nextRocketType
+      || standbyRocket.missionProfile !== missionProfile;
 
     if (shouldRestage) {
-      enterStandby(spaceportIndex, rocketType);
+      enterStandby(spaceportIndex, rocketType, missionProfile);
     }
 
     return launchStandby();
@@ -1150,13 +1397,13 @@ export function createRocketController({
       ));
 
       // 연속 중력 선회: 고도에 따라 0° → 30° 포물선 기울기
-      const turnProgress = Math.min(1, altFrac1 / STAGE1_ALT_TRIGGER);
-      const pitchAngle = turnProgress * turnProgress * PITCHOVER_SEP_ANGLE;
+      const turnProgress = Math.min(1, altFrac1 / getRocketStage1AltTrigger(r));
+      const pitchAngle = turnProgress * turnProgress * getRocketPitchoverSeparationAngle(r);
       const desiredDir = computePitchProgramDirection(r.targetFlightDir, pitchAngle);
-      const steeredDir = steerFlightDirection(r, desiredDir, deltaSeconds, STAGE1_TURN_RATE);
+      const steeredDir = steerFlightDirection(r, desiredDir, deltaSeconds, getRocketStage1TurnRate(r));
       r.thrustDir.copy(steeredDir);
 
-      const climbSpeed = ROCKET_SPEED * (1.0 - LAUNCH_DRAG_FACTOR * altFrac1);
+      const climbSpeed = getRocketStage1Speed(r) * (1.0 - LAUNCH_DRAG_FACTOR * altFrac1);
       applyFlightVelocity(r, steeredDir, climbSpeed, body);
 
       const pos1 = body.translation();
@@ -1187,7 +1434,7 @@ export function createRocketController({
       } else {
         // 80% 고도(30° 기울기) 도달 → 분리
         const domeFrac1 = altFrac1;
-        if (domeFrac1 >= STAGE1_ALT_TRIGGER || r.stageTimer >= STAGE1_DURATION) {
+        if (domeFrac1 >= getRocketStage1AltTrigger(r) || r.stageTimer >= STAGE1_DURATION) {
           const cv = body.linvel();
           captureFlightDirectionFromVelocity(r, cv, r.thrustDir);
           r.stage1ExitDir = r.flightDir.clone();
@@ -1243,7 +1490,8 @@ export function createRocketController({
       const stage2Progress = Math.min(1, Math.max(0,
         (r.position.y - s2Base.y) / Math.max(0.001, domeY2 - s2Base.y)
       ));
-      const stage2Angle = PITCHOVER_SEP_ANGLE + stage2Progress * stage2Progress * (PITCHOVER_ANGLE - PITCHOVER_SEP_ANGLE);
+      const stage2Angle = getRocketPitchoverSeparationAngle(r)
+        + stage2Progress * stage2Progress * (getRocketMaxPitchAngle(r) - getRocketPitchoverSeparationAngle(r));
       const desiredDir = computePitchProgramDirection(r.targetFlightDir, stage2Angle);
 
       if (r.stageTimer <= deltaSeconds) {
@@ -1252,15 +1500,15 @@ export function createRocketController({
         r.thrustDir.copy(r.flightDir);
       }
 
-      const steeredDir = steerFlightDirection(r, desiredDir, deltaSeconds, STAGE2_TURN_RATE);
+      const steeredDir = steerFlightDirection(r, desiredDir, deltaSeconds, getRocketStage2TurnRate(r));
       r.thrustDir.copy(steeredDir);
 
       // 점진적 가속: 분리 속도 → STAGE2_SPEED (0.8초에 걸쳐 ramp up)
       const rampT = Math.min(1.0, r.stageTimer / 0.8);
       const entrySpd = r.sepVel
         ? Math.hypot(r.sepVel.x, r.sepVel.y, r.sepVel.z)
-        : ROCKET_SPEED;
-      const rampSpeed = entrySpd + (STAGE2_SPEED - entrySpd) * rampT;
+        : getRocketStage1Speed(r);
+      const rampSpeed = entrySpd + (getRocketStage2Speed(r) - entrySpd) * rampT;
 
       applyFlightVelocity(r, steeredDir, rampSpeed, body);
 
@@ -1306,13 +1554,13 @@ export function createRocketController({
       const altFrac  = Math.min(1.0, Math.max(0,
         (r.position.y - r.startPos.y) / Math.max(0.001, domeTopY - r.startPos.y)
       ));
-      const turnProgress = Math.min(1, altFrac / STAGE1_ALT_TRIGGER);
-      const pitchAngle = turnProgress * turnProgress * PITCHOVER_SEP_ANGLE;
+      const turnProgress = Math.min(1, altFrac / getRocketStage1AltTrigger(r));
+      const pitchAngle = turnProgress * turnProgress * getRocketPitchoverSeparationAngle(r);
       const desiredDir = computePitchProgramDirection(r.targetFlightDir, pitchAngle);
-      const steeredDir = steerFlightDirection(r, desiredDir, deltaSeconds, LAUNCH_TURN_RATE);
+      const steeredDir = steerFlightDirection(r, desiredDir, deltaSeconds, getRocketStage1TurnRate(r));
       r.thrustDir.copy(steeredDir);
 
-      const launchSpeed = ROCKET_SPEED * (1.0 - LAUNCH_DRAG_FACTOR * altFrac);
+      const launchSpeed = getRocketStage1Speed(r) * (1.0 - LAUNCH_DRAG_FACTOR * altFrac);
       applyFlightVelocity(r, steeredDir, launchSpeed, body);
 
       const pos = body.translation();
@@ -1481,13 +1729,13 @@ export function createRocketController({
       ));
 
       // 연속 중력 선회: 고도에 따라 0° → 30° 포물선 기울기
-      const fbTurnP = Math.min(1, fbAlt1 / STAGE1_ALT_TRIGGER);
-      const fbPitchA = fbTurnP * fbTurnP * PITCHOVER_SEP_ANGLE;
+      const fbTurnP = Math.min(1, fbAlt1 / getRocketStage1AltTrigger(r));
+      const fbPitchA = fbTurnP * fbTurnP * getRocketPitchoverSeparationAngle(r);
       const desiredDir = computePitchProgramDirection(r.targetFlightDir, fbPitchA);
-      const steeredDir = steerFlightDirection(r, desiredDir, deltaSeconds, STAGE1_TURN_RATE);
+      const steeredDir = steerFlightDirection(r, desiredDir, deltaSeconds, getRocketStage1TurnRate(r));
       r.thrustDir.copy(steeredDir);
 
-      const fbClimb = ROCKET_SPEED * (1.0 - LAUNCH_DRAG_FACTOR * fbAlt1);
+      const fbClimb = getRocketStage1Speed(r) * (1.0 - LAUNCH_DRAG_FACTOR * fbAlt1);
       applyFlightVelocity(r, steeredDir, fbClimb);
       r.position.addScaledVector(r.velocity, deltaSeconds);
 
@@ -1511,7 +1759,7 @@ export function createRocketController({
         startStageSeparation(r);
       } else {
         const fbDomeFrac = fbAlt1;
-        if (fbDomeFrac >= STAGE1_ALT_TRIGGER || r.stageTimer >= STAGE1_DURATION) {
+        if (fbDomeFrac >= getRocketStage1AltTrigger(r) || r.stageTimer >= STAGE1_DURATION) {
           captureFlightDirectionFromVelocity(r, r.velocity, r.thrustDir);
           r.stage1ExitDir = r.flightDir.clone();
           r.pitchoverDir = r.flightDir.clone();
@@ -1549,7 +1797,8 @@ export function createRocketController({
       const fbS2Progress = Math.min(1, Math.max(0,
         (r.position.y - fbS2Base.y) / Math.max(0.001, fbDomeH2 - fbS2Base.y)
       ));
-      const fbS2Angle = PITCHOVER_SEP_ANGLE + fbS2Progress * fbS2Progress * (PITCHOVER_ANGLE - PITCHOVER_SEP_ANGLE);
+      const fbS2Angle = getRocketPitchoverSeparationAngle(r)
+        + fbS2Progress * fbS2Progress * (getRocketMaxPitchAngle(r) - getRocketPitchoverSeparationAngle(r));
       const desiredDir = computePitchProgramDirection(r.targetFlightDir, fbS2Angle);
 
       if (r.stageTimer <= deltaSeconds) {
@@ -1558,14 +1807,14 @@ export function createRocketController({
         r.thrustDir.copy(r.flightDir);
       }
 
-      const steeredDir = steerFlightDirection(r, desiredDir, deltaSeconds, STAGE2_TURN_RATE);
+      const steeredDir = steerFlightDirection(r, desiredDir, deltaSeconds, getRocketStage2TurnRate(r));
       r.thrustDir.copy(steeredDir);
 
       const fbRampT = Math.min(1.0, r.stageTimer / 0.8);
       const fbEntrySpd = r.sepVel
         ? Math.hypot(r.sepVel.x, r.sepVel.y, r.sepVel.z)
-        : ROCKET_SPEED;
-      const fbRampSpeed = fbEntrySpd + (STAGE2_SPEED - fbEntrySpd) * fbRampT;
+        : getRocketStage1Speed(r);
+      const fbRampSpeed = fbEntrySpd + (getRocketStage2Speed(r) - fbEntrySpd) * fbRampT;
       applyFlightVelocity(r, steeredDir, fbRampSpeed);
       r.position.addScaledVector(r.velocity, deltaSeconds);
 
@@ -1600,13 +1849,13 @@ export function createRocketController({
       const fbAltFrac = Math.min(1.0, Math.max(0,
         (r.position.y - r.startPos.y) / Math.max(0.001, fbDomeH - r.startPos.y)
       ));
-      const fbTurnP = Math.min(1, fbAltFrac / STAGE1_ALT_TRIGGER);
-      const fbPitchA = fbTurnP * fbTurnP * PITCHOVER_SEP_ANGLE;
+      const fbTurnP = Math.min(1, fbAltFrac / getRocketStage1AltTrigger(r));
+      const fbPitchA = fbTurnP * fbTurnP * getRocketPitchoverSeparationAngle(r);
       const desiredDir = computePitchProgramDirection(r.targetFlightDir, fbPitchA);
-      const steeredDir = steerFlightDirection(r, desiredDir, deltaSeconds, LAUNCH_TURN_RATE);
+      const steeredDir = steerFlightDirection(r, desiredDir, deltaSeconds, getRocketStage1TurnRate(r));
       r.thrustDir.copy(steeredDir);
 
-      const fbSpeed = ROCKET_SPEED * (1.0 - LAUNCH_DRAG_FACTOR * fbAltFrac);
+      const fbSpeed = getRocketStage1Speed(r) * (1.0 - LAUNCH_DRAG_FACTOR * fbAltFrac);
       applyFlightVelocity(r, steeredDir, fbSpeed);
       r.position.addScaledVector(r.velocity, deltaSeconds);
       r.mesh.quaternion.slerp(
@@ -1734,12 +1983,15 @@ export function createRocketController({
     return {
       debrisCount: debris.length,
       launchpadName: r.launchpadName ?? "",
+      missionLabel: r.missionLabel ?? "",
+      missionProfile: r.missionProfile ?? DEFAULT_MISSION_PROFILE_ID,
       state:     r.state,
       isTwoStage: r.isTwoStage,
       altitude:  altPct.toFixed(1),          // % of dome height
       speed:     (speed * 1000).toFixed(1),  // scaled for readability
       stageTimer: (r.stageTimer ?? 0).toFixed(1),
       scrapeTimer: (r.scrapeTimer ?? 0).toFixed(1),
+      vehicleLabel: r.vehicleLabel ?? ""
     };
   }
 

@@ -35,6 +35,28 @@ function createAirportLabel(airport) {
   return `${airport.iata} / ${airport.icao} | ${airport.city}`;
 }
 
+function createRouteNodeLabel(node) {
+  if (!node) {
+    return "-";
+  }
+
+  if (node.label) {
+    return node.label;
+  }
+
+  const codes = [node.iata, node.icao].filter(Boolean).join(" / ");
+  if (codes && node.city) {
+    return `${codes} | ${node.city}`;
+  }
+  if (codes) {
+    return codes;
+  }
+  if (node.name && node.city) {
+    return `${node.name} | ${node.city}`;
+  }
+  return node.name ?? node.city ?? "-";
+}
+
 function createAircraftModel(scaleDimension) {
   const aircraft = new THREE.Group();
   const material = new THREE.MeshStandardMaterial({
@@ -206,8 +228,8 @@ export function createRouteSimulationController({ constants, i18n, scalableStage
     ui.routeResetButton.disabled = disabled;
   }
 
-  function resolveCountryName(countryCode) {
-    return routeLibrary.countryByCode.get(countryCode)?.name ?? countryCode;
+  function resolveCountryName(countryCode, fallbackName = null) {
+    return routeLibrary.countryByCode.get(countryCode)?.name ?? fallbackName ?? countryCode ?? "-";
   }
 
   function resolveRoute(route) {
@@ -215,8 +237,8 @@ export function createRouteSimulationController({ constants, i18n, scalableStage
       return null;
     }
 
-    const origin = routeLibrary.airportByCode.get(route.originIcao);
-    const destination = routeLibrary.airportByCode.get(route.destinationIcao);
+    const origin = route.origin ?? routeLibrary.airportByCode.get(route.originIcao);
+    const destination = route.destination ?? routeLibrary.airportByCode.get(route.destinationIcao);
     const aircraftType = routeLibrary.aircraftTypeByCode.get(route.aircraftTypeCode);
 
     if (!origin || !destination) {
@@ -227,13 +249,37 @@ export function createRouteSimulationController({ constants, i18n, scalableStage
       ...route,
       aircraftType,
       destination,
-      destinationCountryName: resolveCountryName(destination.countryCode),
+      destinationCountryName: resolveCountryName(destination.countryCode, destination.countryName ?? destination.city),
       origin,
-      originCountryName: resolveCountryName(origin.countryCode)
+      originCountryName: resolveCountryName(origin.countryCode, origin.countryName ?? origin.city)
     };
   }
 
+  function createCurvePoint(node) {
+    const altitudeOffset = Number.isFinite(node?.altitude)
+      ? scaleDimension(node.altitude)
+      : routeAltitudeBase + (routeAltitudeScale * Math.max(0, Number(node?.altitudeFactor) || 0));
+    const point = getProjectedPositionFromGeo(
+      node.latitude,
+      node.longitude,
+      constants.DISC_RADIUS,
+      constants.SURFACE_Y + routeSurfaceOffset + altitudeOffset
+    );
+
+    return new THREE.Vector3(point.x, point.y, point.z);
+  }
+
   function createCurveForRoute(route) {
+    if (Array.isArray(route.waypoints) && route.waypoints.length > 0) {
+      const pathNodes = [route.origin, ...route.waypoints, route.destination]
+        .filter((node) => Number.isFinite(node?.latitude) && Number.isFinite(node?.longitude))
+        .map((node) => createCurvePoint(node));
+
+      if (pathNodes.length >= 3) {
+        return new THREE.CatmullRomCurve3(pathNodes, false, "centripetal", 0.42);
+      }
+    }
+
     const startData = getProjectedPositionFromGeo(
       route.origin.latitude,
       route.origin.longitude,
@@ -323,18 +369,24 @@ export function createRouteSimulationController({ constants, i18n, scalableStage
       elapsed: formatDurationHours(elapsedHours, i18n),
       remaining: formatDurationHours(remainingHours, i18n)
     });
-    const aircraftLabel = route.aircraftType
-      ? `${route.aircraftType.name} (${route.aircraftType.icaoCode})`
-      : route.aircraftTypeCode;
+    const aircraftLabel = route.vehicleLabel ?? (
+      route.aircraftType
+        ? `${route.aircraftType.name} (${route.aircraftType.icaoCode})`
+        : (route.aircraftTypeCode ?? "-")
+    );
+    const originLabel = createRouteNodeLabel(route.origin);
+    const destinationLabel = createRouteNodeLabel(route.destination);
+    const originCode = route.origin.iata ?? route.origin.icao ?? route.origin.code ?? route.origin.name ?? "?";
+    const destinationCode = route.destination.iata ?? route.destination.icao ?? route.destination.code ?? route.destination.name ?? "?";
 
     ui.routeSummaryEl.textContent = i18n.t("routeSummaryActiveText", {
-      origin: createAirportLabel(route.origin),
-      destination: createAirportLabel(route.destination),
+      origin: originLabel,
+      destination: destinationLabel,
       duration: formatDurationHours(route.durationHours, i18n)
     });
-    ui.routeLegEl.textContent = `${route.origin.iata} -> ${route.destination.iata}`;
-    ui.routeOriginEl.textContent = createAirportLabel(route.origin);
-    ui.routeDestinationEl.textContent = createAirportLabel(route.destination);
+    ui.routeLegEl.textContent = `${originCode} -> ${destinationCode}`;
+    ui.routeOriginEl.textContent = originLabel;
+    ui.routeDestinationEl.textContent = destinationLabel;
     ui.routeCountriesEl.textContent = i18n.t("routeCountriesValue", {
       originCountry: route.originCountryName,
       destinationCountry: route.destinationCountryName
@@ -359,7 +411,7 @@ export function createRouteSimulationController({ constants, i18n, scalableStage
 
       const option = document.createElement("option");
       option.value = route.id;
-      option.textContent = `${resolvedRoute.origin.iata}-${resolvedRoute.destination.iata} | ${route.aircraftTypeCode}`;
+      option.textContent = route.optionLabel ?? `${resolvedRoute.origin.iata ?? resolvedRoute.origin.code ?? resolvedRoute.origin.name}-${resolvedRoute.destination.iata ?? resolvedRoute.destination.code ?? resolvedRoute.destination.name} | ${route.vehicleLabel ?? route.aircraftTypeCode ?? route.id}`;
       ui.routeSelectEl.append(option);
     }
   }

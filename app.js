@@ -342,6 +342,7 @@ const hudSideCardEl = document.getElementById("hud-side-card");
 const hudSideCardTitleEl = document.getElementById("hud-side-card-title");
 const hudSideCardSlotEl = document.getElementById("hud-side-card-slot");
 const rocketSpaceportSelect = document.getElementById("rocket-spaceport-select");
+const rocketMissionProfileSelect = document.getElementById("rocket-mission-profile-select");
 const rocketTypeSelect      = document.getElementById("rocket-type-select");
 const rocketStandbyBtn      = document.getElementById("rocket-standby-btn");
 const rocketLaunchBtn       = document.getElementById("rocket-launch-btn");
@@ -1654,6 +1655,7 @@ const ui = {
   walkerModeEl,
   walkerSummaryEl,
   rocketSpaceportSelect,
+  rocketMissionProfileSelect,
   rocketTypeSelect,
   rocketStandbyBtn,
   rocketCameraSummaryEl,
@@ -2038,12 +2040,16 @@ function getRocketTrackingSummary(snapshot) {
     return copy.idle;
   }
 
+  const launchLabel = snapshot.missionLabel
+    ? `${snapshot.missionLabel} · ${snapshot.launchpadName ?? ""}`
+    : (snapshot.launchpadName ?? "");
+
   if (snapshot.state === "STANDBY") {
-    return copy.standby.replace("{launchpad}", snapshot.launchpadName ?? "");
+    return copy.standby.replace("{launchpad}", launchLabel);
   }
 
   return copy.tracking
-    .replace("{launchpad}", snapshot.launchpadName ?? "")
+    .replace("{launchpad}", launchLabel)
     .replace("{stage}", getRocketStateLabel(snapshot.state));
 }
 
@@ -2124,7 +2130,7 @@ function syncRocketCameraAndUi() {
 
   if (snapshot) {
     const summaryText = getRocketTrackingSummary(snapshot);
-    const profileKey = `${snapshot.state}:${snapshot.spaceportIndex ?? "none"}:${snapshot.rocketType ?? "default"}`;
+    const profileKey = `${snapshot.state}:${snapshot.spaceportIndex ?? "none"}:${snapshot.rocketType ?? "default"}:${snapshot.missionProfile ?? "default"}`;
     celestialTrackingCameraApi.setTrackedCustomTargetResolver(
       () => {
         const latestActive = rocketApi.getActiveRocketSnapshot();
@@ -2700,6 +2706,8 @@ function animate() {
     const tel = rocketApi.getTelemetry();
     if (!tel) { panel.style.display = "none"; return; }
     panel.style.display = "";
+    document.getElementById("tel-mission").textContent = tel.missionLabel ?? "-";
+    document.getElementById("tel-vehicle").textContent = tel.vehicleLabel ?? "-";
     document.getElementById("tel-state").textContent = getRocketStateLabel(tel.state);
     document.getElementById("tel-alt").textContent = `${tel.altitude}%`;
     document.getElementById("tel-speed").textContent = `${tel.speed} u/s`;
