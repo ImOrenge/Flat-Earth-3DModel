@@ -1944,6 +1944,7 @@ const ROCKET_CAMERA_COPY = {
     standbyButton: "Stage Standby",
     states: {
       FALL: "Fall",
+      IGNITION: "Engine Ignition",
       LAUNCH: "Launch",
       PITCHOVER: "Pitchover",
       SCRAPE: "Dome Scrape",
@@ -1961,6 +1962,7 @@ const ROCKET_CAMERA_COPY = {
     standbyButton: "스탠바이 배치",
     states: {
       FALL: "낙하",
+      IGNITION: "\uc810\ud654 \uc608\uc5f4",
       LAUNCH: "발사",
       PITCHOVER: "자세 전환",
       SCRAPE: "궁창 접촉",
@@ -2064,6 +2066,12 @@ function getRocketTrackingProfile(snapshot) {
         elevation: 0.16
       };
     }
+    case "IGNITION":
+      return {
+        azimuth: getRocketFrontViewAzimuth(snapshot),
+        distance: constants.CAMERA_TRACKING_MIN_DISTANCE * 1.04,
+        elevation: 0.14
+      };
     case "STAGE1":
     case "LAUNCH": {
       const frontProfile = {
@@ -2128,6 +2136,11 @@ function syncRocketCameraAndUi() {
 
   if (rocketStandbyBtn) {
     rocketStandbyBtn.textContent = copy.standbyButton;
+    rocketStandbyBtn.disabled = activeSnapshot?.state === "IGNITION";
+  }
+
+  if (rocketLaunchBtn) {
+    rocketLaunchBtn.disabled = activeSnapshot?.state === "IGNITION";
   }
 
   if (snapshot) {
