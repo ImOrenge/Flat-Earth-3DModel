@@ -1433,6 +1433,7 @@ const {
   createSunRayMesh,
   createOrbitTrack,
   orbitGuideGroups,
+  domeWaterApi,
   setEarthModelView
 } = setupScene({ canvas });
 
@@ -1919,7 +1920,8 @@ celestialTrackingCameraApi = createCelestialTrackingCameraController({
 
 const rocketApi = createRocketController({
   scalableStage,
-  constants
+  constants,
+  domeWaterApi
 });
 
 const rocketCameraUiState = {
@@ -2681,12 +2683,8 @@ function animate() {
   zodiacWheelApi.setSuppressed(walkerState.enabled);
   constellationTabApi.refreshDynamicState();
 
-  const isFreeTopViewPresentation = !walkerState.enabled &&
-    cameraState.mode === "free" &&
-    cameraState.phi <= 0.5 &&
-    cameraState.radius >= (constants.CAMERA_TOPDOWN_FULL_RADIUS * 0.72);
-  dome.visible = !isFreeTopViewPresentation;
-  domeRing.visible = !isFreeTopViewPresentation;
+  dome.visible = true;
+  domeRing.visible = true;
 
   walkerApi.updateWalkerMovement(deltaSeconds);
   walkerApi.updateWalkerAvatar();
@@ -2716,6 +2714,7 @@ function animate() {
   syncPreparationPresentation();
   celestialTrackingCameraApi.update();
   cameraApi.updateCamera();
+  domeWaterApi.update(deltaSeconds, camera.position);
   if (snapshot) {
     if (!walkerState.enabled) {
       resetDarkSunOcclusionMotion(darkSunOcclusionState.orbit);
