@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ko">
   
 <head>
@@ -28,21 +28,21 @@
   </style>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Flat Earth Disc 3D Model</title>
-  <meta name="description" content="Interactive Flat Earth disc viewer with celestial motion, eclipse, moon phase, and constellation controls.">
+  <title>Globe Earth 3D Model</title>
+  <meta name="description" content="Interactive globe-earth viewer with astronomy, routes, constellations, and rocket controls in a separated runtime.">
   <meta property="og:type" content="website">
-  <meta property="og:title" content="Flat Earth Disc 3D Model">
-  <meta property="og:description" content="Interactive Flat Earth disc viewer with celestial motion, eclipse, moon phase, and constellation controls.">
+  <meta property="og:title" content="Globe Earth 3D Model">
+  <meta property="og:description" content="Interactive globe-earth viewer with astronomy, routes, constellations, and rocket controls in a separated runtime.">
   <meta property="og:image" content="https://flatearth-model.com/assets/social-preview.png">
   <meta property="og:image:type" content="image/png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="Stylized preview card for the Flat Earth Disc 3D model">
+  <meta property="og:image:alt" content="Stylized preview card for the Globe Earth 3D model">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Flat Earth Disc 3D Model">
-  <meta name="twitter:description" content="Interactive Flat Earth disc viewer with celestial motion, eclipse, moon phase, and constellation controls.">
+  <meta name="twitter:title" content="Globe Earth 3D Model">
+  <meta name="twitter:description" content="Interactive globe-earth viewer with astronomy, routes, constellations, and rocket controls in a separated runtime.">
   <meta name="twitter:image" content="/assets/social-preview.png">
-  <meta name="twitter:image:alt" content="Stylized preview card for the Flat Earth Disc 3D model">
+  <meta name="twitter:image:alt" content="Stylized preview card for the Globe Earth 3D model">
   <link rel="icon" href="data:,">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -92,7 +92,7 @@
           <div class="topbar-brand-head">
             <div class="topbar-brand-copy">
               <p class="eyebrow topbar-eyebrow" data-i18n="summaryEyebrow">3D MODEL</p>
-              <strong class="topbar-title" data-i18n="summaryTitle">Flat Earth Disc</strong>
+              <strong class="topbar-title" data-i18n="summaryTitle">Globe Earth</strong>
             </div>
             <div class="topbar-brand-settings-slot" id="topbar-brand-settings-slot"></div>
           </div>
@@ -123,8 +123,8 @@
       <div class="topbar-right">
         <div class="topbar-quick-slot" id="topbar-quick-slot"></div>
         <div class="app-switch" aria-label="App switcher">
-          <a class="app-switch-link active" href="./index.html" aria-current="page">Flat</a>
-          <a class="app-switch-link" href="./globe/index.html">Globe</a>
+          <a class="app-switch-link" href="../index.html">Flat</a>
+          <a class="app-switch-link active" href="./index.html" aria-current="page">Globe</a>
         </div>
         <div class="topbar-persistent-actions">
           <div class="topbar-layout-slot" id="topbar-layout-home">
@@ -185,7 +185,7 @@
                   <div class="settings-privacy-actions">
                     <a
                       class="button secondary compact-button settings-privacy-button"
-                      href="./privacy.html"
+                      href="../privacy.html"
                       target="_blank"
                       rel="noopener noreferrer"
                       data-i18n="privacyPolicyButton"
@@ -222,16 +222,15 @@
           <section class="help-section help-section-wide">
             <h3 data-i18n="helpOverviewTitle">Overview</h3>
             <p data-i18n="helpOverviewCopy">
-              This viewer combines astronomy, route replay, constellation reference, and rocket simulation on a flat-earth disc scene.
+              This viewer runs the separated globe-earth runtime with astronomy, routes, constellations, and rocket simulation in one place.
             </p>
             <p class="panel-copy" data-i18n-html="summaryCopy">
-              Bundled default map: <code>assets/flat-earth-map-square.svg</code>. For a custom model source, replace
-              <code>assets/flat-earth-map.png</code> and reload the scene to refresh the preview.
+              Bundled globe texture: <code>../assets/nasa-blue-marble-5400x2700.jpg</code>. Edit <code>globe/modules/*</code> to develop the detached globe runtime without touching the flat app.
             </p>
             <ol class="steps help-steps">
-              <li data-i18n-html="stepGenerateMesh">Generate the mesh with <code>scripts/generate-flat-earth-obj.ps1</code>.</li>
-              <li data-i18n-html="stepOpenObj">Open <code>models/flat-earth-disc.obj</code> in Blender or another DCC tool.</li>
-              <li data-i18n-html="stepSwapTexture">Replace <code>assets/flat-earth-map.png</code> and rerun the mesh script when you need a new model texture.</li>
+              <li data-i18n-html="stepGenerateMesh">Boot the detached globe viewer directly from <code>globe/index.html</code>.</li>
+              <li data-i18n-html="stepOpenObj">Implement globe scene and UI logic under <code>globe/modules/*</code>.</li>
+              <li data-i18n-html="stepSwapTexture">Reuse shared assets from <code>../assets/*</code> while keeping runtime code isolated.</li>
             </ol>
           </section>
           <section class="help-section">
@@ -286,10 +285,9 @@
     <div class="panel-layout">
       <aside class="control-panel summary-panel">
         <p class="eyebrow" data-i18n="summaryEyebrow">3D MODEL</p>
-        <h1 data-i18n="summaryTitle">Flat Earth Disc</h1>
+        <h1 data-i18n="summaryTitle">Globe Earth</h1>
         <p class="panel-copy" data-i18n-html="summaryCopy">
-          Bundled default map: <code>assets/flat-earth-map-square.svg</code>. For a custom model source, replace
-          <code>assets/flat-earth-map.png</code> and reload the scene to refresh the preview.
+          Bundled globe texture: <code>../assets/nasa-blue-marble-5400x2700.jpg</code>. Edit <code>globe/modules/*</code> to develop the detached globe runtime without touching the flat app.
         </p>
 
         <div class="summary-utility-slot" id="summary-utility-slot">
@@ -346,17 +344,17 @@
         </div>
 
         <ol class="steps" id="summary-steps">
-          <li data-i18n-html="stepGenerateMesh">Generate the mesh with <code>scripts/generate-flat-earth-obj.ps1</code>.</li>
-          <li data-i18n-html="stepOpenObj">Open <code>models/flat-earth-disc.obj</code> in Blender or another DCC tool.</li>
-          <li data-i18n-html="stepSwapTexture">Replace <code>assets/flat-earth-map.png</code> and rerun the mesh script when you need a new model texture.</li>
+          <li data-i18n-html="stepGenerateMesh">Boot the detached globe viewer directly from <code>globe/index.html</code>.</li>
+          <li data-i18n-html="stepOpenObj">Implement globe scene and UI logic under <code>globe/modules/*</code>.</li>
+          <li data-i18n-html="stepSwapTexture">Reuse shared assets from <code>../assets/*</code> while keeping runtime code isolated.</li>
         </ol>
 
         <p class="hint" id="status" data-i18n="statusLoadingBundledMap">Loading the bundled default map.</p>
       </aside>
 
       <div class="detail-panel-shell">
-        <button class="detail-panel-collapse-btn" id="detail-panel-collapse" type="button" aria-label="패널 접기" title="패널 접기">
-          <span class="detail-panel-collapse-icon" aria-hidden="true">▼</span>
+        <button class="detail-panel-collapse-btn" id="detail-panel-collapse" type="button" aria-label="?占쎈꼸 ?占쎄린" title="?占쎈꼸 ?占쎄린">
+          <span class="detail-panel-collapse-icon" aria-hidden="true">??/span>
         </button>
       <aside class="control-panel detail-panel">
         <p class="eyebrow" data-i18n="detailEyebrow">DETAIL CONTROLS</p>
@@ -365,20 +363,21 @@
             <button class="panel-tab active" data-control-tab="astronomy" type="button" data-i18n="tabAstronomy">Astronomy</button>
             <button class="panel-tab" data-control-tab="routes" type="button" data-i18n="tabRoutes">Route Control</button>
             <button class="panel-tab" data-control-tab="constellations" type="button" data-i18n="tabConstellations">Constellations</button>
-            <button class="panel-tab" data-control-tab="comparison" type="button" data-i18n="tabComparison">Model Compare</button>
-            <button class="panel-tab" data-control-tab="rockets" type="button" data-i18n="tabRockets">Rockets</button>
+                        <button class="panel-tab" data-control-tab="rockets" type="button" data-i18n="tabRockets">Rockets</button>
           </div>
         </div>
 
         <div class="panel-tab-content active" data-control-panel="astronomy">
-            <div class="hud-subtabs" data-hud-panel-tabs="astronomy">
-              <button class="hud-subtab active" data-hud-panel-tab="time" type="button"><span class="subtab-icon" aria-hidden="true">◷</span><span data-i18n="hudAstronomySectionTime">Time</span></button>
-              <button class="hud-subtab" data-hud-panel-tab="eclipse" type="button"><span class="subtab-icon" aria-hidden="true">◑</span><span data-i18n="hudAstronomySectionEclipse">Eclipse</span></button>
-              <button class="hud-subtab" data-hud-panel-tab="walker" type="button"><span class="subtab-icon" aria-hidden="true">⊙</span><span data-i18n="hudAstronomySectionWalker">Walker</span></button>
-              <button class="hud-subtab" data-hud-panel-tab="seasonal" type="button"><span class="subtab-icon" aria-hidden="true">✦</span><span data-i18n="hudAstronomySectionSeason">Season</span></button>
-              <button class="hud-subtab" data-hud-panel-tab="orbit" type="button"><span class="subtab-icon" aria-hidden="true">◎</span><span data-i18n="hudAstronomySectionOrbit">Orbit</span></button>
-            </div>
-          <section class="sync-panel hud-subpanel active" data-hud-panel-section="time">
+          <div class="hud-subtabs" data-hud-panel-tabs="astronomy">
+            <button class="hud-subtab active" data-hud-panel-tab="system" type="button"><span class="subtab-icon" aria-hidden="true">S</span><span data-i18n="hudAstronomySectionSystem">System</span></button>
+            <button class="hud-subtab" data-hud-panel-tab="sun" type="button"><span class="subtab-icon" aria-hidden="true">S</span><span data-i18n="hudAstronomySectionSun">Sun</span></button>
+            <button class="hud-subtab" data-hud-panel-tab="moon" type="button"><span class="subtab-icon" aria-hidden="true">M</span><span data-i18n="hudAstronomySectionMoon">Moon</span></button>
+            <button class="hud-subtab" data-hud-panel-tab="eclipse" type="button"><span class="subtab-icon" aria-hidden="true">E</span><span data-i18n="hudAstronomySectionEclipse">Eclipse</span></button>
+            <button class="hud-subtab" data-hud-panel-tab="observer" type="button"><span class="subtab-icon" aria-hidden="true">O</span><span data-i18n="hudAstronomySectionObserver">Observer</span></button>
+          </div>
+
+          <section class="sync-panel hud-subpanel active" data-hud-panel-section="system">
+            <p class="orbit-title" data-i18n="astronomySystemTitle">System State</p>
             <div class="hud-split-cols">
               <div class="hud-split-col">
                 <div class="sync-row">
@@ -414,63 +413,177 @@
               </div>
               <div class="hud-split-col">
                 <p class="sync-copy" id="time-summary">Syncing to the current local time.</p>
+                <p class="sync-copy subtle" id="day-night-summary" hidden>Night side overlay is active.</p>
+                <p class="sync-copy subtle" id="analemma-summary" hidden>
+                  Ground projection samples one sun position per day for the current local clock time.
+                </p>
+                <p class="sync-copy subtle" id="magnetic-field-summary" hidden>
+                  Magnetic field lines keep a toroidal donut opening at the center while pinecone-like spiral scales sweep across the torus surface.
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <section class="orbit-panel celestial-motion-panel hud-subpanel" data-hud-panel-section="system">
+            <p class="orbit-title" data-i18n="celestialMotionTitle">Celestial Motion</p>
+            <label class="field" for="celestial-trail-length">
+              <span class="field-label" data-i18n="celestialTrailLengthLabel">Trail Length</span>
+              <input class="slider-input" id="celestial-trail-length" type="range" min="0" max="100" step="5" value="100">
+            </label>
+            <div class="sync-row celestial-value-row">
+              <span class="sync-title" data-i18n="celestialTrailLengthValueTitle">Current Trail</span>
+              <strong class="route-speed-value" id="celestial-trail-length-value">100%</strong>
+            </div>
+            <label class="field" for="celestial-speed">
+              <span class="field-label" data-i18n="celestialSpeedLabel">Accelerated Reality Speed</span>
+              <input class="slider-input" id="celestial-speed" type="range" min="0" max="60" step="0.1" value="1">
+            </label>
+            <div class="sync-row celestial-value-row">
+              <span class="sync-title" data-i18n="celestialSpeedValueTitle">Time Scale</span>
+              <strong class="route-speed-value" id="celestial-speed-value">1x</strong>
+            </div>
+            <div class="sync-row celestial-value-row">
+              <span class="sync-title" data-i18n="celestialSpeedPresetTitle">Speed Presets</span>
+            </div>
+            <div class="orbit-mode-grid celestial-speed-presets" role="group" aria-label="Speed presets">
+              <button class="orbit-mode" data-celestial-speed-preset="0" type="button">0x</button>
+              <button class="orbit-mode active" data-celestial-speed-preset="1" type="button">1x</button>
+              <button class="orbit-mode" data-celestial-speed-preset="5" type="button">5x</button>
+              <button class="orbit-mode" data-celestial-speed-preset="60" type="button">60x</button>
+            </div>
+            <div class="sync-row overlay-row">
+              <span class="sync-title" data-i18n="celestialFullTrailTitle">Full Orbit Path</span>
+              <label class="toggle">
+                <input id="celestial-full-trail" type="checkbox" role="switch" checked>
+                <span class="toggle-switch" aria-hidden="true"></span>
+                <span class="toggle-text" data-i18n="celestialFullTrailToggle">Show</span>
+              </label>
+            </div>
+            <p class="sync-copy subtle" id="celestial-motion-summary">
+              Accelerated reality mode advances celestial time from the chosen anchor while using the same orbit path as reality sync.
+            </p>
+          </section>
+
+          <section class="orbit-panel hud-subpanel" data-hud-panel-section="system">
+            <p class="orbit-title" data-i18n="celestialTrackingTitle">Camera Mode</p>
+            <div class="track-mode-grid">
+              <button class="orbit-mode active" data-camera-track="off" type="button" data-i18n="trackCameraOff">Free Camera</button>
+              <button class="orbit-mode" data-camera-track="sun" type="button" data-i18n="trackCameraSun">Track Sun</button>
+              <button class="orbit-mode" data-camera-track="moon" type="button" data-i18n="trackCameraMoon">Track Moon</button>
+            </div>
+            <p class="orbit-copy" id="camera-track-summary">
+              Free camera mode. Drag to orbit around the globe and zoom independently.
+            </p>
+          </section>
+
+          <section class="orbit-panel hud-subpanel" data-hud-panel-section="sun">
+            <p class="orbit-title" data-i18n="astronomySunTitle">Sun Reference</p>
+            <div class="coord-grid">
+              <div class="coord-card">
+                <span class="coord-label" data-i18n="coordSun">Sun</span>
+                <strong class="coord-value" id="sun-coordinates">0.00degN / 0.00degE</strong>
+              </div>
+            </div>
+            <p class="orbit-copy" id="orbit-label">Reality-linked subsolar point is active.</p>
+            <div class="seasonal-sun-grid" id="seasonal-sun-grid"></div>
+            <p class="sync-copy subtle" id="seasonal-sun-summary">
+              Solar declination and observer altitude summaries will appear here.
+            </p>
+          </section>
+
+          <section class="orbit-panel hud-subpanel" data-hud-panel-section="sun">
+            <p class="orbit-title" data-i18n="solarOrbitTitle">Solar Orbit</p>
+            <div class="orbit-mode-grid">
+              <button class="orbit-mode active" data-orbit-mode="auto" type="button" data-i18n="orbitModeAuto">Auto</button>
+              <button class="orbit-mode" data-orbit-mode="north" type="button" data-i18n="orbitModeNorth">North Tropic</button>
+              <button class="orbit-mode" data-orbit-mode="equator" type="button" data-i18n="orbitModeEquator">Equator</button>
+              <button class="orbit-mode" data-orbit-mode="south" type="button" data-i18n="orbitModeSouth">South Tropic</button>
+            </div>
+            <p class="sync-copy subtle" data-i18n="orbitAltitudeProfile">Altitude profile: north tropic highest, equator mid, south tropic lowest.</p>
+          </section>
+
+          <section class="moon-audit-panel hud-subpanel" data-hud-panel-section="moon">
+            <div class="hud-split-cols">
+              <div class="hud-split-col">
+                <p class="orbit-title" data-i18n="astronomyMoonTitle">Moon Reference</p>
                 <div class="coord-grid">
-                  <div class="coord-card">
-                    <span class="coord-label" data-i18n="coordSun">Sun</span>
-                    <strong class="coord-value" id="sun-coordinates">0.00degN / 0.00degE</strong>
-                  </div>
                   <div class="coord-card">
                     <span class="coord-label" data-i18n="coordMoon">Moon</span>
                     <strong class="coord-value" id="moon-coordinates">0.00degN / 0.00degE</strong>
                   </div>
                 </div>
+                <label class="field" for="seasonal-year">
+                  <span class="field-label" data-i18n="auditYearLabel">Audit Year</span>
+                  <input class="datetime-input seasonal-year-input" id="seasonal-year" type="number" min="1900" max="2100" step="1">
+                </label>
+                <div class="seasonal-event-grid">
+                  <button class="orbit-mode" data-seasonal-event="springEquinox" type="button">Spring Equinox</button>
+                  <button class="orbit-mode" data-seasonal-event="summerSolstice" type="button">Summer Solstice</button>
+                  <button class="orbit-mode" data-seasonal-event="autumnEquinox" type="button">Autumn Equinox</button>
+                  <button class="orbit-mode" data-seasonal-event="winterSolstice" type="button">Winter Solstice</button>
+                </div>
+                <p class="sync-copy" id="seasonal-event-time">
+                  Select a solstice or equinox to update both the sun and moon audits from the same anchor.
+                </p>
+              </div>
+              <div class="hud-split-col">
+                <div class="hud-side-home" id="moon-phase-panel-home">
+                  <section class="moon-phase-panel" id="moon-phase-panel">
+                    <p class="orbit-title" data-i18n="moonPhasePanelTitle">Moon Phase Wheel</p>
+                    <p class="sync-copy subtle moon-phase-copy" data-i18n="moonPhasePanelCopy">
+                      The chart and the rendered moon share the same 360deg phase angle, shown across 28 visual segments.
+                    </p>
+                    <div class="moon-phase-visual">
+                      <img
+                        class="moon-phase-chart-image"
+                        id="moon-phase-chart-image"
+                        src="./assets/moon-phases-360-ko.png"
+                        alt=""
+                      >
+                      <div class="moon-phase-pointer" id="moon-phase-pointer" aria-hidden="true">
+                        <span class="moon-phase-pointer-line"></span>
+                        <span class="moon-phase-pointer-dot"></span>
+                      </div>
+                    </div>
+                    <div class="coord-grid moon-phase-grid">
+                      <div class="coord-card">
+                        <span class="coord-label" data-i18n="moonPhaseCurrentLabel">Current Phase</span>
+                        <strong class="coord-value" id="moon-phase-label">New Moon</strong>
+                      </div>
+                      <div class="coord-card">
+                        <span class="coord-label" data-i18n="moonPhaseDegreesLabel">Phase Angle</span>
+                        <strong class="coord-value" id="moon-phase-degrees">0.0deg</strong>
+                      </div>
+                      <div class="coord-card">
+                        <span class="coord-label" data-i18n="moonPhaseStepLabel">Cycle Day</span>
+                        <strong class="coord-value" id="moon-phase-step">1 / 28</strong>
+                      </div>
+                      <div class="coord-card">
+                        <span class="coord-label" data-i18n="moonPhaseDirectionLabel">Cycle Direction</span>
+                        <strong class="coord-value" id="moon-phase-direction">Waxing</strong>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+                <p class="audit-block-title" data-i18n="moonAuditTitle">Moon Audit</p>
+                <div class="coord-grid">
+                  <div class="coord-card">
+                    <span class="coord-label" data-i18n="moonAnchorLabel">Moon Anchor</span>
+                    <strong class="coord-value" id="seasonal-moon-anchor">0.00degN / 0.00degE</strong>
+                  </div>
+                  <div class="coord-card">
+                    <span class="coord-label" data-i18n="moonDriftLabel">24h Drift</span>
+                    <strong class="coord-value" id="seasonal-moon-drift">dLat 0.0deg / dLon 0.0deg</strong>
+                  </div>
+                </div>
+                <p class="sync-copy subtle" id="seasonal-moon-summary">
+                  The selected seasonal anchor loads an exact preview time and summarizes the moon's 24-hour subpoint swing.
+                </p>
               </div>
             </div>
-            <div class="hud-side-home" id="moon-phase-panel-home">
-              <section class="moon-phase-panel" id="moon-phase-panel">
-                <p class="orbit-title" data-i18n="moonPhasePanelTitle">Moon Phase Wheel</p>
-                <p class="sync-copy subtle moon-phase-copy" data-i18n="moonPhasePanelCopy">
-                  The same 360deg / 28-day cycle value drives this chart and the rendered moon.
-                </p>
-                <div class="moon-phase-visual">
-                  <img
-                    class="moon-phase-chart-image"
-                    id="moon-phase-chart-image"
-                    src="./assets/moon-phases-360-ko.png"
-                    alt=""
-                  >
-                  <div class="moon-phase-pointer" id="moon-phase-pointer" aria-hidden="true">
-                    <span class="moon-phase-pointer-line"></span>
-                    <span class="moon-phase-pointer-dot"></span>
-                  </div>
-                </div>
-                <div class="coord-grid moon-phase-grid">
-                  <div class="coord-card">
-                    <span class="coord-label" data-i18n="moonPhaseCurrentLabel">Current Phase</span>
-                    <strong class="coord-value" id="moon-phase-label">New Moon</strong>
-                  </div>
-                  <div class="coord-card">
-                    <span class="coord-label" data-i18n="moonPhaseDegreesLabel">Phase Angle</span>
-                    <strong class="coord-value" id="moon-phase-degrees">0.0deg</strong>
-                  </div>
-                  <div class="coord-card">
-                    <span class="coord-label" data-i18n="moonPhaseStepLabel">Cycle Day</span>
-                    <strong class="coord-value" id="moon-phase-step">1 / 28</strong>
-                  </div>
-                  <div class="coord-card">
-                    <span class="coord-label" data-i18n="moonPhaseDirectionLabel">Cycle Direction</span>
-                    <strong class="coord-value" id="moon-phase-direction">Waxing</strong>
-                  </div>
-                </div>
-              </section>
-            </div>
-            <p class="sync-copy subtle" id="day-night-summary" hidden>Night side overlay is active.</p>
-            <p class="sync-copy subtle" id="analemma-summary" hidden>
-              Ground projection samples one sun position per day for the current local clock time.
-            </p>
-            <p class="sync-copy subtle" id="magnetic-field-summary" hidden>
-              Magnetic field lines keep a toroidal donut opening at the center while pinecone-like spiral scales sweep across the torus surface.
-            </p>
+          </section>
+
+          <section class="sync-panel hud-subpanel" data-hud-panel-section="eclipse">
             <div class="hud-panel-home" id="solar-eclipse-panel-home">
               <section class="sun-audit-panel" id="solar-eclipse-panel">
                 <div class="eclipse-selector-panel">
@@ -570,24 +683,14 @@
                 <p class="sync-copy subtle" id="dark-sun-debug-summary" hidden></p>
               </section>
             </div>
-            <div class="sync-row overlay-row" hidden>
-              <span class="sync-title" data-i18n="skyOrbitTitle">Sky Orbit</span>
-              <label class="toggle">
-                <input id="sky-analemma-overlay" type="checkbox" role="switch">
-                <span class="toggle-switch" aria-hidden="true"></span>
-                <span class="toggle-text" data-i18n="toggleObserverArc">Observer Arc</span>
-              </label>
-            </div>
-            <p class="sync-copy subtle" id="sky-analemma-summary" hidden>
-              Observer-based sky orbit shows the selected day's solar and lunar paths above the local horizon.
-            </p>
           </section>
 
           <section class="sync-panel hud-subpanel" data-hud-panel-section="eclipse" data-hud-only-section>
             <div class="hud-panel-slot" id="solar-eclipse-panel-slot"></div>
           </section>
 
-          <section class="walker-panel hud-subpanel" data-hud-panel-section="walker">
+          <section class="walker-panel hud-subpanel" data-hud-panel-section="observer">
+            <p class="orbit-title" data-i18n="astronomyObserverTitle">Observer Context</p>
             <div class="hud-split-cols">
               <div class="hud-split-col">
                 <div class="sync-row">
@@ -619,114 +722,24 @@
                 </div>
               </div>
             </div>
-          </section>
-
-          <section class="moon-audit-panel hud-subpanel" data-hud-panel-section="seasonal">
-            <div class="hud-split-cols">
-              <div class="hud-split-col">
-                <p class="orbit-title" data-i18n="seasonalAuditControlsTitle">Seasonal Audit Controls</p>
-                <label class="field" for="seasonal-year">
-                  <span class="field-label" data-i18n="auditYearLabel">Audit Year</span>
-                  <input class="datetime-input seasonal-year-input" id="seasonal-year" type="number" min="1900" max="2100" step="1">
-                </label>
-                <div class="seasonal-event-grid">
-                  <button class="orbit-mode" data-seasonal-event="springEquinox" type="button">Spring Equinox</button>
-                  <button class="orbit-mode" data-seasonal-event="summerSolstice" type="button">Summer Solstice</button>
-                  <button class="orbit-mode" data-seasonal-event="autumnEquinox" type="button">Autumn Equinox</button>
-                  <button class="orbit-mode" data-seasonal-event="winterSolstice" type="button">Winter Solstice</button>
-                </div>
-              </div>
-              <div class="hud-split-col">
-                <p class="sync-copy" id="seasonal-event-time">
-                  Select a solstice or equinox to update both the sun and moon audits from the same anchor.
-                </p>
-                <p class="audit-block-title" data-i18n="moonAuditTitle">Moon Audit</p>
-                <div class="coord-grid">
-                  <div class="coord-card">
-                    <span class="coord-label" data-i18n="moonAnchorLabel">Moon Anchor</span>
-                    <strong class="coord-value" id="seasonal-moon-anchor">0.00degN / 0.00degE</strong>
-                  </div>
-                  <div class="coord-card">
-                    <span class="coord-label" data-i18n="moonDriftLabel">24h Drift</span>
-                    <strong class="coord-value" id="seasonal-moon-drift">dLat 0.0deg / dLon 0.0deg</strong>
-                  </div>
-                </div>
-                <p class="sync-copy subtle" id="seasonal-moon-summary">
-                  The selected seasonal anchor loads an exact preview time and summarizes the moon's 24-hour subpoint swing.
-                </p>
-              </div>
-            </div>
-          </section>
-
-          <section class="orbit-panel hud-subpanel" data-hud-panel-section="orbit">
-            <p class="orbit-title" data-i18n="solarOrbitTitle">Solar Orbit</p>
-            <div class="orbit-mode-grid">
-              <button class="orbit-mode active" data-orbit-mode="auto" type="button" data-i18n="orbitModeAuto">Auto</button>
-              <button class="orbit-mode" data-orbit-mode="north" type="button" data-i18n="orbitModeNorth">North Tropic</button>
-              <button class="orbit-mode" data-orbit-mode="equator" type="button" data-i18n="orbitModeEquator">Equator</button>
-              <button class="orbit-mode" data-orbit-mode="south" type="button" data-i18n="orbitModeSouth">South Tropic</button>
-            </div>
-            <p class="orbit-copy" id="orbit-label">Auto mode sweeps the sun between the tropics.</p>
-            <p class="sync-copy subtle" data-i18n="orbitAltitudeProfile">Altitude profile: north tropic highest, equator mid, south tropic lowest.</p>
-          </section>
-
-          <section class="orbit-panel celestial-motion-panel hud-subpanel" data-hud-panel-section="orbit">
-            <p class="orbit-title" data-i18n="celestialMotionTitle">Celestial Motion</p>
-            <label class="field" for="celestial-trail-length">
-              <span class="field-label" data-i18n="celestialTrailLengthLabel">Trail Length</span>
-              <input class="slider-input" id="celestial-trail-length" type="range" min="0" max="100" step="5" value="100">
-            </label>
-            <div class="sync-row celestial-value-row">
-              <span class="sync-title" data-i18n="celestialTrailLengthValueTitle">Current Trail</span>
-              <strong class="route-speed-value" id="celestial-trail-length-value">100%</strong>
-            </div>
-            <label class="field" for="celestial-speed">
-              <span class="field-label" data-i18n="celestialSpeedLabel">Accelerated Reality Speed</span>
-              <input class="slider-input" id="celestial-speed" type="range" min="0" max="60" step="0.1" value="1">
-            </label>
-            <div class="sync-row celestial-value-row">
-              <span class="sync-title" data-i18n="celestialSpeedValueTitle">Time Scale</span>
-              <strong class="route-speed-value" id="celestial-speed-value">1x</strong>
-            </div>
-            <div class="sync-row celestial-value-row">
-              <span class="sync-title" data-i18n="celestialSpeedPresetTitle">Speed Presets</span>
-            </div>
-            <div class="orbit-mode-grid celestial-speed-presets" role="group" aria-label="Speed presets">
-              <button class="orbit-mode" data-celestial-speed-preset="0" type="button">0x</button>
-              <button class="orbit-mode active" data-celestial-speed-preset="1" type="button">1x</button>
-              <button class="orbit-mode" data-celestial-speed-preset="5" type="button">5x</button>
-              <button class="orbit-mode" data-celestial-speed-preset="60" type="button">60x</button>
-            </div>
-            <div class="sync-row overlay-row">
-              <span class="sync-title" data-i18n="celestialFullTrailTitle">Full Orbit Path</span>
+            <div class="sync-row overlay-row" hidden>
+              <span class="sync-title" data-i18n="skyOrbitTitle">Sky Orbit</span>
               <label class="toggle">
-                <input id="celestial-full-trail" type="checkbox" role="switch" checked>
+                <input id="sky-analemma-overlay" type="checkbox" role="switch">
                 <span class="toggle-switch" aria-hidden="true"></span>
-                <span class="toggle-text" data-i18n="celestialFullTrailToggle">Show</span>
+                <span class="toggle-text" data-i18n="toggleObserverArc">Observer Arc</span>
               </label>
             </div>
-            <p class="sync-copy subtle" id="celestial-motion-summary">
-              Accelerated reality mode advances celestial time from the chosen anchor while using the same orbit path as reality sync.
-            </p>
-          </section>
-
-          <section class="orbit-panel hud-subpanel" data-hud-panel-section="orbit">
-            <p class="orbit-title" data-i18n="celestialTrackingTitle">Camera Mode</p>
-            <div class="track-mode-grid">
-              <button class="orbit-mode active" data-camera-track="off" type="button" data-i18n="trackCameraOff">Free Camera</button>
-              <button class="orbit-mode" data-camera-track="sun" type="button" data-i18n="trackCameraSun">Sun Angle</button>
-              <button class="orbit-mode" data-camera-track="moon" type="button" data-i18n="trackCameraMoon">Moon Angle</button>
-            </div>
-            <p class="orbit-copy" id="camera-track-summary">
-              Free camera mode. Drag to orbit around the disc and zoom independently.
+            <p class="sync-copy subtle" id="sky-analemma-summary" hidden>
+              Observer-based sky orbit shows the selected day's solar and lunar paths above the local horizon.
             </p>
           </section>
         </div>
 
         <div class="panel-tab-content" data-control-panel="routes" hidden>
           <div class="hud-subtabs" data-hud-panel-tabs="routes">
-            <button class="hud-subtab active" data-hud-panel-tab="playback" type="button"><span class="subtab-icon" aria-hidden="true">▷</span><span data-i18n="hudRoutesSectionPlayback">Playback</span></button>
-            <button class="hud-subtab" data-hud-panel-tab="summary" type="button"><span class="subtab-icon" aria-hidden="true">≡</span><span data-i18n="hudRoutesSectionSummary">Summary</span></button>
+            <button class="hud-subtab active" data-hud-panel-tab="playback" type="button"><span class="subtab-icon" aria-hidden="true">??/span><span data-i18n="hudRoutesSectionPlayback">Playback</span></button>
+            <button class="hud-subtab" data-hud-panel-tab="summary" type="button"><span class="subtab-icon" aria-hidden="true">??/span><span data-i18n="hudRoutesSectionSummary">Summary</span></button>
           </div>
           <section class="route-panel hud-subpanel active" data-hud-panel-section="playback">
             <p class="orbit-title" data-i18n="offlineRouteLibraryTitle">Offline Route Library</p>
@@ -795,8 +808,8 @@
 
         <div class="panel-tab-content" data-control-panel="constellations" hidden>
           <div class="hud-subtabs" data-hud-panel-tabs="constellations">
-            <button class="hud-subtab active" data-hud-panel-tab="controls" type="button"><span class="subtab-icon" aria-hidden="true">⋆</span><span data-i18n="hudConstellationsSectionControls">Controls</span></button>
-            <button class="hud-subtab" data-hud-panel-tab="info" type="button"><span class="subtab-icon" aria-hidden="true">ℹ</span><span data-i18n="hudConstellationsSectionInfo">Info</span></button>
+            <button class="hud-subtab active" data-hud-panel-tab="controls" type="button"><span class="subtab-icon" aria-hidden="true">??/span><span data-i18n="hudConstellationsSectionControls">Controls</span></button>
+            <button class="hud-subtab" data-hud-panel-tab="info" type="button"><span class="subtab-icon" aria-hidden="true">??/span><span data-i18n="hudConstellationsSectionInfo">Info</span></button>
             <button class="hud-subtab" data-hud-panel-tab="zodiac" type="button"><span class="subtab-icon" aria-hidden="true">*</span><span data-i18n="hudConstellationsSectionZodiac">Zodiac Age</span></button>
           </div>
           <section class="constellation-panel hud-subpanel active" data-hud-panel-section="controls">
@@ -896,59 +909,10 @@
             </div>
           </section>
         </div>
-
-        <div class="panel-tab-content" data-control-panel="comparison" hidden>
-          <section class="comparison-mode-panel">
-            <div class="sync-row">
-              <span class="sync-title" data-i18n="comparisonSceneModelLabel">3D Scene Model</span>
-              <div class="comparison-scene-toggle" role="group" aria-label="comparison scene model">
-                <button class="button secondary compact-button active" type="button" data-comparison-scene-model="flat" data-i18n="comparisonSceneFlat">Flat</button>
-                <button class="button secondary compact-button" type="button" data-comparison-scene-model="spherical" data-i18n="comparisonSceneSpherical">Spherical</button>
-              </div>
-            </div>
-            <div class="comparison-total-grid">
-              <div class="coord-card">
-                <span class="coord-label" data-i18n="comparisonModelFlat">Flat</span>
-                <strong class="coord-value" data-comparison-total="flat">-</strong>
-              </div>
-              <div class="coord-card">
-                <span class="coord-label" data-i18n="comparisonModelSpherical">Spherical</span>
-                <strong class="coord-value" data-comparison-total="spherical">-</strong>
-              </div>
-            </div>
-            <p class="sync-copy subtle" data-comparison-timestamp data-i18n="comparisonLoading">Loading comparison data...</p>
-            <p class="sync-copy subtle error" data-comparison-error hidden></p>
-          </section>
-
-          <div class="hud-subtabs" data-hud-panel-tabs="comparison">
-            <button class="hud-subtab active" data-hud-panel-tab="routes" type="button"><span class="subtab-icon" aria-hidden="true">R</span><span data-i18n="hudComparisonSectionRoutes">Routes</span></button>
-            <button class="hud-subtab" data-hud-panel-tab="eclipses" type="button"><span class="subtab-icon" aria-hidden="true">E</span><span data-i18n="hudComparisonSectionEclipses">Eclipses</span></button>
-            <button class="hud-subtab" data-hud-panel-tab="orbit" type="button"><span class="subtab-icon" aria-hidden="true">O</span><span data-i18n="hudComparisonSectionOrbit">Orbit</span></button>
-            <button class="hud-subtab" data-hud-panel-tab="rotation" type="button"><span class="subtab-icon" aria-hidden="true">W</span><span data-i18n="hudComparisonSectionRotation">Rotation</span></button>
-          </div>
-
-          <section class="comparison-panel hud-subpanel active" data-hud-panel-section="routes">
-            <p class="orbit-title" data-comparison-title="routes" data-i18n="comparisonCategoryRoutes">Flight Routes</p>
-            <div class="comparison-section-body" data-comparison-category="routes"></div>
-          </section>
-          <section class="comparison-panel hud-subpanel" data-hud-panel-section="eclipses">
-            <p class="orbit-title" data-comparison-title="eclipses" data-i18n="comparisonCategoryEclipses">Eclipses</p>
-            <div class="comparison-section-body" data-comparison-category="eclipses"></div>
-          </section>
-          <section class="comparison-panel hud-subpanel" data-hud-panel-section="orbit">
-            <p class="orbit-title" data-comparison-title="orbit" data-i18n="comparisonCategoryOrbit">Orbit (Seasons / Declination / Day Length)</p>
-            <div class="comparison-section-body" data-comparison-category="orbit"></div>
-          </section>
-          <section class="comparison-panel hud-subpanel" data-hud-panel-section="rotation">
-            <p class="orbit-title" data-comparison-title="rotation" data-i18n="comparisonCategoryRotation">Rotation Speed</p>
-            <div class="comparison-section-body" data-comparison-category="rotation"></div>
-          </section>
-        </div>
-
         <div class="panel-tab-content" data-control-panel="rockets" hidden>
           <div class="hud-subtabs" data-hud-panel-tabs="rockets">
-            <button class="hud-subtab active" data-hud-panel-tab="launch" type="button"><span class="subtab-icon" aria-hidden="true">↑</span><span data-i18n="hudRocketsSectionLaunch">Launch</span></button>
-            <button class="hud-subtab" data-hud-panel-tab="telemetry" type="button"><span class="subtab-icon" aria-hidden="true">⊟</span><span data-i18n="hudRocketsSectionTelemetry">Telemetry</span></button>
+            <button class="hud-subtab active" data-hud-panel-tab="launch" type="button"><span class="subtab-icon" aria-hidden="true">??/span><span data-i18n="hudRocketsSectionLaunch">Launch</span></button>
+            <button class="hud-subtab" data-hud-panel-tab="telemetry" type="button"><span class="subtab-icon" aria-hidden="true">??/span><span data-i18n="hudRocketsSectionTelemetry">Telemetry</span></button>
           </div>
           <section class="route-panel hud-subpanel active" data-hud-panel-section="launch">
             <p class="orbit-title" data-i18n="rocketSimulationTitle">Rocket Simulation</p>
@@ -970,31 +934,31 @@
           </section>
 
           <section class="route-panel route-summary-panel hud-subpanel" data-hud-panel-section="telemetry" id="rocket-telemetry-panel" style="display:none;">
-            <p class="orbit-title">항법 데이터</p>
+            <p class="orbit-title">??占쏙옙 ?占쎌씠??/p>
             <div class="coord-grid">
               <div class="coord-card">
-                <span class="coord-label">상태</span>
-                <strong class="coord-value" id="tel-state">—</strong>
+                <span class="coord-label">?占쏀깭</span>
+                <strong class="coord-value" id="tel-state">??/strong>
               </div>
               <div class="coord-card">
-                <span class="coord-label">고도</span>
-                <strong class="coord-value" id="tel-alt">—</strong>
+                <span class="coord-label">怨좊룄</span>
+                <strong class="coord-value" id="tel-alt">??/strong>
               </div>
               <div class="coord-card">
-                <span class="coord-label">속도</span>
-                <strong class="coord-value" id="tel-speed">—</strong>
+                <span class="coord-label">?占쎈룄</span>
+                <strong class="coord-value" id="tel-speed">??/strong>
               </div>
               <div class="coord-card">
-                <span class="coord-label">단계 경과</span>
-                <strong class="coord-value" id="tel-stage-t">—</strong>
+                <span class="coord-label">?占쎄퀎 寃쎄낵</span>
+                <strong class="coord-value" id="tel-stage-t">??/strong>
               </div>
               <div class="coord-card">
-                <span class="coord-label">궁창 접촉</span>
-                <strong class="coord-value" id="tel-scrape-t">—</strong>
+                <span class="coord-label">沅곸갹 ?占쎌큺</span>
+                <strong class="coord-value" id="tel-scrape-t">??/strong>
               </div>
               <div class="coord-card">
-                <span class="coord-label">잔해</span>
-                <strong class="coord-value" id="tel-debris">—</strong>
+                <span class="coord-label">?占쏀빐</span>
+                <strong class="coord-value" id="tel-debris">??/strong>
               </div>
             </div>
           </section>
@@ -1007,3 +971,5 @@
   <script type="module" src="./app.js?v=20260328-mobileratio2"></script>
   </body>
 </html>
+
+
