@@ -18,7 +18,7 @@ import { createFirstPersonWorldController } from "./modules/first-person-world-c
 import { createI18n } from "./modules/i18n.js?v=20260327-mobilehud1";
 import { createMagneticFieldController } from "./modules/magnetic-field-controller.js?v=20260314-magnetic-pinecone3";
 import { createModelComparisonController } from "./modules/model-comparison-controller.js?v=20260329-compare1";
-import { createRouteSimulationController } from "./modules/route-simulation-controller.js?v=20260405-slerpfix1";
+import { createRouteSimulationController } from "./modules/route-simulation-controller.js?v=20260405-mainroutes1";
 import { createTextureManager } from "./modules/texture-manager.js?v=20260311-gpu-daynight";
 import { createWalkerController } from "./modules/walker-controller.js?v=20260324-moon-cycle28";
 
@@ -26,7 +26,7 @@ import * as constants from "./modules/constants.js";
 import { createEclipseController } from "./modules/eclipse-controller.js?v=20260320-reality-eclipse-sync2";
 import { createCelestialVisualsController } from "./modules/celestial-visuals-controller.js?v=20260321-sunset5";
 import { createConstellationTabController } from "./modules/constellation-tab-controller.js?v=20260320-constellation-precession1";
-import { setupInputHandlers } from "./modules/input-handler.js?v=20260328-mobileratio1";
+import { setupInputHandlers } from "./modules/input-handler.js?v=20260405-mainroutes1";
 import { createRocketController, SPACEPORTS } from "./modules/rocket-controller.js?v=20260319-parabola";
 const {
   DEFAULT_MAP_PATH,
@@ -438,7 +438,16 @@ const walkerCoordinatesEl = document.getElementById("walker-coordinates");
 const walkerLightEl = document.getElementById("walker-light");
 const resetWalkerButton = document.getElementById("reset-walker");
 const routeDatasetStatusEl = document.getElementById("route-dataset-status");
-const routeSelectEl = document.getElementById("route-select");
+const routeModeSelectEl = document.getElementById("route-mode-select");
+const routeRecommendedPanelEl = document.getElementById("route-recommended-panel");
+const routeAdvancedPanelEl = document.getElementById("route-advanced-panel");
+const routeOriginContinentEl = document.getElementById("route-origin-continent");
+const routeDestinationContinentEl = document.getElementById("route-destination-continent");
+const routeRecommendedRouteEl = document.getElementById("route-recommended-route");
+const routeOriginCountryEl = document.getElementById("route-origin-country");
+const routeOriginAirportEl = document.getElementById("route-origin-airport");
+const routeDestinationCountryEl = document.getElementById("route-destination-country");
+const routeDestinationAirportEl = document.getElementById("route-destination-airport");
 const routeSpeedEl = document.getElementById("route-speed");
 const routeSpeedValueEl = document.getElementById("route-speed-value");
 const routePlaybackButton = document.getElementById("route-playback");
@@ -449,6 +458,7 @@ const routeAircraftEl = document.getElementById("route-aircraft");
 const routeOriginEl = document.getElementById("route-origin");
 const routeDestinationEl = document.getElementById("route-destination");
 const routeCountriesEl = document.getElementById("route-countries");
+const routeLayoversEl = document.getElementById("route-layovers");
 const routeDurationEl = document.getElementById("route-duration");
 const routeProgressEl = document.getElementById("route-progress");
 const routeGeoSummaryEl = document.getElementById("route-geo-summary");
@@ -1788,17 +1798,27 @@ const routeSimulationApi = createRouteSimulationController({
   scalableStage,
   ui: {
     routeAircraftEl,
+    routeAdvancedPanelEl,
     routeCountriesEl,
     routeDatasetStatusEl,
+    routeDestinationAirportEl,
+    routeDestinationContinentEl,
+    routeDestinationCountryEl,
     routeDestinationEl,
     routeDurationEl,
     routeGeoSummaryEl,
     routeLegEl,
+    routeLayoversEl,
+    routeModeSelectEl,
     routeOriginEl,
+    routeOriginAirportEl,
+    routeOriginContinentEl,
+    routeOriginCountryEl,
     routePlaybackButton,
     routeProgressEl,
+    routeRecommendedPanelEl,
+    routeRecommendedRouteEl,
     routeResetButton,
-    routeSelectEl,
     routeSpeedEl,
     routeSpeedValueEl,
     routeSummaryEl
@@ -2357,7 +2377,9 @@ function syncRocketCameraAndUi() {
     resetDarkSunOcclusionMotion: eclipseApi.resetDarkSunOcclusionMotion, darkSunOcclusionState,
     controlTabButtons, cameraPresetButtons, cameraViewToggleEl, syncCameraViewToggleUi, languageToggleEl, i18n, resetButton,
     exitFirstPersonMode, enterFirstPersonMode, walkerModeEl, resetWalkerButton,
-    routeSelectEl, routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl,
+    routeModeSelectEl, routeOriginContinentEl, routeDestinationContinentEl, routeRecommendedRouteEl,
+    routeOriginCountryEl, routeOriginAirportEl, routeDestinationCountryEl, routeDestinationAirportEl,
+    routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl,
     celestialSpeedPresetButtons,
     celestialFullTrailEl, routePlaybackButton, routeResetButton, realitySyncEl,
     realityLiveEl, observationTimeEl, observationMinusHourButton, observationPlusHourButton,
