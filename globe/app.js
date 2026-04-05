@@ -437,6 +437,12 @@ const routeDatasetStatusEl = document.getElementById("route-dataset-status");
 const routeRefreshButton = document.getElementById("route-refresh");
 const routeDataSourceEl = document.getElementById("route-data-source");
 const routeLastSyncEl = document.getElementById("route-last-sync");
+const routeModeSelectEl = document.getElementById("route-mode-select");
+const routeRecommendedPanelEl = document.getElementById("route-recommended-panel");
+const routeAdvancedPanelEl = document.getElementById("route-advanced-panel");
+const routeOriginContinentEl = document.getElementById("route-origin-continent");
+const routeDestinationContinentEl = document.getElementById("route-destination-continent");
+const routeRecommendedRouteEl = document.getElementById("route-recommended-route");
 const routeOriginCountryEl = document.getElementById("route-origin-country");
 const routeOriginAirportEl = document.getElementById("route-origin-airport");
 const routeDestinationCountryEl = document.getElementById("route-destination-country");
@@ -451,6 +457,7 @@ const routeAircraftEl = document.getElementById("route-aircraft");
 const routeOriginEl = document.getElementById("route-origin");
 const routeDestinationEl = document.getElementById("route-destination");
 const routeCountriesEl = document.getElementById("route-countries");
+const routeLayoversEl = document.getElementById("route-layovers");
 const routeDurationEl = document.getElementById("route-duration");
 const routeProgressEl = document.getElementById("route-progress");
 const routeGeoSummaryEl = document.getElementById("route-geo-summary");
@@ -1970,6 +1977,12 @@ const routeSimulationApi = createRouteSimulationController({
     routeGeoSummaryEl,
     routeLegEl,
     routeLastSyncEl,
+    routeModeSelectEl,
+    routeRecommendedPanelEl,
+    routeAdvancedPanelEl,
+    routeOriginContinentEl,
+    routeDestinationContinentEl,
+    routeRecommendedRouteEl,
     routeOriginEl,
     routeOriginAirportEl,
     routeOriginCountryEl,
@@ -1979,7 +1992,8 @@ const routeSimulationApi = createRouteSimulationController({
     routeResetButton,
     routeSpeedEl,
     routeSpeedValueEl,
-    routeSummaryEl
+    routeSummaryEl,
+    routeLayoversEl
   }
 });
 
@@ -2270,6 +2284,7 @@ const inputHandlersApi = setupInputHandlers({
     resetDarkSunOcclusionMotion: eclipseApi.resetDarkSunOcclusionMotion, darkSunOcclusionState,
     controlTabButtons, cameraPresetButtons, cameraViewToggleEl, syncCameraViewToggleUi, languageToggleEl, i18n, resetButton,
     exitFirstPersonMode, enterFirstPersonMode, walkerModeEl, resetWalkerButton,
+    routeModeSelectEl, routeOriginContinentEl, routeDestinationContinentEl, routeRecommendedRouteEl,
     routeOriginCountryEl, routeOriginAirportEl, routeDestinationCountryEl, routeDestinationAirportEl,
     routeRefreshButton, routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl,
     celestialSpeedPresetButtons,

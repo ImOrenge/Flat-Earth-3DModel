@@ -1217,3 +1217,53 @@ Object.assign(TRANSLATIONS.ko, {
   routeDatasetRefreshPartial: "{source} \ub3d9\uae30\ud654\ub294 \uc644\ub8cc\ub418\uc5c8\uc9c0\ub9cc GeoNames \ub370\uc774\ud130\ub97c \uc0ac\uc6a9\ud560 \uc218 \uc5c6\uc2b5\ub2c8\ub2e4.",
   routeDatasetRefreshFailed: "\uc6d0\uaca9 \ub3d9\uae30\ud654\uc5d0 \uc2e4\ud328\ud588\uc2b5\ub2c8\ub2e4. \ud604\uc7ac {source} \ub370\uc774\ud130\ub97c \uacc4\uc18d \uc0ac\uc6a9\ud569\ub2c8\ub2e4."
 });
+
+Object.assign(TRANSLATIONS.en, {
+  helpRoutesCopy: "Pick Recommended mode for intercontinental multi-leg routes, or switch to Advanced mode for direct country/airport selection.",
+  routeModeLabel: "Route Mode",
+  routeModeRecommended: "Recommended",
+  routeModeAdvanced: "Advanced",
+  routeOriginContinentLabel: "Origin Continent",
+  routeDestinationContinentLabel: "Destination Continent",
+  routeRecommendedListLabel: "Recommended Route",
+  routeContinentAmericas: "Americas",
+  routeContinentEurope: "Europe",
+  routeContinentAfrica: "Africa",
+  routeContinentAsia: "Asia",
+  routeContinentOceania: "Oceania",
+  routeContinentUnknown: "Unknown",
+  routeRecommendedPrompt: "Choose an intercontinental route",
+  routeRecommendedNone: "No recommended intercontinental routes are available for {originContinent} -> {destinationContinent}.",
+  routeContinentConflict: "Origin and destination continents must be different in recommended mode.",
+  routeLayoversLabel: "Layovers",
+  routeLayoversNone: "Non-stop",
+  routeLayoversValue: "{count} stop(s): {layovers} ({seconds}s each)",
+  routeProgressLayover: "Holding at {airport} ({seconds}s)",
+  routeSummaryActiveText: "{originCountry} / {originAirport} to {destinationCountry} / {destinationAirport}. Stops: {layovers}. Great-circle {greatCircle}, total block {duration}.",
+  routeGeoPathValue: "{waypointGeo} | great-circle {greatCircle}"
+});
+
+Object.assign(TRANSLATIONS.ko, {
+  helpRoutesCopy: "\ucd94\ucc9c \ubaa8\ub4dc\uc5d0\uc11c \ub300\ub959\uac04 \ub2e4\uad6c\uac04 \uacbd\ub85c\ub97c \uc120\ud0dd\ud558\uace0, \uace0\uae09 \ubaa8\ub4dc\uc5d0\uc11c \uad6d\uac00/\uacf5\ud56d \uc9c1\uc811 \uc120\ud0dd\uc73c\ub85c \uc804\ud658\ud560 \uc218 \uc788\uc2b5\ub2c8\ub2e4.",
+  routeModeLabel: "\uacbd\ub85c \ubaa8\ub4dc",
+  routeModeRecommended: "\ucd94\ucc9c",
+  routeModeAdvanced: "\uace0\uae09",
+  routeOriginContinentLabel: "\ucd9c\ubc1c \ub300\ub959",
+  routeDestinationContinentLabel: "\ub3c4\ucc29 \ub300\ub959",
+  routeRecommendedListLabel: "\ucd94\ucc9c \ub178\uc120",
+  routeContinentAmericas: "\uc544\uba54\ub9ac\uce74",
+  routeContinentEurope: "\uc720\ub7fd",
+  routeContinentAfrica: "\uc544\ud504\ub9ac\uce74",
+  routeContinentAsia: "\uc544\uc2dc\uc544",
+  routeContinentOceania: "\uc624\uc138\uc544\ub2c8\uc544",
+  routeContinentUnknown: "\ubbf8\uc0c1",
+  routeRecommendedPrompt: "\ub300\ub959\uac04 \uacbd\ub85c\ub97c \uc120\ud0dd\ud558\uc138\uc694",
+  routeRecommendedNone: "{originContinent} -> {destinationContinent} \uad6c\uac04\uc5d0\uc11c \uc0ac\uc6a9 \uac00\ub2a5\ud55c \ucd94\ucc9c \ub2e4\uad6c\uac04 \ub178\uc120\uc774 \uc5c6\uc2b5\ub2c8\ub2e4.",
+  routeContinentConflict: "\ucd94\ucc9c \ubaa8\ub4dc\uc5d0\uc11c\ub294 \ucd9c\ubc1c/\ub3c4\ucc29 \ub300\ub959\uc774 \uc11c\ub85c \ub2ec\ub77c\uc57c \ud569\ub2c8\ub2e4.",
+  routeLayoversLabel: "\uacbd\uc720\uc9c0",
+  routeLayoversNone: "\ubb34\ucc29\ub959",
+  routeLayoversValue: "{count}\ud68c \uacbd\uc720: {layovers} (\uac01 {seconds}\ucd08 \uc815\uc9c0)",
+  routeProgressLayover: "{airport}\uc5d0\uc11c \uc815\ucc28 \uc911 ({seconds}\ucd08)",
+  routeSummaryActiveText: "{originCountry} / {originAirport}\uc5d0\uc11c {destinationCountry} / {destinationAirport}\uae4c\uc9c0 \uc5f0\uacb0\ud569\ub2c8\ub2e4. \uacbd\uc720: {layovers}. \ub300\uad8c {greatCircle}, \ucd1d \ube14\ub85d {duration}.",
+  routeGeoPathValue: "{waypointGeo} | \ub300\uad8c {greatCircle}"
+});

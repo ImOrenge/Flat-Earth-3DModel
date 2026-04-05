@@ -10,10 +10,22 @@ const REMOTE_AIRPORTS_URL = "https://raw.githubusercontent.com/mwgg/Airports/mas
 const REMOTE_COUNTRIES_URL = "https://raw.githubusercontent.com/mledoze/countries/master/countries.json";
 const GEONAMES_PROXY_URL = "/api/geonames/country-info";
 
-const CACHE_KEY = "globe.routes.dataset.v1";
-const CACHE_VERSION = 1;
+const CACHE_KEY = "globe.routes.dataset.v2";
+const CACHE_VERSION = 2;
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const AIRPORTS_PER_COUNTRY_CAP = 15;
+const PINNED_AIRPORT_IATA = Object.freeze([
+  "SCL", "LAX", "SYD",
+  "JFK", "DFW", "MIA", "GRU", "LIM",
+  "LHR", "CDG", "FRA", "AMS", "MAD", "IST",
+  "JNB", "CAI", "ADD", "NBO", "CMN",
+  "DXB", "DOH", "SIN", "HKG", "ICN", "NRT",
+  "MEL", "BNE", "PER", "AKL",
+  "ORD", "ATL"
+]);
+const PINNED_AIRPORT_PRIORITY = new Map(
+  PINNED_AIRPORT_IATA.map((iata, index) => [iata, index])
+);
 
 function compareText(a, b) {
   return String(a ?? "").localeCompare(String(b ?? ""), undefined, { sensitivity: "base" });
@@ -268,7 +280,26 @@ function normalizeRemoteAirports(rawAirports) {
       || compareText(left.iata, right.iata)
       || compareText(left.icao, right.icao)
     ));
-    reduced.push(...airports.slice(0, AIRPORTS_PER_COUNTRY_CAP));
+
+    const pinnedAirports = [];
+    const regularAirports = [];
+    for (const airport of airports) {
+      if (PINNED_AIRPORT_PRIORITY.has(airport.iata)) {
+        pinnedAirports.push(airport);
+      } else {
+        regularAirports.push(airport);
+      }
+    }
+
+    pinnedAirports.sort((left, right) => (
+      (PINNED_AIRPORT_PRIORITY.get(left.iata) ?? Number.MAX_SAFE_INTEGER)
+      - (PINNED_AIRPORT_PRIORITY.get(right.iata) ?? Number.MAX_SAFE_INTEGER)
+      || compareText(left.city, right.city)
+      || compareText(left.icao, right.icao)
+    ));
+
+    const prioritized = [...pinnedAirports, ...regularAirports];
+    reduced.push(...prioritized.slice(0, AIRPORTS_PER_COUNTRY_CAP));
   }
 
   return reduced.sort((left, right) => (

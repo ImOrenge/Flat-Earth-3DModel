@@ -32,6 +32,7 @@ export function setupInputHandlers(deps) {
     darkSunOcclusionState,
     controlTabButtons, cameraPresetButtons = [], cameraViewToggleEl = null, syncCameraViewToggleUi = () => {}, languageToggleEl, i18n, resetButton,
     exitFirstPersonMode, enterFirstPersonMode, walkerModeEl, resetWalkerButton,
+    routeModeSelectEl, routeOriginContinentEl, routeDestinationContinentEl, routeRecommendedRouteEl,
     routeOriginCountryEl, routeOriginAirportEl, routeDestinationCountryEl, routeDestinationAirportEl,
     routeRefreshButton, routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl, celestialSpeedPresetButtons = [],
     celestialFullTrailEl, routePlaybackButton, routeResetButton, realitySyncEl,
@@ -592,9 +593,41 @@ export function setupInputHandlers(deps) {
     walkerApi.updateWalkerAvatar();
   
   });
-  
-  
-  
+
+
+
+  routeModeSelectEl?.addEventListener("change", () => {
+
+    routeSimulationApi.setRouteMode(routeModeSelectEl.value);
+
+  });
+
+
+
+  routeOriginContinentEl?.addEventListener("change", () => {
+
+    routeSimulationApi.setOriginContinent(routeOriginContinentEl.value);
+
+  });
+
+
+
+  routeDestinationContinentEl?.addEventListener("change", () => {
+
+    routeSimulationApi.setDestinationContinent(routeDestinationContinentEl.value);
+
+  });
+
+
+
+  routeRecommendedRouteEl?.addEventListener("change", () => {
+
+    routeSimulationApi.setRecommendedRoute(routeRecommendedRouteEl.value);
+
+  });
+
+
+
   routeOriginCountryEl?.addEventListener("change", () => {
 
     routeSimulationApi.setOriginCountry(routeOriginCountryEl.value);
