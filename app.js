@@ -1,4 +1,4 @@
-import * as THREE from "./vendor/three.module.js";
+﻿import * as THREE from "./vendor/three.module.js";
 import {
   getGeoFromProjectedPosition,
   projectedRadiusFromLatitude
@@ -18,7 +18,7 @@ import { createFirstPersonWorldController } from "./modules/first-person-world-c
 import { createI18n } from "./modules/i18n.js?v=20260327-mobilehud1";
 import { createMagneticFieldController } from "./modules/magnetic-field-controller.js?v=20260314-magnetic-pinecone3";
 import { createModelComparisonController } from "./modules/model-comparison-controller.js?v=20260329-compare1";
-import { createRouteSimulationController } from "./modules/route-simulation-controller.js?v=20260405-mainroutes1";
+import { createRouteSimulationController } from "./modules/route-simulation-controller.js?v=20260405-mainroutes3";
 import { createTextureManager } from "./modules/texture-manager.js?v=20260311-gpu-daynight";
 import { createWalkerController } from "./modules/walker-controller.js?v=20260324-moon-cycle28";
 
@@ -1978,21 +1978,21 @@ const ROCKET_CAMERA_COPY = {
     ended: "Tracking finished for the {launchpad} launch. Stage another rocket to preview a pad again."
   },
   ko: {
-    idle: "발사대를 선택하고 로켓을 스탠바이로 배치하면 발사장 카메라 미리보기가 시작됩니다.",
-    standby: "{launchpad}에 스탠바이 카메라를 고정했습니다. 준비되면 발사하세요.",
-    standbyButton: "스탠바이 배치",
+    idle: "諛쒖궗?瑜??좏깮?섍퀬 濡쒖폆???ㅽ깲諛붿씠濡?諛곗튂?섎㈃ 諛쒖궗??移대찓??誘몃━蹂닿린媛 ?쒖옉?⑸땲??",
+    standby: "{launchpad}???ㅽ깲諛붿씠 移대찓?쇰? 怨좎젙?덉뒿?덈떎. 以鍮꾨릺硫?諛쒖궗?섏꽭??",
+    standbyButton: "?ㅽ깲諛붿씠 諛곗튂",
     states: {
-      FALL: "낙하",
-      LAUNCH: "발사",
-      PITCHOVER: "자세 전환",
-      SCRAPE: "궁창 접촉",
-      SEPARATION: "단 분리",
-      STAGE1: "1단 연소",
-      STAGE2: "2단 연소",
-      STANDBY: "스탠바이"
+      FALL: "?숉븯",
+      LAUNCH: "諛쒖궗",
+      PITCHOVER: "?먯꽭 ?꾪솚",
+      SCRAPE: "沅곸갹 ?묒큺",
+      SEPARATION: "??遺꾨━",
+      STAGE1: "1???곗냼",
+      STAGE2: "2???곗냼",
+      STANDBY: "?ㅽ깲諛붿씠"
     },
-    tracking: "{launchpad} 발사를 {stage} 단계까지 추적 중입니다. 드래그와 줌은 계속 사용할 수 있습니다.",
-    ended: "{launchpad} 발사 추적이 종료되었습니다. 다음 발사를 미리 보려면 다시 스탠바이를 배치하세요."
+    tracking: "{launchpad} 諛쒖궗瑜?{stage} ?④퀎源뚯? 異붿쟻 以묒엯?덈떎. ?쒕옒洹몄? 以뚯? 怨꾩냽 ?ъ슜?????덉뒿?덈떎.",
+    ended: "{launchpad} 諛쒖궗 異붿쟻??醫낅즺?섏뿀?듬땲?? ?ㅼ쓬 諛쒖궗瑜?誘몃━ 蹂대젮硫??ㅼ떆 ?ㅽ깲諛붿씠瑜?諛곗튂?섏꽭??"
   }
 };
 
@@ -2951,7 +2951,7 @@ astronomyApi.enableRealityMode({ live: true, date: astronomyState.selectedDate }
 animate();
 runOnboarding();
 
-// ── 하단 패널 접기 ──────────────────────────
+// ?? ?섎떒 ?⑤꼸 ?묎린 ??????????????????????????
 (function initDetailPanelCollapse() {
   const btn = document.getElementById('detail-panel-collapse');
   const shell = btn && btn.closest('.detail-panel-shell');
@@ -2964,8 +2964,8 @@ runOnboarding();
   btn.addEventListener('click', () => {
     const isCollapsed = shell.classList.toggle('detail-panel-shell--collapsed');
     try { localStorage.setItem(STORAGE_KEY, isCollapsed ? '1' : '0'); } catch {}
-    btn.title = isCollapsed ? '패널 펼치기' : '패널 접기';
-    btn.setAttribute('aria-label', isCollapsed ? '패널 펼치기' : '패널 접기');
+    btn.title = isCollapsed ? "Expand details" : "Collapse details";
+    btn.setAttribute("aria-label", isCollapsed ? "Expand details" : "Collapse details");
   });
 })();
 

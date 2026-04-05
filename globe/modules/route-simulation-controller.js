@@ -1173,9 +1173,11 @@ export function createRouteSimulationController({
       return false;
     }
 
+    const firstLegDistanceKm = legs[0]?.greatCircleDistanceKm ?? 0;
     const finalLeg = legs[legs.length - 1];
     const finalLegDistanceKm = finalLeg?.greatCircleDistanceKm ?? 0;
-    return finalLegDistanceKm <= MIN_FINAL_LEG_DISTANCE_KM;
+    return firstLegDistanceKm <= MIN_FINAL_LEG_DISTANCE_KM
+      || finalLegDistanceKm <= MIN_FINAL_LEG_DISTANCE_KM;
   }
 
   function buildRecommendedRoutesForPair(originContinentCode, destinationContinentCode) {

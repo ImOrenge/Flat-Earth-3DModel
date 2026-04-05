@@ -16,7 +16,7 @@ import {
   getContinentLabelKey,
   inferContinentCode,
   uniqueByIcao
-} from "./route-multileg-core.js";
+} from "./route-multileg-core.js?v=20260405-endpointfilter1";
 
 const DATASET_BASE_PATHS = ["./assets/data", "../assets/data", "/assets/data"];
 const DATASET_FILENAMES = {

@@ -272,6 +272,24 @@ export function isLayoverTooCloseToDestination(route, minFinalLegDistanceKm = MI
   return finalLegDistanceKm <= minFinalLegDistanceKm;
 }
 
+export function isLayoverTooCloseToOrigin(route, minFirstLegDistanceKm = MIN_FINAL_LEG_DISTANCE_KM) {
+  const layoverCount = route?.totals?.layoverCount ?? 0;
+  if (layoverCount <= 0) {
+    return false;
+  }
+  const legs = Array.isArray(route?.legs) ? route.legs : [];
+  if (legs.length === 0) {
+    return false;
+  }
+  const firstLegDistanceKm = legs[0]?.greatCircleDistanceKm ?? 0;
+  return firstLegDistanceKm <= minFirstLegDistanceKm;
+}
+
+export function isLayoverTooCloseToEndpoints(route, minLegDistanceKm = MIN_FINAL_LEG_DISTANCE_KM) {
+  return isLayoverTooCloseToOrigin(route, minLegDistanceKm)
+    || isLayoverTooCloseToDestination(route, minLegDistanceKm);
+}
+
 export function buildRecommendedRoutesForPair({
   originContinentCode,
   destinationContinentCode,
@@ -333,7 +351,7 @@ export function buildRecommendedRoutesForPair({
       resolveCountryName,
       resolveCountryCentroid
     });
-    if (!builtRoute || isLayoverTooCloseToDestination(builtRoute, minFinalLegDistanceKm)) {
+    if (!builtRoute || isLayoverTooCloseToEndpoints(builtRoute, minFinalLegDistanceKm)) {
       return;
     }
 
@@ -456,7 +474,7 @@ export function buildRecommendedRoutesForPair({
       resolveCountryName,
       resolveCountryCentroid
     });
-    if (!flagshipRoute || isLayoverTooCloseToDestination(flagshipRoute, minFinalLegDistanceKm)) {
+    if (!flagshipRoute || isLayoverTooCloseToEndpoints(flagshipRoute, minFinalLegDistanceKm)) {
       continue;
     }
 
