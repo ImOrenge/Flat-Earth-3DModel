@@ -15,11 +15,11 @@ import {
 import { createAstronomyController } from "./modules/astronomy-controller.js?v=20260325-eclipse-selector1";
 import { createCameraController } from "./modules/camera-controller.js?v=20260328-mobiletouch1";
 import { createCelestialTrackingCameraController } from "./modules/celestial-tracking-camera-controller.js?v=20260320-constellation-precession1";
-import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js?v=20260312-darksun-eclipse1";
+import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js?v=20260405-surfacepatch1";
 import { createI18n } from "./modules/i18n.js?v=20260327-mobilehud1";
 import { createMagneticFieldController } from "./modules/magnetic-field-controller.js?v=20260314-magnetic-pinecone3";
 import { createRouteSimulationController } from "./modules/route-simulation-controller.js";
-import { createTextureManager } from "./modules/texture-manager.js?v=20260311-gpu-daynight";
+import { createTextureManager } from "./modules/texture-manager.js?v=20260405-surfacepatch1";
 import { createWalkerController } from "./modules/walker-controller.js?v=20260324-moon-cycle28";
 
 import * as constants from "./modules/constants.js";
@@ -1692,8 +1692,17 @@ const textureApi = createTextureManager({
       return;
     }
 
-    const demoSunGeo = getGeoFromProjectedPosition(orbitSun.position, DISC_RADIUS);
-    astronomyApi.updateDayNightOverlayFromSun(demoSunGeo.latitudeDegrees, demoSunGeo.longitudeDegrees, true);
+    const demoDate = new Date(
+      Number.isFinite(simulationState.simulatedDateMs)
+        ? simulationState.simulatedDateMs
+        : astronomyState.selectedDate.getTime()
+    );
+    const demoSnapshot = astronomyApi.getAstronomySnapshot(demoDate);
+    astronomyApi.updateDayNightOverlayFromSun(
+      demoSnapshot.sun.latitudeDegrees,
+      demoSnapshot.sun.longitudeDegrees,
+      true
+    );
   }
 });
 dayNightOverlayMaterial.uniforms.nightLightsMap.value = textureApi.getNightLightsTexture();
@@ -1773,6 +1782,9 @@ const firstPersonWorldApi = createFirstPersonWorldController({
   constants,
   walkerState,
   renderState,
+  drawSurfacePatch: (...args) => textureApi.drawSurfacePatch(...args),
+  getSurfaceSample: (...args) => textureApi.getSurfaceSample(...args),
+  getSurfaceSampleVersion: () => textureApi.getSurfaceSampleVersion(),
   ambient: firstPersonAmbient,
   keyLight: firstPersonKeyLight,
   rimLight: firstPersonRimLight,

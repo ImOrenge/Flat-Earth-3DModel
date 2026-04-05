@@ -956,23 +956,29 @@ export function setupInputHandlers(deps) {
   
   
     if (astronomyState.enabled) {
-  
+
       const observationDate = astronomyState.live ? new Date() : astronomyState.selectedDate;
-  
+
       const snapshot = astronomyApi.getAstronomySnapshot(observationDate);
   
       astronomyApi.updateDayNightOverlayFromSun(snapshot.sun.latitudeDegrees, snapshot.sun.longitudeDegrees, true);
-  
+
       return;
-  
+
     }
-  
-  
-  
-    const demoSunGeo = getGeoFromProjectedPosition(orbitSun.position, DISC_RADIUS);
-  
-    astronomyApi.updateDayNightOverlayFromSun(demoSunGeo.latitudeDegrees, demoSunGeo.longitudeDegrees, true);
-  
+
+    const demoDate = new Date(
+      Number.isFinite(simulationState.simulatedDateMs)
+        ? simulationState.simulatedDateMs
+        : astronomyState.selectedDate.getTime()
+    );
+    const demoSnapshot = astronomyApi.getAstronomySnapshot(demoDate);
+    astronomyApi.updateDayNightOverlayFromSun(
+      demoSnapshot.sun.latitudeDegrees,
+      demoSnapshot.sun.longitudeDegrees,
+      true
+    );
+
   });
   
   

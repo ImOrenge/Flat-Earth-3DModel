@@ -38,7 +38,6 @@ export function createEclipseController(deps) {
     cameraApi,
     celestialTrackingCameraApi,
     celestialControlState,
-    getGeoFromProjectedPosition,
     orbitMoon,
     orbitMoonBody,
     observerMoon,
@@ -128,7 +127,6 @@ export function createEclipseController(deps) {
     ORBIT_SUN_SIZE,
     ORBIT_DARK_SUN_SIZE,
     ORBIT_MOON_SIZE,
-    DISC_RADIUS,
     ORBIT_SUN_SPEED,
     ORBIT_DARK_SUN_RIM_OPACITY,
     ORBIT_DARK_SUN_DEBUG_OPACITY,
@@ -769,6 +767,7 @@ export function createEclipseController(deps) {
             : astronomyState.selectedDate.getTime()
         )
     );
+    const baseSnapshot = astronomyApi?.getAstronomySnapshot?.(demoPhaseDate) ?? null;
     const sunRenderState = astronomyApi.getSunRenderState({
       orbitAngleRadians: simulationState.orbitSunAngle,
       orbitMode: simulationState.orbitMode,
@@ -779,16 +778,17 @@ export function createEclipseController(deps) {
   
     return {
       date: demoPhaseDate,
-      sun: getGeoFromProjectedPosition(orbitSun.position, DISC_RADIUS),
-      moon: getGeoFromProjectedPosition(orbitMoon.position, DISC_RADIUS),
+      sun: baseSnapshot?.sun ?? { latitudeDegrees: 0, longitudeDegrees: 0 },
+      moon: baseSnapshot?.moon ?? { latitudeDegrees: 0, longitudeDegrees: 0 },
       darkSunRenderState,
-      moonPhase: getMoonPhase(demoPhaseDate),
+      moonPhase: baseSnapshot?.moonPhase ?? getMoonPhase(demoPhaseDate),
       darkSunRenderPosition: orbitDarkSun.position.clone(),
       solarEclipse: createSolarEclipseState(),
       sunPosition: orbitSun.position.clone(),
       sunRenderState,
       sunRenderPosition: orbitSun.position.clone(),
-      sunDisplayHorizontal: astronomyApi?.getSunDisplayHorizontalFromPosition?.(orbitSun.position),
+      sunDisplayHorizontal: baseSnapshot?.sunDisplayHorizontal
+        ?? astronomyApi?.getSunDisplayHorizontalFromPosition?.(orbitSun.position),
       moonPosition: orbitMoon.position.clone(),
       moonRenderPosition: orbitMoon.position.clone()
     };
@@ -4299,4 +4299,6 @@ export function createEclipseController(deps) {
     darkSunOcclusionState
   };
 }
+
+
 

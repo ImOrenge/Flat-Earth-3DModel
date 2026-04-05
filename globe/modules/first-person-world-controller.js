@@ -28,6 +28,9 @@ function drawGroundTexture(context, size) {
   }
 }
 
+const GROUND_PATCH_RADIUS_DEGREES = 3.2;
+const GROUND_PATCH_REDRAW_THRESHOLD_DEGREES = 0.06;
+
 function createGlowTexture() {
   const canvas = document.createElement("canvas");
   canvas.width = 512;
@@ -146,11 +149,32 @@ function createOceanTexture(size = 1024) {
   return texture;
 }
 
+function getOffsetGeoFromAzimuth(observerGeo, azimuthRadians, distanceDegrees) {
+  const latitudeRadians = THREE.MathUtils.degToRad(observerGeo.latitudeDegrees);
+  const northOffset = Math.cos(azimuthRadians) * distanceDegrees;
+  const eastOffset = Math.sin(azimuthRadians) * distanceDegrees;
+  const latitudeDegrees = THREE.MathUtils.clamp(
+    observerGeo.latitudeDegrees + northOffset,
+    -89.5,
+    89.5
+  );
+  const longitudeScale = Math.max(Math.cos(latitudeRadians), 0.15);
+  const longitudeDegrees = observerGeo.longitudeDegrees + (eastOffset / longitudeScale);
+
+  return {
+    latitudeDegrees,
+    longitudeDegrees
+  };
+}
+
 export function createFirstPersonWorldController({
   scene,
   constants,
   walkerState,
   renderState,
+  drawSurfacePatch,
+  getSurfaceSample,
+  getSurfaceSampleVersion = () => 0,
   ambient,
   keyLight,
   rimLight,
@@ -176,10 +200,11 @@ export function createFirstPersonWorldController({
   drawGroundTexture(groundContext, groundCanvas.width);
   const groundTexture = new THREE.CanvasTexture(groundCanvas);
   groundTexture.colorSpace = THREE.SRGBColorSpace;
-  groundTexture.wrapS = THREE.RepeatWrapping;
-  groundTexture.wrapT = THREE.RepeatWrapping;
-  const groundRepeat = Math.max(10, Math.round(constants.FIRST_PERSON_WORLD_RADIUS / 18));
-  groundTexture.repeat.set(groundRepeat, groundRepeat);
+  groundTexture.wrapS = THREE.ClampToEdgeWrapping;
+  groundTexture.wrapT = THREE.ClampToEdgeWrapping;
+  groundTexture.magFilter = THREE.LinearFilter;
+  groundTexture.minFilter = THREE.LinearMipmapLinearFilter;
+  groundTexture.generateMipmaps = true;
   const oceanTexture = createOceanTexture(1024);
   const shallowsTexture = createOceanTexture(1024);
   const oceanRepeat = Math.max(14, Math.round(constants.FIRST_PERSON_WORLD_RADIUS / 20));
@@ -251,6 +276,8 @@ export function createFirstPersonWorldController({
 
   const distantLandMaterial = new THREE.MeshStandardMaterial({
     color: 0x7b755d,
+    transparent: true,
+    opacity: 0.92,
     roughness: 0.98,
     metalness: 0.02
   });
@@ -261,6 +288,7 @@ export function createFirstPersonWorldController({
     depthWrite: false
   });
   const distantLandGroup = new THREE.Group();
+  const distantLandFeatures = [];
   const nextRandom = createSeededRandom(129736);
 
   for (let index = 0; index < 18; index += 1) {
@@ -273,9 +301,10 @@ export function createFirstPersonWorldController({
     const width = THREE.MathUtils.lerp(scaleDimension(12), scaleDimension(38), nextRandom());
     const depth = THREE.MathUtils.lerp(scaleDimension(5), scaleDimension(15), nextRandom());
     const height = THREE.MathUtils.lerp(scaleDimension(0.6), scaleDimension(2.2), nextRandom());
+    const landMaterial = distantLandMaterial.clone();
     const landMass = new THREE.Mesh(
       new THREE.CylinderGeometry(1, 1, 1, 18, 1, false),
-      distantLandMaterial
+      landMaterial
     );
     landMass.scale.set(width, height, depth);
     landMass.position.set(
@@ -286,9 +315,10 @@ export function createFirstPersonWorldController({
     landMass.rotation.y = angle + (nextRandom() * Math.PI);
     distantLandGroup.add(landMass);
 
+    const beachMaterial = distantBeachMaterial.clone();
     const beach = new THREE.Mesh(
       new THREE.CylinderGeometry(1, 1, 1, 18, 1, false),
-      distantBeachMaterial
+      beachMaterial
     );
     beach.scale.set(width * 0.82, height * 0.18, depth * 0.82);
     beach.position.set(
@@ -298,6 +328,22 @@ export function createFirstPersonWorldController({
     );
     beach.rotation.y = landMass.rotation.y;
     distantLandGroup.add(beach);
+
+    distantLandFeatures.push({
+      angle,
+      baseDepth: depth,
+      baseHeight: height,
+      baseRadius: radius,
+      baseRotation: landMass.rotation.y,
+      baseWidth: width,
+      beach,
+      beachMaterial,
+      coastalDistanceDegrees: THREE.MathUtils.lerp(5.5, 11.5, nextRandom()),
+      horizonDistanceDegrees: THREE.MathUtils.lerp(10, 20, nextRandom()),
+      index,
+      landMass,
+      landMaterial
+    });
   }
 
   root.add(distantLandGroup);
@@ -543,10 +589,232 @@ export function createFirstPersonWorldController({
   const seaTargetColor = new THREE.Color();
   const shallowsTargetColor = new THREE.Color();
   const seaSheenColor = new THREE.Color();
+  const sampledGroundBase = new THREE.Color(0x708676);
+  const sampledSeaBase = new THREE.Color(0x5f94b6);
+  const sampledLandBase = new THREE.Color(0x7d765d);
+  const sampledBeachBase = new THREE.Color(0xdcc7a0);
+  const sampledHorizonBase = new THREE.Color(0xd7a36e);
+  const sampledGlowBase = new THREE.Color(0xffb36f);
+  const tempSampleColor = new THREE.Color();
+  const surfacePaletteCache = {
+    key: "",
+    beachOpacity: 0.84,
+    horizonLandPresence: 0.6,
+    landOpacity: 0.92
+  };
+  const groundPatchCache = {
+    latitudeDegrees: Number.NaN,
+    longitudeDegrees: Number.NaN,
+    version: -1
+  };
   const observerEyeOffset = Math.max(
     walkerState.eyeHeightOffset ?? Math.max(constants.WALKER_EYE_HEIGHT - constants.SURFACE_Y, scaleDimension(0.05)),
     0.0001
   );
+
+  function applySampleColor(target, sample, fallbackHex) {
+    target.setHex(fallbackHex);
+    if (!sample) {
+      return target;
+    }
+    tempSampleColor.setRGB(sample.r, sample.g, sample.b);
+    target.copy(tempSampleColor);
+    return target;
+  }
+
+  function refreshSurfacePalette(observerGeo) {
+    const sampleVersion = getSurfaceSampleVersion?.() ?? 0;
+    const cacheKey = `${sampleVersion}:${observerGeo.latitudeDegrees.toFixed(1)}:${observerGeo.longitudeDegrees.toFixed(1)}`;
+    if (surfacePaletteCache.key === cacheKey) {
+      return surfacePaletteCache;
+    }
+
+    surfacePaletteCache.key = cacheKey;
+    const centerSample = getSurfaceSample?.(observerGeo.latitudeDegrees, observerGeo.longitudeDegrees, 2.4) ?? null;
+    const horizonSamples = [
+      getSurfaceSample?.(observerGeo.latitudeDegrees + 8, observerGeo.longitudeDegrees, 5.5) ?? null,
+      getSurfaceSample?.(observerGeo.latitudeDegrees - 8, observerGeo.longitudeDegrees, 5.5) ?? null,
+      getSurfaceSample?.(observerGeo.latitudeDegrees, observerGeo.longitudeDegrees + 10, 5.5) ?? null,
+      getSurfaceSample?.(observerGeo.latitudeDegrees, observerGeo.longitudeDegrees - 10, 5.5) ?? null
+    ].filter(Boolean);
+
+    const horizonAggregate = horizonSamples.length > 0
+      ? horizonSamples.reduce((accumulator, sample) => {
+        accumulator.r += sample.r;
+        accumulator.g += sample.g;
+        accumulator.b += sample.b;
+        accumulator.waterness += sample.waterness;
+        accumulator.vegetation += sample.vegetation;
+        accumulator.arid += sample.arid;
+        accumulator.ice += sample.ice;
+        return accumulator;
+      }, {
+        r: 0,
+        g: 0,
+        b: 0,
+        waterness: 0,
+        vegetation: 0,
+        arid: 0,
+        ice: 0
+      })
+      : null;
+
+    const horizonSample = horizonAggregate
+      ? {
+        r: horizonAggregate.r / horizonSamples.length,
+        g: horizonAggregate.g / horizonSamples.length,
+        b: horizonAggregate.b / horizonSamples.length,
+        waterness: horizonAggregate.waterness / horizonSamples.length,
+        vegetation: horizonAggregate.vegetation / horizonSamples.length,
+        arid: horizonAggregate.arid / horizonSamples.length,
+        ice: horizonAggregate.ice / horizonSamples.length
+      }
+      : centerSample;
+
+    applySampleColor(sampledGroundBase, centerSample, 0x708676);
+    sampledGroundBase.lerp(new THREE.Color(0x6f8578), 0.22);
+
+    applySampleColor(sampledLandBase, horizonSample, 0x7d765d);
+    sampledLandBase.lerp(new THREE.Color(0x7b755d), 0.26);
+
+    applySampleColor(sampledBeachBase, centerSample ?? horizonSample, 0xdcc7a0);
+    sampledBeachBase.lerp(new THREE.Color(0xe0c79f), 0.58);
+
+    applySampleColor(sampledSeaBase, horizonSample ?? centerSample, 0x5f94b6);
+    sampledSeaBase.lerp(new THREE.Color(0x5f94b6), 0.68 + (0.22 * (1 - (horizonSample?.waterness ?? 0.5))));
+
+    applySampleColor(sampledHorizonBase, horizonSample ?? centerSample, 0xd7a36e);
+    sampledHorizonBase.lerp(sampledSeaBase, horizonSample?.waterness ?? 0.4);
+    sampledHorizonBase.lerp(new THREE.Color(0xd7a36e), 0.26);
+
+    sampledGlowBase.copy(sampledHorizonBase).lerp(new THREE.Color(0xffb36f), 0.44);
+
+    const centerWaterness = centerSample?.waterness ?? 0.45;
+    const horizonWaterness = horizonSample?.waterness ?? centerWaterness;
+    const horizonVegetation = horizonSample?.vegetation ?? 0.25;
+    const horizonIce = horizonSample?.ice ?? 0;
+    surfacePaletteCache.landOpacity = THREE.MathUtils.clamp(
+      0.18 + ((1 - horizonWaterness) * 0.92) + (horizonIce * 0.08),
+      0.14,
+      0.96
+    );
+    surfacePaletteCache.beachOpacity = THREE.MathUtils.clamp(
+      0.12 + ((1 - Math.abs(centerWaterness - 0.5) * 2) * 0.76),
+      0.08,
+      0.9
+    );
+    surfacePaletteCache.horizonLandPresence = THREE.MathUtils.clamp(
+      (1 - horizonWaterness) * 0.82 + (horizonVegetation * 0.28) + (horizonIce * 0.2),
+      0.08,
+      1
+    );
+
+    return surfacePaletteCache;
+  }
+
+  function refreshGroundPatch(observerGeo) {
+    const sampleVersion = getSurfaceSampleVersion?.() ?? 0;
+    const latitudeDelta = Math.abs(observerGeo.latitudeDegrees - groundPatchCache.latitudeDegrees);
+    const longitudeDelta = Math.abs(THREE.MathUtils.euclideanModulo(
+      (observerGeo.longitudeDegrees - groundPatchCache.longitudeDegrees) + 180,
+      360
+    ) - 180);
+    const shouldRedraw = (
+      sampleVersion !== groundPatchCache.version
+      || !Number.isFinite(groundPatchCache.latitudeDegrees)
+      || !Number.isFinite(groundPatchCache.longitudeDegrees)
+      || latitudeDelta > GROUND_PATCH_REDRAW_THRESHOLD_DEGREES
+      || longitudeDelta > GROUND_PATCH_REDRAW_THRESHOLD_DEGREES
+    );
+
+    if (!shouldRedraw) {
+      return;
+    }
+
+    const drewPatch = drawSurfacePatch?.(groundContext, groundCanvas.width, groundCanvas.height, {
+      centerLatitudeDegrees: observerGeo.latitudeDegrees,
+      centerLongitudeDegrees: observerGeo.longitudeDegrees,
+      angularRadiusDegrees: GROUND_PATCH_RADIUS_DEGREES
+    }) ?? false;
+
+    if (!drewPatch) {
+      drawGroundTexture(groundContext, groundCanvas.width);
+    }
+
+    groundPatchCache.latitudeDegrees = observerGeo.latitudeDegrees;
+    groundPatchCache.longitudeDegrees = observerGeo.longitudeDegrees;
+    groundPatchCache.version = sampleVersion;
+    groundTexture.needsUpdate = true;
+  }
+
+  function updateDistantLandFeatures(observerGeo, dayFactor, twilightFactor, nightFactor, surfacePalette) {
+    for (const feature of distantLandFeatures) {
+      const azimuthRadians = feature.angle;
+      const horizonGeo = getOffsetGeoFromAzimuth(observerGeo, azimuthRadians, feature.horizonDistanceDegrees);
+      const coastalGeo = getOffsetGeoFromAzimuth(observerGeo, azimuthRadians, feature.coastalDistanceDegrees);
+      const horizonSample = getSurfaceSample?.(horizonGeo.latitudeDegrees, horizonGeo.longitudeDegrees, 4.4) ?? null;
+      const coastalSample = getSurfaceSample?.(coastalGeo.latitudeDegrees, coastalGeo.longitudeDegrees, 2.8) ?? horizonSample;
+      const waterness = horizonSample?.waterness ?? coastalSample?.waterness ?? 0.45;
+      const vegetation = horizonSample?.vegetation ?? coastalSample?.vegetation ?? 0.2;
+      const arid = horizonSample?.arid ?? coastalSample?.arid ?? 0.12;
+      const ice = horizonSample?.ice ?? coastalSample?.ice ?? 0;
+      const landPresence = THREE.MathUtils.clamp(
+        ((1 - waterness) * 1.12) + (vegetation * 0.22) + (arid * 0.12) + (ice * 0.18),
+        0,
+        1
+      );
+      const coastalPresence = THREE.MathUtils.clamp(
+        ((1 - Math.abs((coastalSample?.waterness ?? waterness) - 0.5) * 2) * 0.82) + (landPresence * 0.24),
+        0,
+        1
+      );
+      const radius = THREE.MathUtils.lerp(feature.baseRadius * 1.04, feature.baseRadius * 0.88, landPresence);
+      const width = feature.baseWidth * THREE.MathUtils.lerp(0.24, 1.18, landPresence);
+      const depth = feature.baseDepth * THREE.MathUtils.lerp(0.2, 1.14, landPresence);
+      const height = feature.baseHeight * THREE.MathUtils.lerp(
+        0.12,
+        1.42 + (vegetation * 0.1) + (arid * 0.08) + (ice * 0.16),
+        landPresence
+      );
+      const x = Math.cos(feature.angle) * radius;
+      const z = Math.sin(feature.angle) * radius;
+
+      feature.landMass.visible = landPresence > 0.14;
+      feature.beach.visible = coastalPresence > 0.1;
+      feature.landMass.scale.set(width, Math.max(height, 0.0001), depth);
+      feature.landMass.position.set(x, constants.SURFACE_Y + (height * 0.33), z);
+      feature.landMass.rotation.y = feature.baseRotation + (vegetation - arid) * 0.35;
+      feature.beach.scale.set(
+        Math.max(width * 0.82, 0.0001),
+        Math.max(height * 0.18, scaleDimension(0.025)),
+        Math.max(depth * 0.82, 0.0001)
+      );
+      feature.beach.position.set(x, constants.SURFACE_Y + scaleDimension(0.08), z);
+      feature.beach.rotation.y = feature.landMass.rotation.y;
+
+      applySampleColor(feature.landMaterial.color, horizonSample ?? coastalSample, 0x7d765d);
+      feature.landMaterial.color
+        .lerp(new THREE.Color(0x4f5f4b), dayFactor * (0.22 + (vegetation * 0.16)))
+        .lerp(new THREE.Color(0x8f8f92), ice * 0.42)
+        .lerp(new THREE.Color(0xa96d4c), twilightFactor * (0.12 + (arid * 0.24)))
+        .lerp(new THREE.Color(0x30354a), nightFactor * 0.84);
+      feature.landMaterial.opacity = THREE.MathUtils.clamp(
+        landPresence * surfacePalette.horizonLandPresence * 1.08,
+        0.06,
+        0.96
+      );
+
+      applySampleColor(feature.beachMaterial.color, coastalSample ?? horizonSample, 0xdcc7a0);
+      feature.beachMaterial.color
+        .lerp(new THREE.Color(0xf5d1a4), 0.36 + (arid * 0.2))
+        .lerp(new THREE.Color(0xdce8f6), ice * 0.34)
+        .lerp(new THREE.Color(0xffc48e), twilightFactor * 0.24)
+        .lerp(new THREE.Color(0x657a9a), nightFactor * 0.78);
+      feature.beachMaterial.opacity = THREE.MathUtils.lerp(0.06, 0.86, coastalPresence);
+    }
+
+    distantLandGroup.visible = distantLandFeatures.some((feature) => feature.landMass.visible || feature.beach.visible);
+  }
 
   function getObserverGeo() {
     return {
@@ -555,8 +823,7 @@ export function createFirstPersonWorldController({
     };
   }
 
-  function updateObserverFrame() {
-    const observerGeo = getObserverGeo();
+  function updateObserverFrame(observerGeo = getObserverGeo()) {
     const basis = getGlobeBasisFromGeo(
       observerGeo.latitudeDegrees,
       observerGeo.longitudeDegrees
@@ -632,7 +899,10 @@ export function createFirstPersonWorldController({
     }
 
     root.visible = true;
-    updateObserverFrame();
+    const observerGeo = getObserverGeo();
+    updateObserverFrame(observerGeo);
+    const surfacePalette = refreshSurfacePalette(observerGeo);
+    refreshGroundPatch(observerGeo);
     root.position.copy(walkerState.position).multiplyScalar(renderState.visualScale);
     root.quaternion.copy(tempObserverQuaternion);
 
@@ -671,15 +941,16 @@ export function createFirstPersonWorldController({
     fogTargetColor.copy(horizonColor).lerp(new THREE.Color(0x09111e), nightFactor * 0.68);
     scene.fog.color.lerp(fogTargetColor, 0.08);
 
-    ground.material.color.lerp(
-      new THREE.Color(0x708676).lerp(new THREE.Color(0x3b463f), nightFactor * 0.72).lerp(new THREE.Color(0x9f7b56), twilightFactor * 0.26),
-      0.08
-    );
+    ground.material.color
+      .setRGB(1, 1, 1)
+      .lerp(sampledGroundBase, 0.18)
+      .lerp(new THREE.Color(0x32404f), nightFactor * 0.7)
+      .lerp(new THREE.Color(0xe1bc8b), twilightFactor * 0.14);
     oceanTexture.offset.x = nowSeconds * 0.0035;
     oceanTexture.offset.y = nowSeconds * 0.0022;
     shallowsTexture.offset.x = -nowSeconds * 0.0024;
     shallowsTexture.offset.y = nowSeconds * 0.0016;
-    seaTargetColor.set(0x5f94b6)
+    seaTargetColor.copy(sampledSeaBase)
       .lerp(new THREE.Color(0x6dc0cf), dayFactor * 0.28)
       .lerp(new THREE.Color(0x30506c), nightFactor * 0.82)
       .lerp(new THREE.Color(0xffa269), twilightFactor * 0.18);
@@ -693,7 +964,8 @@ export function createFirstPersonWorldController({
       0.08
     );
     distantSea.material.emissiveIntensity = THREE.MathUtils.lerp(0.08, 0.26, twilightFactor + (dayFactor * 0.12));
-    shallowsTargetColor.set(0xa9dbe4)
+    shallowsTargetColor.copy(sampledSeaBase)
+      .lerp(new THREE.Color(0xa9dbe4), 0.42)
       .lerp(new THREE.Color(0x7cc5d4), dayFactor * 0.22)
       .lerp(new THREE.Color(0x4a6684), nightFactor * 0.86)
       .lerp(new THREE.Color(0xffc082), twilightFactor * 0.36);
@@ -707,7 +979,8 @@ export function createFirstPersonWorldController({
       0.08
     );
     distantShallows.material.emissiveIntensity = THREE.MathUtils.lerp(0.06, 0.18, dayFactor + twilightFactor);
-    seaSheenColor.set(0xffdfb0)
+    seaSheenColor.copy(sampledBeachBase)
+      .lerp(new THREE.Color(0xffdfb0), 0.58)
       .lerp(new THREE.Color(0xff9b62), twilightFactor * 0.46)
       .lerp(new THREE.Color(0x7ea7d7), nightFactor * 0.82);
     seaSheen.material.color.lerp(seaSheenColor, 0.08);
@@ -717,43 +990,26 @@ export function createFirstPersonWorldController({
       THREE.MathUtils.clamp((dayFactor * 0.7) + twilightFactor, 0, 1)
     );
     seaSheen.rotation.z = Math.sin(nowSeconds * 0.08) * 0.06;
-    distantLandMaterial.color.lerp(
-      new THREE.Color(0x7d765d)
-        .lerp(new THREE.Color(0x4f5f4b), dayFactor * 0.28)
-        .lerp(new THREE.Color(0x30354a), nightFactor * 0.84)
-        .lerp(new THREE.Color(0xa96d4c), twilightFactor * 0.3),
-      0.08
-    );
-    distantBeachMaterial.color.lerp(
-      new THREE.Color(0xdcc7a0)
-        .lerp(new THREE.Color(0xffc48e), twilightFactor * 0.34)
-        .lerp(new THREE.Color(0x657a9a), nightFactor * 0.78),
-      0.08
-    );
-    distantBeachMaterial.opacity = THREE.MathUtils.lerp(0.28, 0.88, 0.2 + dayFactor + (twilightFactor * 0.24));
-    horizonWall.material.color.lerp(
-      horizonColor.clone().lerp(new THREE.Color(0x291922), twilightFactor * 0.24),
-      0.08
-    );
+    updateDistantLandFeatures(observerGeo, dayFactor, twilightFactor, nightFactor, surfacePalette);
+    horizonWall.material.color.copy(sampledHorizonBase)
+      .lerp(horizonColor, 0.58)
+      .lerp(new THREE.Color(0x291922), twilightFactor * 0.24);
     horizonWall.material.opacity = THREE.MathUtils.lerp(0.2, 0.56, twilightFactor + (dayFactor * 0.25));
-    horizonSilhouette.material.color.lerp(
-      new THREE.Color(0x41362f)
-        .lerp(new THREE.Color(0x271f24), twilightFactor * 0.48)
-        .lerp(new THREE.Color(0x10182b), nightFactor * 0.82),
-      0.08
+    horizonSilhouette.material.color.copy(sampledLandBase)
+      .lerp(new THREE.Color(0x41362f), 0.42)
+      .lerp(new THREE.Color(0x271f24), twilightFactor * 0.48)
+      .lerp(new THREE.Color(0x10182b), nightFactor * 0.82);
+    horizonSilhouette.material.opacity = THREE.MathUtils.lerp(
+      0.18,
+      0.96,
+      surfacePalette.horizonLandPresence * (0.44 + twilightFactor + (nightFactor * 0.2))
     );
-    horizonSilhouette.material.opacity = THREE.MathUtils.lerp(0.54, 0.96, 0.4 + twilightFactor + (nightFactor * 0.2));
-    horizonVeil.material.color.lerp(
-      new THREE.Color(0xffcc9d)
-        .lerp(new THREE.Color(0xff935f), twilightFactor * 0.58)
-        .lerp(new THREE.Color(0x6f87bc), nightFactor * 0.86),
-      0.08
-    );
+    horizonVeil.material.color.copy(sampledBeachBase)
+      .lerp(new THREE.Color(0xffcc9d), 0.46)
+      .lerp(new THREE.Color(0xff935f), twilightFactor * 0.58)
+      .lerp(new THREE.Color(0x6f87bc), nightFactor * 0.86);
     horizonVeil.material.opacity = THREE.MathUtils.lerp(0.14, 0.58, twilightFactor + (nightFactor * 0.18));
-    horizonGlow.material.color.lerp(
-      new THREE.Color(0xffb36f).lerp(new THREE.Color(0x6e89d8), nightFactor * 0.65),
-      0.08
-    );
+    horizonGlow.material.color.copy(sampledGlowBase).lerp(new THREE.Color(0x6e89d8), nightFactor * 0.65);
     horizonGlow.material.opacity = THREE.MathUtils.lerp(0.05, 0.34, twilightFactor + (dayFactor * 0.22));
 
     syncSkyShader(dayFactor, twilightFactor, nightFactor);
