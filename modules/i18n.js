@@ -1054,3 +1054,19 @@ Object.assign(TRANSLATIONS.ko, {
   helpComparisonTitle: "모델 비교",
   helpComparisonCopy: "항공경로, 식, 공전, 자전 지표를 고정 임계값으로 비교합니다. 결과는 점수와 근거 표만 제공합니다."
 });
+
+Object.assign(TRANSLATIONS.en, {
+  helpOverviewCopy: "This viewer combines astronomy, route replay, constellation reference, and rocket simulation across both flat-disc and spherical-globe scene modes. Use the layout switch to move between the new HUD and the preserved classic control panels.",
+  helpRoutesCopy: "Route Control replays offline aircraft legs, exposes playback speed controls, and summarizes route, aircraft, duration, and progress data. In spherical scene mode, routes are rendered as great-circle arcs with a smooth flight profile.",
+  onboardingRoutes: "Replay aircraft routes across flat and spherical scenes.",
+  onboardingComparison: "Compare flat-disc and spherical-globe model scores and evidence side by side.",
+  helpComparisonCopy: "Compare route, eclipse, orbit, and rotation metrics with fixed thresholds, and switch the 3D scene between flat and spherical views for context."
+});
+
+Object.assign(TRANSLATIONS.ko, {
+  helpOverviewCopy: "\uC774 \uBDF0\uC5B4\uB294 \uD3C9\uBA74 \uC6D0\uD310 \uBAA8\uB4DC\uC640 \uAD6C\uD615 \uAE00\uB85C\uBE0C \uBAA8\uB4DC\uC5D0\uC11C \uCC9C\uBB38, \uD56D\uB85C \uC7AC\uC0DD, \uBCC4\uC790\uB9AC \uCC38\uC870, \uB85C\uCF13 \uC2DC\uBBAC\uB808\uC774\uC158\uC744 \uD568\uAED8 \uC81C\uACF5\uD569\uB2C8\uB2E4. \uB808\uC774\uC544\uC6C3 \uC2A4\uC704\uCE58\uB85C \uC0C8 HUD\uC640 \uAE30\uC874 \uCEE8\uD2B8\uB864 \uD328\uB110 \uC0AC\uC774\uB97C \uC624\uAC08 \uC218 \uC788\uC2B5\uB2C8\uB2E4.",
+  helpRoutesCopy: "\uD56D\uB85C \uCEE8\uD2B8\uB864\uC740 \uC624\uD504\uB77C\uC778 \uBE44\uD589 \uAD6C\uAC04\uC744 \uC7AC\uC0DD\uD558\uACE0, \uC18D\uB3C4 \uC870\uC808\uACFC \uD56D\uB85C\u00B7\uAE30\uCCB4\u00B7\uC18C\uC694 \uC2DC\uAC04\u00B7\uC9C4\uD589 \uB370\uC774\uD130\uB97C \uD568\uAED8 \uBCF4\uC5EC\uC90D\uB2C8\uB2E4. \uAD6C\uD615 \uC7A5\uBA74\uC5D0\uC11C\uB294 \uB300\uAD8C\uD56D\uB85C \uAE30\uBC18\uC758 \uC644\uB9CC\uD55C \uBE44\uD589 \uC544\uD06C\uB85C \uB80C\uB354\uB9C1\uB429\uB2C8\uB2E4.",
+  onboardingRoutes: "\uD3C9\uBA74/\uAD6C\uD615 \uC7A5\uBA74\uC5D0\uC11C \uD56D\uACF5 \uACBD\uB85C\uB97C \uC7AC\uC0DD\uD574 \uBCF4\uC138\uC694.",
+  onboardingComparison: "\uD3C9\uBA74 \uC6D0\uD310/\uAD6C\uD615 \uAE00\uB85C\uBE0C \uBAA8\uB378 \uC810\uC218\uC640 \uADFC\uAC70\uB97C \uB098\uB780\uD788 \uBE44\uAD50\uD558\uC138\uC694.",
+  helpComparisonCopy: "\uD56D\uACF5\uACBD\uB85C, \uC2DD, \uACF5\uC804, \uC790\uC804 \uC9C0\uD45C\uB97C \uACE0\uC815 \uC784\uACC4\uAC12\uC73C\uB85C \uBE44\uAD50\uD558\uACE0 3D \uC52C\uC744 \uD3C9\uBA74/\uAD6C\uD615\uC73C\uB85C \uC804\uD658\uD574 \uB9E5\uB77D\uC744 \uD655\uC778\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4."
+});

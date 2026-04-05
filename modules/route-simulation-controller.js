@@ -16,6 +16,11 @@ const ROUTE_SURFACE_OFFSET = 0.045;
 const ROUTE_ALTITUDE_BASE = 0.2;
 const ROUTE_ALTITUDE_SCALE = 0.55;
 const ROUTE_SEGMENTS = 96;
+const ROUTE_MARKER_STEP = 8;
+const GLOBE_RADIUS_FALLBACK_SCALE = 0.82;
+
+const WORLD_UP = new THREE.Vector3(0, 1, 0);
+const WORLD_RIGHT = new THREE.Vector3(1, 0, 0);
 
 function formatDurationHours(hours, i18n) {
   const totalMinutes = Math.max(0, Math.round(hours * 60));
@@ -89,22 +94,16 @@ function createAircraftModel(scaleDimension) {
   return aircraft;
 }
 
-async function loadJson(path) {
-  const response = await fetch(path);
-  if (!response.ok) {
-    throw new Error(`Failed to load ${path}`);
-  }
-  return response.json();
-}
-
-export function createRouteSimulationController({ constants, i18n, scalableStage, ui }) {
-  const scaleDimension = (value) => value * (constants.MODEL_SCALE ?? 1);
-  const routeSurfaceOffset = scaleDimension(ROUTE_SURFACE_OFFSET);
-  const routeAltitudeBase = scaleDimension(ROUTE_ALTITUDE_BASE);
-  const routeAltitudeScale = scaleDimension(ROUTE_ALTITUDE_SCALE);
+function createRouteLayer({
+  scaleDimension,
+  parent,
+  depthTest = true,
+  pathRenderOrder = null,
+  pointsRenderOrder = null
+}) {
   const routeLayer = new THREE.Group();
   routeLayer.visible = false;
-  scalableStage.add(routeLayer);
+  parent.add(routeLayer);
 
   const routePath = new THREE.Line(
     new THREE.BufferGeometry(),
@@ -113,10 +112,12 @@ export function createRouteSimulationController({ constants, i18n, scalableStage
       transparent: true,
       opacity: 0.95,
       depthWrite: false,
-      depthTest: false
+      depthTest
     })
   );
-  routePath.renderOrder = 18;
+  if (Number.isFinite(pathRenderOrder)) {
+    routePath.renderOrder = pathRenderOrder;
+  }
   routeLayer.add(routePath);
 
   const routePathPoints = new THREE.Points(
@@ -128,10 +129,12 @@ export function createRouteSimulationController({ constants, i18n, scalableStage
       transparent: true,
       opacity: 0.82,
       depthWrite: false,
-      depthTest: false
+      depthTest
     })
   );
-  routePathPoints.renderOrder = 19;
+  if (Number.isFinite(pointsRenderOrder)) {
+    routePathPoints.renderOrder = pointsRenderOrder;
+  }
   routeLayer.add(routePathPoints);
 
   const originMarker = new THREE.Mesh(
@@ -141,7 +144,9 @@ export function createRouteSimulationController({ constants, i18n, scalableStage
       emissive: 0x4fcf84,
       emissiveIntensity: 0.8,
       roughness: 0.25,
-      metalness: 0.06
+      metalness: 0.06,
+      depthTest,
+      depthWrite: false
     })
   );
   routeLayer.add(originMarker);
@@ -153,13 +158,74 @@ export function createRouteSimulationController({ constants, i18n, scalableStage
       emissive: 0xffa44d,
       emissiveIntensity: 0.85,
       roughness: 0.24,
-      metalness: 0.06
+      metalness: 0.06,
+      depthTest,
+      depthWrite: false
     })
   );
   routeLayer.add(destinationMarker);
 
   const aircraft = createAircraftModel(scaleDimension);
   routeLayer.add(aircraft);
+
+  return {
+    aircraft,
+    destinationMarker,
+    originMarker,
+    routeLayer,
+    routePath,
+    routePathPoints
+  };
+}
+
+async function loadJson(path) {
+  const response = await fetch(path);
+  if (!response.ok) {
+    throw new Error(`Failed to load ${path}`);
+  }
+  return response.json();
+}
+
+function geoToUnitVector(latitudeDegrees, longitudeDegrees, target) {
+  const latitudeRadians = THREE.MathUtils.degToRad(latitudeDegrees);
+  const longitudeRadians = THREE.MathUtils.degToRad(longitudeDegrees);
+  const cosLatitude = Math.cos(latitudeRadians);
+  target.set(
+    cosLatitude * Math.cos(longitudeRadians),
+    Math.sin(latitudeRadians),
+    cosLatitude * Math.sin(longitudeRadians)
+  );
+  return target.normalize();
+}
+
+export function createRouteSimulationController({
+  cameraState,
+  constants,
+  globeStage,
+  globeSurface,
+  i18n,
+  scalableStage,
+  ui
+}) {
+  const scaleDimension = (value) => value * (constants.MODEL_SCALE ?? 1);
+  const routeSurfaceOffset = scaleDimension(ROUTE_SURFACE_OFFSET);
+  const routeAltitudeBase = scaleDimension(ROUTE_ALTITUDE_BASE);
+  const routeAltitudeScale = scaleDimension(ROUTE_ALTITUDE_SCALE);
+
+  const flatLayer = createRouteLayer({
+    scaleDimension,
+    parent: scalableStage,
+    depthTest: false,
+    pathRenderOrder: 18,
+    pointsRenderOrder: 19
+  });
+
+  const globeParent = globeStage ?? scalableStage;
+  const globeLayer = createRouteLayer({
+    scaleDimension,
+    parent: globeParent,
+    depthTest: true
+  });
 
   const routeLibrary = {
     countries: [],
@@ -173,10 +239,11 @@ export function createRouteSimulationController({ constants, i18n, scalableStage
   };
 
   const routeState = {
-    curve: null,
     datasetStatusError: false,
     datasetStatusKey: "routeDatasetLoading",
     datasetStatusParams: {},
+    flatCurve: null,
+    globeCurve: null,
     loading: true,
     playing: true,
     progress: 0,
@@ -189,6 +256,34 @@ export function createRouteSimulationController({ constants, i18n, scalableStage
   const tempPoint = new THREE.Vector3();
   const tempTangent = new THREE.Vector3();
   const tempTarget = new THREE.Vector3();
+  const tempUp = new THREE.Vector3();
+  const tempGlobeCenter = new THREE.Vector3();
+  const tempGreatCircleStart = new THREE.Vector3();
+  const tempGreatCircleEnd = new THREE.Vector3();
+  const tempGreatCircleSample = new THREE.Vector3();
+  const tempGreatCircleAxis = new THREE.Vector3();
+  const tempGreatCircleStartScaled = new THREE.Vector3();
+  const tempGreatCircleEndScaled = new THREE.Vector3();
+  const tempGreatCirclePoint = new THREE.Vector3();
+
+  function isSphericalView() {
+    return cameraState?.earthModelView === "spherical";
+  }
+
+  function getGlobeCenter(target = tempGlobeCenter) {
+    if (globeSurface?.position) {
+      return target.copy(globeSurface.position);
+    }
+    return target.set(0, constants.SURFACE_Y * 0.2, 0);
+  }
+
+  function getGlobeRadius() {
+    const radius = globeSurface?.geometry?.parameters?.radius;
+    if (Number.isFinite(radius) && radius > 0) {
+      return radius;
+    }
+    return constants.DISC_RADIUS * GLOBE_RADIUS_FALLBACK_SCALE;
+  }
 
   function setDatasetStatus(key, params = {}, error = false) {
     routeState.datasetStatusKey = key;
@@ -204,6 +299,13 @@ export function createRouteSimulationController({ constants, i18n, scalableStage
     ui.routeSpeedEl.disabled = disabled;
     ui.routePlaybackButton.disabled = disabled;
     ui.routeResetButton.disabled = disabled;
+  }
+
+  function syncRouteLayerVisibility() {
+    const hasRoute = Boolean(routeState.selectedRoute && routeState.flatCurve && routeState.globeCurve);
+    const spherical = isSphericalView();
+    flatLayer.routeLayer.visible = hasRoute && !spherical;
+    globeLayer.routeLayer.visible = hasRoute && spherical;
   }
 
   function resolveCountryName(countryCode) {
@@ -233,7 +335,7 @@ export function createRouteSimulationController({ constants, i18n, scalableStage
     };
   }
 
-  function createCurveForRoute(route) {
+  function createFlatCurveForRoute(route) {
     const startData = getProjectedPositionFromGeo(
       route.origin.latitude,
       route.origin.longitude,
@@ -256,39 +358,139 @@ export function createRouteSimulationController({ constants, i18n, scalableStage
     return new THREE.QuadraticBezierCurve3(start, control, end);
   }
 
+  function sampleGreatCircle(startUnit, endUnit, t, target) {
+    const dot = THREE.MathUtils.clamp(startUnit.dot(endUnit), -1, 1);
+    if (dot > 0.9999) {
+      return target.copy(startUnit).lerp(endUnit, t).normalize();
+    }
+
+    if (dot < -0.9995) {
+      tempGreatCircleAxis.copy(startUnit).cross(WORLD_UP);
+      if (tempGreatCircleAxis.lengthSq() < 1e-8) {
+        tempGreatCircleAxis.copy(startUnit).cross(WORLD_RIGHT);
+      }
+      tempGreatCircleAxis.normalize();
+      return target.copy(startUnit).applyAxisAngle(tempGreatCircleAxis, Math.PI * t).normalize();
+    }
+
+    const theta = Math.acos(dot);
+    const sinTheta = Math.sin(theta);
+    if (sinTheta < 1e-8) {
+      return target.copy(startUnit).lerp(endUnit, t).normalize();
+    }
+    const weightStart = Math.sin((1 - t) * theta) / sinTheta;
+    const weightEnd = Math.sin(t * theta) / sinTheta;
+    return target
+      .copy(startUnit)
+      .multiplyScalar(weightStart)
+      .addScaledVector(endUnit, weightEnd)
+      .normalize();
+  }
+
+  function createGlobeCurveForRoute(route) {
+    geoToUnitVector(route.origin.latitude, route.origin.longitude, tempGreatCircleStart);
+    geoToUnitVector(route.destination.latitude, route.destination.longitude, tempGreatCircleEnd);
+
+    const baseRadius = getGlobeRadius() + routeSurfaceOffset;
+    tempGreatCircleStartScaled.copy(tempGreatCircleStart).multiplyScalar(baseRadius);
+    tempGreatCircleEndScaled.copy(tempGreatCircleEnd).multiplyScalar(baseRadius);
+    const distance = tempGreatCircleStartScaled.distanceTo(tempGreatCircleEndScaled);
+    const peakArc = routeAltitudeBase + Math.min(distance * 0.14, routeAltitudeScale);
+
+    const sampledPoints = [];
+    for (let index = 0; index <= ROUTE_SEGMENTS; index += 1) {
+      const t = index / ROUTE_SEGMENTS;
+      sampleGreatCircle(tempGreatCircleStart, tempGreatCircleEnd, t, tempGreatCircleSample);
+      const radius = baseRadius + (Math.sin(Math.PI * t) * peakArc);
+      tempGreatCirclePoint.copy(tempGreatCircleSample).multiplyScalar(radius).add(getGlobeCenter());
+      sampledPoints.push(tempGreatCirclePoint.clone());
+    }
+
+    return {
+      curve: new THREE.CatmullRomCurve3(sampledPoints, false, "centripetal", 0.5),
+      sampledPoints
+    };
+  }
+
+  function clearLayerGeometry(layer) {
+    layer.routePath.geometry.setFromPoints([]);
+    layer.routePathPoints.geometry.setFromPoints([]);
+  }
+
+  function applyLayerGeometry(layer, sampledPoints) {
+    if (!sampledPoints.length) {
+      clearLayerGeometry(layer);
+      return;
+    }
+
+    const markerPoints = sampledPoints.filter(
+      (_, index) => index % ROUTE_MARKER_STEP === 0 || index === sampledPoints.length - 1
+    );
+
+    layer.routePath.geometry.setFromPoints(sampledPoints);
+    layer.routePathPoints.geometry.setFromPoints(markerPoints);
+    layer.originMarker.position.copy(sampledPoints[0]);
+    layer.destinationMarker.position.copy(sampledPoints[sampledPoints.length - 1]);
+  }
+
   function syncAircraftPose() {
-    if (!routeState.curve || !routeState.selectedRoute) {
-      routeLayer.visible = false;
+    if (!routeState.selectedRoute) {
+      flatLayer.routeLayer.visible = false;
+      globeLayer.routeLayer.visible = false;
+      return;
+    }
+
+    const spherical = isSphericalView();
+    const activeCurve = spherical ? routeState.globeCurve : routeState.flatCurve;
+    const activeLayer = spherical ? globeLayer : flatLayer;
+    const inactiveLayer = spherical ? flatLayer : globeLayer;
+    inactiveLayer.aircraft.visible = false;
+
+    if (!activeCurve) {
+      syncRouteLayerVisibility();
       return;
     }
 
     const clampedProgress = THREE.MathUtils.clamp(routeState.progress, 0, 1);
-    routeState.curve.getPointAt(clampedProgress, tempPoint);
-    routeState.curve.getTangentAt(clampedProgress, tempTangent);
+    activeCurve.getPointAt(clampedProgress, tempPoint);
+    activeCurve.getTangentAt(clampedProgress, tempTangent);
     tempTarget.copy(tempPoint).add(tempTangent);
 
-    aircraft.position.copy(tempPoint);
-    aircraft.lookAt(tempTarget);
-    routeLayer.visible = true;
+    activeLayer.aircraft.position.copy(tempPoint);
+    if (spherical) {
+      tempUp.copy(tempPoint).sub(getGlobeCenter());
+      if (tempUp.lengthSq() > 1e-8) {
+        activeLayer.aircraft.up.copy(tempUp.normalize());
+      } else {
+        activeLayer.aircraft.up.copy(WORLD_UP);
+      }
+    } else {
+      activeLayer.aircraft.up.copy(WORLD_UP);
+    }
+    activeLayer.aircraft.lookAt(tempTarget);
+    activeLayer.aircraft.visible = true;
+
+    syncRouteLayerVisibility();
   }
 
   function syncRouteGeometry() {
     if (!routeState.selectedRoute) {
-      routeLayer.visible = false;
-      routeState.curve = null;
-      routePath.geometry.setFromPoints([]);
-      routePathPoints.geometry.setFromPoints([]);
+      routeState.flatCurve = null;
+      routeState.globeCurve = null;
+      clearLayerGeometry(flatLayer);
+      clearLayerGeometry(globeLayer);
+      syncRouteLayerVisibility();
       return;
     }
 
-    routeState.curve = createCurveForRoute(routeState.selectedRoute);
-    const sampledPoints = routeState.curve.getPoints(ROUTE_SEGMENTS);
-    const markerPoints = sampledPoints.filter((_, index) => index % 8 === 0);
+    routeState.flatCurve = createFlatCurveForRoute(routeState.selectedRoute);
+    const flatPoints = routeState.flatCurve.getPoints(ROUTE_SEGMENTS);
+    applyLayerGeometry(flatLayer, flatPoints);
 
-    routePath.geometry.setFromPoints(sampledPoints);
-    routePathPoints.geometry.setFromPoints(markerPoints);
-    originMarker.position.copy(sampledPoints[0]);
-    destinationMarker.position.copy(sampledPoints[sampledPoints.length - 1]);
+    const globeRoute = createGlobeCurveForRoute(routeState.selectedRoute);
+    routeState.globeCurve = globeRoute.curve;
+    applyLayerGeometry(globeLayer, globeRoute.sampledPoints);
+
     syncAircraftPose();
   }
 
@@ -459,17 +661,20 @@ export function createRouteSimulationController({ constants, i18n, scalableStage
   }
 
   function update(deltaSeconds) {
-    if (!routeState.ready || !routeState.playing || !routeState.selectedRoute) {
+    if (!routeState.ready || !routeState.selectedRoute) {
+      syncRouteLayerVisibility();
       return;
     }
 
-    routeState.progress += (deltaSeconds * routeState.speedMultiplier) / BASE_ROUTE_CYCLE_SECONDS;
-    if (routeState.progress >= 1) {
-      routeState.progress %= 1;
+    if (routeState.playing) {
+      routeState.progress += (deltaSeconds * routeState.speedMultiplier) / BASE_ROUTE_CYCLE_SECONDS;
+      if (routeState.progress >= 1) {
+        routeState.progress %= 1;
+      }
+      syncRouteUi();
     }
 
     syncAircraftPose();
-    syncRouteUi();
   }
 
   function refreshLocalizedUi() {
@@ -478,6 +683,7 @@ export function createRouteSimulationController({ constants, i18n, scalableStage
   }
 
   syncRouteUi();
+  syncRouteLayerVisibility();
 
   return {
     initialize,

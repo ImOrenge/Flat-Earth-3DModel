@@ -1293,6 +1293,7 @@ const {
   stage,
   scalableStage,
   globeStage,
+  globeSurface,
   topMaterial,
   sideMaterial,
   bottomMaterial,
@@ -1779,7 +1780,10 @@ const firstPersonWorldApi = createFirstPersonWorldController({
 });
 
 const routeSimulationApi = createRouteSimulationController({
+  cameraState,
   constants,
+  globeStage,
+  globeSurface,
   i18n,
   scalableStage,
   ui: {
