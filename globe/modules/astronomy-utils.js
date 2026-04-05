@@ -1,4 +1,4 @@
-﻿import * as THREE from "../vendor/three.module.js";
+﻿import * as THREE from "../../vendor/three.module.js";
 import {
   normalizeDegrees,
   projectedRadiusFromLatitude,
@@ -843,3 +843,4 @@ export function getLocalLightSummary(solarFactor) {
   }
   return "Night";
 }
+
