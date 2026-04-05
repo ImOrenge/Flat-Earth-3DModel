@@ -742,11 +742,23 @@
             <button class="hud-subtab" data-hud-panel-tab="summary" type="button"><span class="subtab-icon" aria-hidden="true">??/span><span data-i18n="hudRoutesSectionSummary">Summary</span></button>
           </div>
           <section class="route-panel hud-subpanel active" data-hud-panel-section="playback">
-            <p class="orbit-title" data-i18n="offlineRouteLibraryTitle">Offline Route Library</p>
-            <p class="sync-copy" id="route-dataset-status">Loading offline route library...</p>
-            <label class="field" for="route-select">
-              <span class="field-label" data-i18n="routeLabel">Route</span>
-              <select class="select-input" id="route-select" disabled></select>
+            <p class="orbit-title" data-i18n="offlineRouteLibraryTitle">Globe Route Builder</p>
+            <p class="sync-copy" id="route-dataset-status">Loading globe route builder...</p>
+            <label class="field" for="route-origin-country">
+              <span class="field-label" data-i18n="routeOriginCountryLabel">Origin Country</span>
+              <select class="select-input" id="route-origin-country" disabled></select>
+            </label>
+            <label class="field" for="route-origin-airport">
+              <span class="field-label" data-i18n="routeOriginAirportLabel">Origin Airport</span>
+              <select class="select-input" id="route-origin-airport" disabled></select>
+            </label>
+            <label class="field" for="route-destination-country">
+              <span class="field-label" data-i18n="routeDestinationCountryLabel">Destination Country</span>
+              <select class="select-input" id="route-destination-country" disabled></select>
+            </label>
+            <label class="field" for="route-destination-airport">
+              <span class="field-label" data-i18n="routeDestinationAirportLabel">Destination Airport</span>
+              <select class="select-input" id="route-destination-airport" disabled></select>
             </label>
             <label class="field" for="route-speed">
               <span class="field-label" data-i18n="playbackSpeedLabel">Playback Speed</span>
@@ -763,14 +775,14 @@
           </section>
 
           <section class="route-panel route-summary-panel hud-subpanel" data-hud-panel-section="summary">
-            <p class="orbit-title" data-i18n="activeRouteTitle">Active Route</p>
+            <p class="orbit-title" data-i18n="activeRouteTitle">Active Globe Route</p>
             <p class="sync-copy" id="route-summary">
-              Offline route metadata and aircraft position will appear here once the dataset is ready.
+              Choose origin and destination airports to build a globe route.
             </p>
             <div class="coord-grid">
               <div class="coord-card">
                 <span class="coord-label" data-i18n="routeLegLabel">Leg</span>
-                <strong class="coord-value" id="route-leg">Select a route</strong>
+                <strong class="coord-value" id="route-leg">Choose airports</strong>
               </div>
               <div class="coord-card">
                 <span class="coord-label" data-i18n="routeAircraftLabel">Aircraft</span>
@@ -968,7 +980,7 @@
     </div>
   </div>
 
-  <script type="module" src="./app.js?v=20260328-mobileratio2"></script>
+  <script type="module" src="./app.js?v=20260405-countryroute1"></script>
   </body>
 </html>
 

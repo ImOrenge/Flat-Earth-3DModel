@@ -4,11 +4,12 @@ import {
   getProjectedPositionFromGeo
 } from "./geo-utils.js";
 
-const DATASET_PATHS = {
-  countries: "./assets/data/countries.json",
-  airports: "./assets/data/airports.json",
-  aircraftTypes: "./assets/data/aircraft-types.json",
-  routes: "./assets/data/routes.json"
+const DATASET_BASE_PATHS = ["./assets/data", "../assets/data", "/assets/data"];
+const DATASET_FILENAMES = {
+  countries: ["countries.json"],
+  airports: ["airports.json"],
+  aircraftTypes: ["aircraft-types.json"],
+  routes: ["routes-spherical.json", "routes.json"]
 };
 
 const BASE_ROUTE_CYCLE_SECONDS = 120;
@@ -178,12 +179,40 @@ function createRouteLayer({
   };
 }
 
-async function loadJson(path) {
-  const response = await fetch(path);
-  if (!response.ok) {
-    throw new Error(`Failed to load ${path}`);
+function buildDatasetPathCandidates(filenames) {
+  const candidateFilenames = Array.isArray(filenames) ? filenames : [filenames];
+  const paths = [];
+
+  for (const filename of candidateFilenames) {
+    for (const basePath of DATASET_BASE_PATHS) {
+      paths.push(`${basePath}/${filename}`);
+    }
   }
-  return response.json();
+
+  return paths;
+}
+
+async function loadJson(pathCandidates, label) {
+  const attempted = [];
+  let lastError = null;
+
+  for (const path of pathCandidates) {
+    try {
+      const response = await fetch(path, { cache: "no-store" });
+      if (!response.ok) {
+        attempted.push(`${path} [${response.status}]`);
+        continue;
+      }
+      return response.json();
+    } catch (error) {
+      lastError = error;
+      attempted.push(`${path} [network-error]`);
+    }
+  }
+
+  const details = attempted.join(", ");
+  const lastErrorMessage = lastError instanceof Error ? ` (${lastError.message})` : "";
+  throw new Error(`Failed to load ${label}. Tried: ${details}${lastErrorMessage}`);
 }
 
 function geoToUnitVector(latitudeDegrees, longitudeDegrees, target) {
@@ -572,10 +601,10 @@ export function createRouteSimulationController({
 
     try {
       const [countries, airports, aircraftTypes, routes] = await Promise.all([
-        loadJson(DATASET_PATHS.countries),
-        loadJson(DATASET_PATHS.airports),
-        loadJson(DATASET_PATHS.aircraftTypes),
-        loadJson(DATASET_PATHS.routes)
+        loadJson(buildDatasetPathCandidates(DATASET_FILENAMES.countries), "countries"),
+        loadJson(buildDatasetPathCandidates(DATASET_FILENAMES.airports), "airports"),
+        loadJson(buildDatasetPathCandidates(DATASET_FILENAMES.aircraftTypes), "aircraftTypes"),
+        loadJson(buildDatasetPathCandidates(DATASET_FILENAMES.routes), "routes")
       ]);
 
       routeLibrary.countries = countries;
@@ -613,6 +642,7 @@ export function createRouteSimulationController({
       });
       selectRoute(ui.routeSelectEl.value || routes[0].id);
     } catch (error) {
+      console.error("[routes] offline dataset load failed", error);
       routeState.loading = false;
       routeState.ready = false;
       routeState.playing = false;
