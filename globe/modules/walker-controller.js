@@ -4,6 +4,7 @@ import {
   getSunHorizontalCoordinates
 } from "./astronomy-utils.js?v=20260324-moon-cycle28";
 import {
+  createGlobeModelFrame,
   formatGeoPair,
   getGeoFromGlobePosition,
   getGlobeBasisFromGeo,
@@ -12,6 +13,7 @@ import {
 
 export function createWalkerController({
   constants,
+  globeSurface,
   i18n,
   walkerState,
   renderState,
@@ -26,7 +28,6 @@ export function createWalkerController({
   keyLight,
   rimLight
 }) {
-  const globeCenter = new THREE.Vector3();
   const tempWalkerDirection = new THREE.Vector3();
   const tempWalkerRight = new THREE.Vector3();
   const tempWalkerPosition = new THREE.Vector3();
@@ -39,11 +40,17 @@ export function createWalkerController({
   const tempWalkerUp = new THREE.Vector3();
   const tempWalkerEyePosition = new THREE.Vector3();
   const tempWalkerLookTarget = new THREE.Vector3();
+  const globeFrame = createGlobeModelFrame(globeSurface, { space: "parent" });
+
+  function getGlobeFrame() {
+    return globeFrame;
+  }
 
   function getSurfaceRadius() {
+    const frame = getGlobeFrame();
     return Math.max(
       walkerState.surfaceRadius
-        ?? ((constants.DISC_RADIUS * 0.82) + constants.WALKER_SURFACE_OFFSET),
+        ?? (frame.radius + constants.WALKER_SURFACE_OFFSET),
       0.0001
     );
   }
@@ -57,6 +64,7 @@ export function createWalkerController({
   }
 
   function getObserverGeo() {
+    const frame = getGlobeFrame();
     if (Number.isFinite(walkerState.latitudeDegrees) && Number.isFinite(walkerState.longitudeDegrees)) {
       return {
         latitudeDegrees: walkerState.latitudeDegrees,
@@ -64,14 +72,26 @@ export function createWalkerController({
       };
     }
 
-    const observerGeo = getGeoFromGlobePosition(walkerState.position, globeCenter, getSurfaceRadius());
+    const observerGeo = getGeoFromGlobePosition(
+      walkerState.position,
+      frame.center,
+      getSurfaceRadius(),
+      frame
+    );
     walkerState.latitudeDegrees = observerGeo.latitudeDegrees;
     walkerState.longitudeDegrees = observerGeo.longitudeDegrees;
     return observerGeo;
   }
 
   function syncWalkerPositionFromGeo(latitudeDegrees, longitudeDegrees) {
-    const position = getGlobePositionFromGeo(latitudeDegrees, longitudeDegrees, getSurfaceRadius(), globeCenter);
+    const frame = getGlobeFrame();
+    const position = getGlobePositionFromGeo(
+      latitudeDegrees,
+      longitudeDegrees,
+      getSurfaceRadius(),
+      frame.center,
+      frame
+    );
     walkerState.latitudeDegrees = latitudeDegrees;
     walkerState.longitudeDegrees = longitudeDegrees;
     walkerState.position.set(position.x, position.y, position.z);
@@ -79,14 +99,24 @@ export function createWalkerController({
   }
 
   function syncWalkerGeoFromPosition() {
-    const observerGeo = getGeoFromGlobePosition(walkerState.position, globeCenter, getSurfaceRadius());
+    const frame = getGlobeFrame();
+    const observerGeo = getGeoFromGlobePosition(
+      walkerState.position,
+      frame.center,
+      getSurfaceRadius(),
+      frame
+    );
     walkerState.latitudeDegrees = observerGeo.latitudeDegrees;
     walkerState.longitudeDegrees = observerGeo.longitudeDegrees;
     return observerGeo;
   }
 
   function getWalkerBasis(observerGeo = getObserverGeo()) {
-    const basis = getGlobeBasisFromGeo(observerGeo.latitudeDegrees, observerGeo.longitudeDegrees);
+    const basis = getGlobeBasisFromGeo(
+      observerGeo.latitudeDegrees,
+      observerGeo.longitudeDegrees,
+      getGlobeFrame()
+    );
     tempWalkerNorth.set(basis.north.x, basis.north.y, basis.north.z).normalize();
     tempWalkerEast.set(basis.east.x, basis.east.y, basis.east.z).normalize();
     tempWalkerUp.set(basis.up.x, basis.up.y, basis.up.z).normalize();

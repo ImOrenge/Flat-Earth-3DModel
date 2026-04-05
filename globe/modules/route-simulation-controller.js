@@ -1,17 +1,12 @@
 import * as THREE from "../../vendor/three.module.js";
 import {
+  createGlobeModelFrame,
   formatGeoPair,
   getGlobeNormalFromGeo,
+  getGlobePositionFromNormal,
   getGlobePositionFromGeo
 } from "./geo-utils.js";
-
-const DATASET_BASE_PATHS = ["./assets/data", "../assets/data", "/assets/data"];
-const DATASET_FILENAMES = {
-  countries: ["countries.json"],
-  countryCentroids: ["country-centroids.json"],
-  airports: ["airports.json"],
-  aircraftTypes: ["aircraft-types.json"]
-};
+import { createRouteDataService } from "./route-data-service.js";
 
 const BASE_ROUTE_CYCLE_SECONDS = 120;
 const EARTH_RADIUS_KM = 6371;
@@ -27,6 +22,9 @@ const GREAT_CIRCLE_ANTIPODAL_THRESHOLD = -0.9995;
 const DISTANCE_PROFILE_SHORT_KM = 3500;
 const DISTANCE_PROFILE_MEDIUM_KM = 9000;
 const COUNTRY_MARKER_BASE_NORMAL = new THREE.Vector3(0, 0, 1);
+const DATA_SOURCE_BUNDLED = "bundled";
+const DATA_SOURCE_CACHED = "cached";
+const DATA_SOURCE_LIVE_API = "live_api";
 
 function formatDurationHours(hours, i18n) {
   const totalMinutes = Math.max(0, Math.round(hours * 60));
@@ -152,42 +150,6 @@ function createCountryHalo(scaleDimension, { color, innerRadius, outerRadius, co
   return marker;
 }
 
-function buildDatasetPathCandidates(filenames) {
-  const candidateFilenames = Array.isArray(filenames) ? filenames : [filenames];
-  const paths = [];
-
-  for (const filename of candidateFilenames) {
-    for (const basePath of DATASET_BASE_PATHS) {
-      paths.push(`${basePath}/${filename}`);
-    }
-  }
-
-  return paths;
-}
-
-async function loadJson(pathCandidates, label) {
-  const attempted = [];
-  let lastError = null;
-
-  for (const path of pathCandidates) {
-    try {
-      const response = await fetch(path, { cache: "no-store" });
-      if (!response.ok) {
-        attempted.push(`${path} [${response.status}]`);
-        continue;
-      }
-      return response.json();
-    } catch (error) {
-      lastError = error;
-      attempted.push(`${path} [network-error]`);
-    }
-  }
-
-  const details = attempted.join(", ");
-  const lastErrorMessage = lastError instanceof Error ? ` (${lastError.message})` : "";
-  throw new Error(`Failed to load ${label}. Tried: ${details}${lastErrorMessage}`);
-}
-
 function createSampledPath(points) {
   const safePoints = points.map((point) => point.clone());
   const tempDelta = new THREE.Vector3();
@@ -237,6 +199,16 @@ function compareText(a, b) {
   return String(a ?? "").localeCompare(String(b ?? ""), undefined, { sensitivity: "base" });
 }
 
+function getSourceLabelKey(source) {
+  if (source === DATA_SOURCE_LIVE_API) {
+    return "routeDataSourceLiveApi";
+  }
+  if (source === DATA_SOURCE_CACHED) {
+    return "routeDataSourceCached";
+  }
+  return "routeDataSourceBundled";
+}
+
 export function createRouteSimulationController({
   constants,
   globeCenter,
@@ -247,8 +219,11 @@ export function createRouteSimulationController({
   ui
 }) {
   const scaleDimension = (value) => value * (constants.MODEL_SCALE ?? 1);
-  const airportSurfaceOffset = Math.max(scaleDimension(0.018), globeRadius * ROUTE_MARKER_SURFACE_RATIO);
-  const countrySurfaceOffset = Math.max(scaleDimension(0.01), globeRadius * COUNTRY_MARKER_SURFACE_RATIO);
+  const routeFrame = createGlobeModelFrame(globeSurface, { space: "self" });
+  const routeCenter = new THREE.Vector3(routeFrame.center.x, routeFrame.center.y, routeFrame.center.z);
+  const routeModelRadius = Number.isFinite(globeRadius) ? globeRadius : routeFrame.radius;
+  const airportSurfaceOffset = Math.max(scaleDimension(0.018), routeModelRadius * ROUTE_MARKER_SURFACE_RATIO);
+  const countrySurfaceOffset = Math.max(scaleDimension(0.01), routeModelRadius * COUNTRY_MARKER_SURFACE_RATIO);
 
   const routeLayer = new THREE.Group();
   routeLayer.visible = false;
@@ -340,6 +315,8 @@ export function createRouteSimulationController({
     aircraftTypeByCode: new Map()
   };
 
+  const routeDataService = createRouteDataService();
+
   const routeState = {
     path: null,
     datasetStatusError: false,
@@ -357,7 +334,10 @@ export function createRouteSimulationController({
     selectionErrorKey: "",
     selectionErrorParams: {},
     speedMultiplier: Number(ui.routeSpeedEl?.value ?? 8),
-    libraryStatusParams: {}
+    libraryStatusParams: {},
+    refreshing: false,
+    datasetSource: DATA_SOURCE_BUNDLED,
+    lastSyncedAt: null
   };
 
   const tempPoint = new THREE.Vector3();
@@ -370,7 +350,6 @@ export function createRouteSimulationController({
   const tempMarkerNormal = new THREE.Vector3();
   const tempRouteStartUnit = new THREE.Vector3();
   const tempRouteEndUnit = new THREE.Vector3();
-  const globeLocalCenter = new THREE.Vector3();
   void globeCenter;
 
   function setDatasetStatus(key, params = {}, error = false) {
@@ -379,6 +358,30 @@ export function createRouteSimulationController({
     routeState.datasetStatusError = error;
     ui.routeDatasetStatusEl.textContent = i18n.t(key, params);
     ui.routeDatasetStatusEl.classList.toggle("error", error);
+  }
+
+  function syncDatasetMetaUi() {
+    if (ui.routeDataSourceEl) {
+      ui.routeDataSourceEl.textContent = i18n.t(getSourceLabelKey(routeState.datasetSource));
+    }
+
+    if (!ui.routeLastSyncEl) {
+      return;
+    }
+
+    if (!Number.isFinite(routeState.lastSyncedAt) || routeState.lastSyncedAt <= 0) {
+      ui.routeLastSyncEl.textContent = i18n.t("routeLastSyncUnknown");
+      return;
+    }
+
+    const formatted = i18n.formatDate(new Date(routeState.lastSyncedAt), {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+    ui.routeLastSyncEl.textContent = i18n.t("routeLastSyncValue", { time: formatted });
   }
 
   function setSelectionError(key, params = {}) {
@@ -402,6 +405,9 @@ export function createRouteSimulationController({
     ui.routeSpeedEl.disabled = routeDisabled;
     ui.routePlaybackButton.disabled = routeDisabled;
     ui.routeResetButton.disabled = routeDisabled;
+    if (ui.routeRefreshButton) {
+      ui.routeRefreshButton.disabled = routeState.loading || routeState.refreshing;
+    }
   }
 
   function resolveCountryName(countryCode) {
@@ -486,9 +492,9 @@ export function createRouteSimulationController({
 
   function getCruiseAltitudeUnits(route) {
     const altitudeKm = Math.max(0, Number(route.cruiseAltitudeFt) || 0) * 0.0003048;
-    const altitudeUnitsRaw = globeRadius * (altitudeKm / EARTH_RADIUS_KM);
-    const minAltitude = globeRadius * ROUTE_ALTITUDE_MIN_RATIO;
-    const maxAltitude = globeRadius * ROUTE_ALTITUDE_MAX_RATIO;
+    const altitudeUnitsRaw = routeModelRadius * (altitudeKm / EARTH_RADIUS_KM);
+    const minAltitude = routeModelRadius * ROUTE_ALTITUDE_MIN_RATIO;
+    const maxAltitude = routeModelRadius * ROUTE_ALTITUDE_MAX_RATIO;
     return THREE.MathUtils.clamp(
       altitudeUnitsRaw * ROUTE_ALTITUDE_VISUAL_BOOST,
       minAltitude,
@@ -497,8 +503,8 @@ export function createRouteSimulationController({
   }
 
   function computeGreatCircleDistanceKm(originAirport, destinationAirport) {
-    const originNormal = getGlobeNormalFromGeo(originAirport.latitude, originAirport.longitude);
-    const destinationNormal = getGlobeNormalFromGeo(destinationAirport.latitude, destinationAirport.longitude);
+    const originNormal = getGlobeNormalFromGeo(originAirport.latitude, originAirport.longitude, routeFrame);
+    const destinationNormal = getGlobeNormalFromGeo(destinationAirport.latitude, destinationAirport.longitude, routeFrame);
 
     tempRouteStartUnit.set(originNormal.x, originNormal.y, originNormal.z).normalize();
     tempRouteEndUnit.set(destinationNormal.x, destinationNormal.y, destinationNormal.z).normalize();
@@ -558,8 +564,8 @@ export function createRouteSimulationController({
   }
 
   function createPathForRoute(route) {
-    const startNormalData = getGlobeNormalFromGeo(route.origin.latitude, route.origin.longitude);
-    const endNormalData = getGlobeNormalFromGeo(route.destination.latitude, route.destination.longitude);
+    const startNormalData = getGlobeNormalFromGeo(route.origin.latitude, route.origin.longitude, routeFrame);
+    const endNormalData = getGlobeNormalFromGeo(route.destination.latitude, route.destination.longitude, routeFrame);
     const startUnit = new THREE.Vector3(startNormalData.x, startNormalData.y, startNormalData.z).normalize();
     const endUnit = new THREE.Vector3(endNormalData.x, endNormalData.y, endNormalData.z).normalize();
     const centralAngle = startUnit.angleTo(endUnit);
@@ -577,11 +583,10 @@ export function createRouteSimulationController({
       }
 
       const altitudeOffset = cruiseAltitudeUnits * Math.sin(Math.PI * t);
-      const position = getGlobePositionFromGeo(
-        THREE.MathUtils.radToDeg(Math.asin(tempUnit.y)),
-        THREE.MathUtils.radToDeg(Math.atan2(tempUnit.z, tempUnit.x)),
-        globeRadius + airportSurfaceOffset + altitudeOffset,
-        globeLocalCenter
+      const position = getGlobePositionFromNormal(
+        tempUnit,
+        routeModelRadius + airportSurfaceOffset + altitudeOffset,
+        routeFrame
       );
       sampledPoints.push(new THREE.Vector3(position.x, position.y, position.z));
     }
@@ -595,11 +600,11 @@ export function createRouteSimulationController({
   }
 
   function positionMarkerAtGeo(marker, latitude, longitude, radius, orientToSurface = false) {
-    const position = getGlobePositionFromGeo(latitude, longitude, radius, globeLocalCenter);
+    const position = getGlobePositionFromGeo(latitude, longitude, radius, routeFrame);
     marker.position.set(position.x, position.y, position.z);
 
     if (orientToSurface) {
-      const normal = getGlobeNormalFromGeo(latitude, longitude);
+      const normal = getGlobeNormalFromGeo(latitude, longitude, routeFrame);
       tempMarkerNormal.set(normal.x, normal.y, normal.z).normalize();
       marker.quaternion.setFromUnitVectors(COUNTRY_MARKER_BASE_NORMAL, tempMarkerNormal);
     }
@@ -627,7 +632,7 @@ export function createRouteSimulationController({
     const clampedProgress = THREE.MathUtils.clamp(routeState.progress, 0, 1);
     routeState.path.getPointAt(clampedProgress, tempPoint);
     routeState.path.getTangentAt(clampedProgress, tempTangent);
-    tempUp.copy(tempPoint).normalize();
+    tempUp.copy(tempPoint).sub(routeCenter).normalize();
     tempTarget.copy(tempPoint).add(tempTangent);
 
     aircraft.position.copy(tempPoint);
@@ -648,14 +653,14 @@ export function createRouteSimulationController({
       originCountryMarker,
       route.originCountryCentroid.latitude,
       route.originCountryCentroid.longitude,
-      globeRadius + countrySurfaceOffset,
+      routeModelRadius + countrySurfaceOffset,
       true
     );
     positionMarkerAtGeo(
       destinationCountryMarker,
       route.destinationCountryCentroid.latitude,
       route.destinationCountryCentroid.longitude,
-      globeRadius + countrySurfaceOffset,
+      routeModelRadius + countrySurfaceOffset,
       true
     );
     originCountryMarker.visible = true;
@@ -739,6 +744,7 @@ export function createRouteSimulationController({
     const route = routeState.selectedRoute;
     const { origin: selectedOrigin, destination: selectedDestination } = getSelectedAirports();
     const cycleSeconds = BASE_ROUTE_CYCLE_SECONDS / Math.max(routeState.speedMultiplier, 1);
+    syncDatasetMetaUi();
 
     ui.routeSpeedValueEl.textContent = i18n.t("routeSpeedValue", {
       speed: routeState.speedMultiplier,
@@ -820,7 +826,10 @@ export function createRouteSimulationController({
   }
 
   function applyLoadedStatus() {
-    setDatasetStatus("routeDatasetLoaded", routeState.libraryStatusParams);
+    setDatasetStatus("routeDatasetLoaded", {
+      ...routeState.libraryStatusParams,
+      source: i18n.t(getSourceLabelKey(routeState.datasetSource))
+    });
   }
 
   function applySelectionChange(resetProgress = true) {
@@ -903,109 +912,212 @@ export function createRouteSimulationController({
     applySelectionChange(true);
   }
 
+  function applyLibraryDataset(dataset, { preserveSelection = true, source = DATA_SOURCE_BUNDLED, fetchedAt = null } = {}) {
+    const previousOriginCountry = routeState.selectedOriginCountryCode;
+    const previousDestinationCountry = routeState.selectedDestinationCountryCode;
+    const previousOriginAirport = routeState.selectedOriginAirportIcao;
+    const previousDestinationAirport = routeState.selectedDestinationAirportIcao;
+    const previousSelectionKey = `${previousOriginAirport}|${previousDestinationAirport}`;
+
+    routeLibrary.countries = [];
+    routeLibrary.countryCentroids = Array.isArray(dataset.countryCentroids) ? dataset.countryCentroids : [];
+    routeLibrary.airports = Array.isArray(dataset.airports) ? [...dataset.airports].sort((left, right) => (
+      compareText(left.countryCode, right.countryCode)
+      || compareText(left.city, right.city)
+      || compareText(left.iata, right.iata)
+    )) : [];
+    routeLibrary.aircraftTypes = Array.isArray(dataset.aircraftTypes) ? dataset.aircraftTypes : [];
+    routeLibrary.countryByCode = new Map();
+    routeLibrary.countryCentroidByCode = new Map();
+    routeLibrary.airportByCode = new Map();
+    routeLibrary.airportsByCountry = new Map();
+    routeLibrary.aircraftTypeByCode = new Map();
+
+    for (const country of (Array.isArray(dataset.countries) ? dataset.countries : [])) {
+      routeLibrary.countryByCode.set(country.alpha2, { ...country });
+    }
+
+    for (const centroid of routeLibrary.countryCentroids) {
+      const existingCountry = routeLibrary.countryByCode.get(centroid.alpha2) ?? {};
+      const mergedCountry = {
+        ...existingCountry,
+        alpha2: centroid.alpha2,
+        name: centroid.name ?? existingCountry.name ?? centroid.alpha2,
+        latitude: centroid.latitude,
+        longitude: centroid.longitude
+      };
+      routeLibrary.countryByCode.set(centroid.alpha2, mergedCountry);
+      routeLibrary.countryCentroidByCode.set(centroid.alpha2, {
+        alpha2: centroid.alpha2,
+        name: mergedCountry.name,
+        latitude: centroid.latitude,
+        longitude: centroid.longitude
+      });
+    }
+
+    for (const airport of routeLibrary.airports) {
+      routeLibrary.airportByCode.set(airport.icao, airport);
+      if (!routeLibrary.airportsByCountry.has(airport.countryCode)) {
+        routeLibrary.airportsByCountry.set(airport.countryCode, []);
+      }
+      routeLibrary.airportsByCountry.get(airport.countryCode).push(airport);
+
+      if (!routeLibrary.countryByCode.has(airport.countryCode)) {
+        routeLibrary.countryByCode.set(airport.countryCode, {
+          alpha2: airport.countryCode,
+          name: airport.countryCode
+        });
+      }
+    }
+
+    for (const aircraftType of routeLibrary.aircraftTypes) {
+      routeLibrary.aircraftTypeByCode.set(aircraftType.icaoCode, aircraftType);
+    }
+
+    routeLibrary.countries = Array.from(routeLibrary.airportsByCountry.keys())
+      .map((countryCode) => ({
+        alpha2: countryCode,
+        name: resolveCountryName(countryCode)
+      }))
+      .sort((left, right) => compareText(left.name, right.name));
+
+    routeState.libraryReady = routeLibrary.airports.length >= 2 && routeLibrary.countries.length >= 1;
+    routeState.datasetSource = source;
+    routeState.lastSyncedAt = Number.isFinite(fetchedAt) ? fetchedAt : null;
+    routeState.libraryStatusParams = {
+      countries: routeLibrary.countries.length,
+      airports: routeLibrary.airports.length,
+      centroids: routeLibrary.countryCentroids.length,
+      aircraftTypes: routeLibrary.aircraftTypes.length
+    };
+
+    if (!routeState.libraryReady) {
+      routeState.selectedRoute = null;
+      routeState.playing = false;
+      clearRouteGeometry();
+      syncControlAvailability();
+      syncRouteUi();
+      return false;
+    }
+
+    const hasCountry = (countryCode) => routeLibrary.countries.some((country) => country.alpha2 === countryCode);
+    const getAirportByCode = (airportIcao) => routeLibrary.airportByCode.get(airportIcao);
+
+    routeState.selectedOriginCountryCode = preserveSelection && hasCountry(previousOriginCountry)
+      ? previousOriginCountry
+      : (routeLibrary.countries[0]?.alpha2 ?? "");
+
+    const preferredDestinationCountry = preserveSelection && hasCountry(previousDestinationCountry)
+      ? previousDestinationCountry
+      : "";
+    routeState.selectedDestinationCountryCode = preferredDestinationCountry
+      || routeLibrary.countries.find((country) => country.alpha2 !== routeState.selectedOriginCountryCode)?.alpha2
+      || routeState.selectedOriginCountryCode;
+
+    const previousOriginAirportEntry = preserveSelection ? getAirportByCode(previousOriginAirport) : null;
+    routeState.selectedOriginAirportIcao = previousOriginAirportEntry?.countryCode === routeState.selectedOriginCountryCode
+      ? previousOriginAirport
+      : getDefaultAirportIcao(
+        routeState.selectedOriginCountryCode,
+        routeState.selectedOriginCountryCode === routeState.selectedDestinationCountryCode
+          ? previousDestinationAirport
+          : ""
+      );
+
+    const previousDestinationAirportEntry = preserveSelection ? getAirportByCode(previousDestinationAirport) : null;
+    routeState.selectedDestinationAirportIcao = previousDestinationAirportEntry?.countryCode === routeState.selectedDestinationCountryCode
+      ? previousDestinationAirport
+      : getDefaultAirportIcao(
+        routeState.selectedDestinationCountryCode,
+        routeState.selectedDestinationCountryCode === routeState.selectedOriginCountryCode
+          ? routeState.selectedOriginAirportIcao
+          : ""
+      );
+
+    const nextSelectionKey = `${routeState.selectedOriginAirportIcao}|${routeState.selectedDestinationAirportIcao}`;
+    applySelectionChange(nextSelectionKey !== previousSelectionKey);
+    return true;
+  }
+
+  async function refreshDataset({ forceRemote = false } = {}) {
+    if (routeState.refreshing || routeState.loading) {
+      return false;
+    }
+
+    routeState.refreshing = true;
+    setDatasetStatus("routeDatasetRefreshing");
+    syncControlAvailability();
+    syncRouteUi();
+
+    try {
+      const refreshed = await routeDataService.refreshRemote({ language: i18n.getLanguage(), forceRemote });
+      const dataset = {
+        ...refreshed.dataset,
+        aircraftTypes: routeLibrary.aircraftTypes
+      };
+      const applied = applyLibraryDataset(dataset, {
+        preserveSelection: true,
+        source: refreshed.source ?? DATA_SOURCE_LIVE_API,
+        fetchedAt: refreshed.fetchedAt ?? Date.now()
+      });
+
+      if (!applied) {
+        setDatasetStatus("routeDatasetNoRoutes", {}, true);
+      } else if (!routeState.selectionErrorKey) {
+        const warningKey = (refreshed.warnings ?? []).includes("geonames_unavailable")
+          ? "routeDatasetRefreshPartial"
+          : "routeDatasetRefreshSuccess";
+        setDatasetStatus(warningKey, {
+          source: i18n.t(getSourceLabelKey(routeState.datasetSource))
+        }, warningKey === "routeDatasetRefreshPartial");
+      }
+
+      syncRouteUi();
+      return true;
+    } catch (error) {
+      console.error("[globe routes] remote dataset refresh failed", error);
+      if (routeState.selectionErrorKey) {
+        setDatasetStatus(routeState.selectionErrorKey, routeState.selectionErrorParams, true);
+      } else {
+        setDatasetStatus("routeDatasetRefreshFailed", {
+          source: i18n.t(getSourceLabelKey(routeState.datasetSource))
+        }, true);
+      }
+      syncRouteUi();
+      return false;
+    } finally {
+      routeState.refreshing = false;
+      syncControlAvailability();
+    }
+  }
+
   async function initialize() {
+    routeState.loading = true;
     setDatasetStatus("routeDatasetLoading");
     syncControlAvailability();
 
     try {
-      const [countries, countryCentroids, airports, aircraftTypes] = await Promise.all([
-        loadJson(buildDatasetPathCandidates(DATASET_FILENAMES.countries), "countries"),
-        loadJson(buildDatasetPathCandidates(DATASET_FILENAMES.countryCentroids), "countryCentroids"),
-        loadJson(buildDatasetPathCandidates(DATASET_FILENAMES.airports), "airports"),
-        loadJson(buildDatasetPathCandidates(DATASET_FILENAMES.aircraftTypes), "aircraftTypes")
-      ]);
-
-      routeLibrary.countries = [];
-      routeLibrary.countryCentroids = countryCentroids;
-      routeLibrary.airports = [...airports].sort((left, right) => (
-        compareText(left.countryCode, right.countryCode)
-        || compareText(left.city, right.city)
-        || compareText(left.iata, right.iata)
-      ));
-      routeLibrary.aircraftTypes = aircraftTypes;
-      routeLibrary.countryByCode = new Map();
-      routeLibrary.countryCentroidByCode = new Map();
-      routeLibrary.airportByCode = new Map();
-      routeLibrary.airportsByCountry = new Map();
-      routeLibrary.aircraftTypeByCode = new Map();
-
-      for (const country of countries) {
-        routeLibrary.countryByCode.set(country.alpha2, { ...country });
-      }
-
-      for (const centroid of countryCentroids) {
-        const existingCountry = routeLibrary.countryByCode.get(centroid.alpha2) ?? {};
-        const mergedCountry = {
-          ...existingCountry,
-          alpha2: centroid.alpha2,
-          name: centroid.name ?? existingCountry.name ?? centroid.alpha2,
-          latitude: centroid.latitude,
-          longitude: centroid.longitude
-        };
-        routeLibrary.countryByCode.set(centroid.alpha2, mergedCountry);
-        routeLibrary.countryCentroidByCode.set(centroid.alpha2, {
-          alpha2: centroid.alpha2,
-          name: mergedCountry.name,
-          latitude: centroid.latitude,
-          longitude: centroid.longitude
-        });
-      }
-
-      for (const airport of routeLibrary.airports) {
-        routeLibrary.airportByCode.set(airport.icao, airport);
-        if (!routeLibrary.airportsByCountry.has(airport.countryCode)) {
-          routeLibrary.airportsByCountry.set(airport.countryCode, []);
-        }
-        routeLibrary.airportsByCountry.get(airport.countryCode).push(airport);
-
-        if (!routeLibrary.countryByCode.has(airport.countryCode)) {
-          routeLibrary.countryByCode.set(airport.countryCode, {
-            alpha2: airport.countryCode,
-            name: airport.countryCode
-          });
-        }
-      }
-
-      for (const aircraftType of aircraftTypes) {
-        routeLibrary.aircraftTypeByCode.set(aircraftType.icaoCode, aircraftType);
-      }
-
-      routeLibrary.countries = Array.from(routeLibrary.airportsByCountry.keys())
-        .map((countryCode) => ({
-          alpha2: countryCode,
-          name: resolveCountryName(countryCode)
-        }))
-        .sort((left, right) => compareText(left.name, right.name));
-
+      const initialLoad = await routeDataService.loadInitialDataset();
       routeState.loading = false;
-      routeState.libraryReady = routeLibrary.airports.length >= 2 && routeLibrary.countries.length >= 1;
-      syncControlAvailability();
 
-      if (!routeState.libraryReady) {
+      const applied = applyLibraryDataset(initialLoad.dataset, {
+        preserveSelection: false,
+        source: initialLoad.source ?? DATA_SOURCE_BUNDLED,
+        fetchedAt: initialLoad.fetchedAt
+      });
+
+      if (!applied) {
         setDatasetStatus("routeDatasetNoRoutes", {}, true);
         syncRouteUi();
         return;
       }
 
-      routeState.libraryStatusParams = {
-        countries: routeLibrary.countries.length,
-        airports: routeLibrary.airports.length,
-        centroids: routeLibrary.countryCentroids.length,
-        aircraftTypes: routeLibrary.aircraftTypes.length
-      };
+      syncControlAvailability();
+      syncRouteUi();
 
-      routeState.selectedOriginCountryCode = routeLibrary.countries[0]?.alpha2 ?? "";
-      routeState.selectedOriginAirportIcao = getDefaultAirportIcao(routeState.selectedOriginCountryCode);
-
-      const fallbackDestinationCountry = routeLibrary.countries.find(
-        (country) => country.alpha2 !== routeState.selectedOriginCountryCode
-      )?.alpha2 ?? routeState.selectedOriginCountryCode;
-      routeState.selectedDestinationCountryCode = fallbackDestinationCountry;
-      routeState.selectedDestinationAirportIcao = routeState.selectedDestinationCountryCode === routeState.selectedOriginCountryCode
-        ? getDefaultAirportIcao(routeState.selectedDestinationCountryCode, routeState.selectedOriginAirportIcao)
-        : getDefaultAirportIcao(routeState.selectedDestinationCountryCode);
-
-      applySelectionChange(false);
+      if (initialLoad.shouldAutoRefresh) {
+        void refreshDataset({ forceRemote: false });
+      }
     } catch (error) {
       console.error("[globe routes] offline dataset load failed", error);
       routeState.loading = false;
@@ -1068,6 +1180,7 @@ export function createRouteSimulationController({
 
   return {
     initialize,
+    refreshDataset,
     refreshLocalizedUi,
     resetProgress,
     setDestinationAirport,

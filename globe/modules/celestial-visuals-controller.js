@@ -1,6 +1,10 @@
 import * as THREE from "../../vendor/three.module.js";
 import { createSolarEclipseState } from "./astronomy-utils.js?v=20260324-moon-cycle28";
-import { getGeoFromGlobePosition, getGlobeBasisFromGeo } from "./geo-utils.js";
+import {
+  createGlobeModelFrame,
+  getGeoFromGlobePosition,
+  getGlobeBasisFromGeo
+} from "./geo-utils.js";
 
 export function createCelestialVisualsController(deps) {
   const {
@@ -28,6 +32,7 @@ export function createCelestialVisualsController(deps) {
     scene,
     firstPersonScene,
     camera,
+    globeSurface,
     stage,
     scalableStage,
     globeStage,
@@ -155,8 +160,14 @@ export function createCelestialVisualsController(deps) {
     constants.WALKER_EYE_HEIGHT - constants.SURFACE_Y,
     scaleDimension(0.05)
   );
+  const globeFrame = createGlobeModelFrame(globeSurface, { space: "parent" });
+
+  function getGlobeFrame() {
+    return globeFrame;
+  }
 
   function getObserverGeo() {
+    const frame = getGlobeFrame();
     if (Number.isFinite(walkerState.latitudeDegrees) && Number.isFinite(walkerState.longitudeDegrees)) {
       return {
         latitudeDegrees: walkerState.latitudeDegrees,
@@ -166,8 +177,9 @@ export function createCelestialVisualsController(deps) {
 
     return getGeoFromGlobePosition(
       walkerState.position,
-      { x: 0, y: 0, z: 0 },
-      Math.max(walkerState.surfaceRadius ?? 1, 0.0001)
+      frame.center,
+      Math.max(walkerState.surfaceRadius ?? frame.radius, 0.0001),
+      frame
     );
   }
 
@@ -401,9 +413,11 @@ export function createCelestialVisualsController(deps) {
   }
   
   function getObserverSkyAxes(observerPosition, observerGeo = getObserverGeo()) {
+    const frame = getGlobeFrame();
     const basis = getGlobeBasisFromGeo(
       observerGeo.latitudeDegrees,
-      observerGeo.longitudeDegrees
+      observerGeo.longitudeDegrees,
+      frame
     );
     tempObserverNorthAxis.set(basis.north.x, basis.north.y, basis.north.z).normalize();
     tempObserverEastAxis.set(basis.east.x, basis.east.y, basis.east.z).normalize();

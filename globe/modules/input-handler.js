@@ -33,7 +33,7 @@ export function setupInputHandlers(deps) {
     controlTabButtons, cameraPresetButtons = [], cameraViewToggleEl = null, syncCameraViewToggleUi = () => {}, languageToggleEl, i18n, resetButton,
     exitFirstPersonMode, enterFirstPersonMode, walkerModeEl, resetWalkerButton,
     routeOriginCountryEl, routeOriginAirportEl, routeDestinationCountryEl, routeDestinationAirportEl,
-    routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl, celestialSpeedPresetButtons = [],
+    routeRefreshButton, routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl, celestialSpeedPresetButtons = [],
     celestialFullTrailEl, routePlaybackButton, routeResetButton, realitySyncEl,
     realityLiveEl, observationTimeEl, observationMinusHourButton, observationPlusHourButton,
     eclipseCatalogSourceEl, eclipseCatalogUploadEl, eclipseKindSelectEl, eclipseYearSelectEl,
@@ -622,6 +622,14 @@ export function setupInputHandlers(deps) {
   routeDestinationAirportEl?.addEventListener("change", () => {
 
     routeSimulationApi.setDestinationAirport(routeDestinationAirportEl.value);
+
+  });
+
+
+
+  routeRefreshButton?.addEventListener("click", () => {
+
+    void routeSimulationApi.refreshDataset({ forceRemote: true });
 
   });
   

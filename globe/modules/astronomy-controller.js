@@ -1,5 +1,6 @@
 ﻿import * as THREE from "../../vendor/three.module.js";
 import {
+  createGlobeModelFrame,
   formatGeoPair,
   formatLatitude,
   getGeoFromGlobePosition,
@@ -40,6 +41,7 @@ export function createAstronomyController({
   constants,
   i18n,
   ui,
+  globeSurface,
   magneticFieldApi,
   astronomyState,
   eclipseSelectionState,
@@ -117,6 +119,10 @@ export function createAstronomyController({
     equator: 0.5,
     south: 0.5
   };
+  const globeFrame = createGlobeModelFrame(globeSurface, { space: "parent" });
+  function getGlobeFrame() {
+    return globeFrame;
+  }
   const ECLIPSE_TIME_POINT_VALUES = ["start", "peak", "end"];
 
   if (!Number.isFinite(simulationState.demoPhaseDateMs)) {
@@ -405,6 +411,7 @@ export function createAstronomyController({
   }
 
   function getObserverGeo() {
+    const frame = getGlobeFrame();
     if (Number.isFinite(walkerState.latitudeDegrees) && Number.isFinite(walkerState.longitudeDegrees)) {
       return {
         latitudeDegrees: walkerState.latitudeDegrees,
@@ -414,8 +421,9 @@ export function createAstronomyController({
 
     return getGeoFromGlobePosition(
       walkerState.position,
-      { x: 0, y: 0, z: 0 },
-      Math.max(walkerState.surfaceRadius ?? 1, 0.0001)
+      frame.center,
+      Math.max(walkerState.surfaceRadius ?? frame.radius, 0.0001),
+      frame
     );
   }
 
@@ -1965,9 +1973,11 @@ export function createAstronomyController({
   }
 
   function getObserverSkyAxes(observerPosition, observerGeo = getObserverGeo()) {
+    const frame = getGlobeFrame();
     const basis = getGlobeBasisFromGeo(
       observerGeo.latitudeDegrees,
-      observerGeo.longitudeDegrees
+      observerGeo.longitudeDegrees,
+      frame
     );
     tempNorthAxis.set(basis.north.x, basis.north.y, basis.north.z).normalize();
     tempEastAxis.set(basis.east.x, basis.east.y, basis.east.z).normalize();

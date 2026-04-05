@@ -1185,3 +1185,35 @@ Object.assign(TRANSLATIONS.ko, {
   routeDatasetFailed: "\uad6c\ud615 \uacbd\ub85c \ube4c\ub354\ub97c \ubd88\ub7ec\uc624\uc9c0 \ubabb\ud588\uc2b5\ub2c8\ub2e4.",
   routeSelectionConflict: "\ucd9c\ubc1c \uacf5\ud56d\uacfc \ub3c4\ucc29 \uacf5\ud56d\uc740 \uc11c\ub85c \ub2ec\ub77c\uc57c \ud569\ub2c8\ub2e4."
 });
+
+Object.assign(TRANSLATIONS.en, {
+  routeRefreshButton: "Refresh Data",
+  routeDataSourceTitle: "Data Source",
+  routeDataSourceBundled: "Bundled",
+  routeDataSourceCached: "Cached",
+  routeDataSourceLiveApi: "Live API",
+  routeLastSyncTitle: "Last Sync",
+  routeLastSyncUnknown: "Not synced yet",
+  routeLastSyncValue: "{time}",
+  routeDatasetLoaded: "Loaded {countries} countries, {airports} airports, {centroids} country centroids, and {aircraftTypes} aircraft types from {source}.",
+  routeDatasetRefreshing: "Syncing latest route dataset from free APIs...",
+  routeDatasetRefreshSuccess: "{source} sync completed.",
+  routeDatasetRefreshPartial: "{source} sync completed, but GeoNames data is currently unavailable.",
+  routeDatasetRefreshFailed: "Remote sync failed. Continuing with {source} dataset."
+});
+
+Object.assign(TRANSLATIONS.ko, {
+  routeRefreshButton: "\ub370\uc774\ud130 \uac31\uc2e0",
+  routeDataSourceTitle: "\ub370\uc774\ud130 \uc18c\uc2a4",
+  routeDataSourceBundled: "\ubc88\ub4e4",
+  routeDataSourceCached: "\uce90\uc2dc",
+  routeDataSourceLiveApi: "\uc2e4\uc2dc\uac04 API",
+  routeLastSyncTitle: "\ub9c8\uc9c0\ub9c9 \ub3d9\uae30\ud654",
+  routeLastSyncUnknown: "\uc544\uc9c1 \ub3d9\uae30\ud654\ub418\uc9c0 \uc54a\uc74c",
+  routeLastSyncValue: "{time}",
+  routeDatasetLoaded: "{source} \ub370\uc774\ud130\ub85c \uad6d\uac00 {countries}\uac1c, \uacf5\ud56d {airports}\uac1c, \uad6d\uac00 \uc911\uc2ec\uc810 {centroids}\uac1c, \ud56d\uacf5\uae30 \ud615\uc2dd {aircraftTypes}\uac1c\ub97c \uc900\ube44\ud588\uc2b5\ub2c8\ub2e4.",
+  routeDatasetRefreshing: "\ubb34\ub8cc API\uc5d0\uc11c \ucd5c\uc2e0 \uacbd\ub85c \ub370\uc774\ud130\ub97c \ub3d9\uae30\ud654\ud558\ub294 \uc911...",
+  routeDatasetRefreshSuccess: "{source} \ub3d9\uae30\ud654\uac00 \uc644\ub8cc\ub418\uc5c8\uc2b5\ub2c8\ub2e4.",
+  routeDatasetRefreshPartial: "{source} \ub3d9\uae30\ud654\ub294 \uc644\ub8cc\ub418\uc5c8\uc9c0\ub9cc GeoNames \ub370\uc774\ud130\ub97c \uc0ac\uc6a9\ud560 \uc218 \uc5c6\uc2b5\ub2c8\ub2e4.",
+  routeDatasetRefreshFailed: "\uc6d0\uaca9 \ub3d9\uae30\ud654\uc5d0 \uc2e4\ud328\ud588\uc2b5\ub2c8\ub2e4. \ud604\uc7ac {source} \ub370\uc774\ud130\ub97c \uacc4\uc18d \uc0ac\uc6a9\ud569\ub2c8\ub2e4."
+});

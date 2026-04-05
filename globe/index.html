@@ -744,6 +744,17 @@
           <section class="route-panel hud-subpanel active" data-hud-panel-section="playback">
             <p class="orbit-title" data-i18n="offlineRouteLibraryTitle">Globe Route Builder</p>
             <p class="sync-copy" id="route-dataset-status">Loading globe route builder...</p>
+            <div class="button-row compact">
+              <button class="button secondary compact-button" id="route-refresh" type="button" data-i18n="routeRefreshButton">Refresh Data</button>
+            </div>
+            <div class="sync-row">
+              <span class="sync-title" data-i18n="routeDataSourceTitle">Data Source</span>
+              <strong class="route-speed-value" id="route-data-source">Bundled</strong>
+            </div>
+            <div class="sync-row">
+              <span class="sync-title" data-i18n="routeLastSyncTitle">Last Sync</span>
+              <strong class="route-speed-value" id="route-last-sync">Not synced yet</strong>
+            </div>
             <label class="field" for="route-origin-country">
               <span class="field-label" data-i18n="routeOriginCountryLabel">Origin Country</span>
               <select class="select-input" id="route-origin-country" disabled></select>
@@ -980,8 +991,8 @@
     </div>
   </div>
 
-  <script type="module" src="./app.js?v=20260405-countryroute1"></script>
-  </body>
+  <script type="module" src="./app.js?v=20260405-hybridroute1"></script>
+</body>
 </html>
 
 
