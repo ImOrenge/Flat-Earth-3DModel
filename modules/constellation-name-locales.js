@@ -1,4 +1,4 @@
-const KO_CONSTELLATION_NAMES = Object.freeze({
+﻿const KO_CONSTELLATION_NAMES = Object.freeze({
   Andromeda: "안드로메다자리",
   Antlia: "공기펌프자리",
   Apus: "극락조자리",

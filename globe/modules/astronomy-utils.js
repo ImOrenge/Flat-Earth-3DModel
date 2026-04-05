@@ -1,10 +1,11 @@
-import * as THREE from "../../vendor/three.module.js";
+﻿import * as THREE from "../../vendor/three.module.js";
 import {
   normalizeDegrees,
   projectedRadiusFromLatitude,
   toDegrees,
   toRadians
 } from "./geo-utils.js";
+import * as constants from "./constants.js";
 
 const DAY_MS = 86_400_000;
 const HOUR_MS = 3_600_000;
@@ -68,25 +69,25 @@ const MOON_PHASE_LABEL_KEYS = [
 export const SEASONAL_EVENT_DEFINITIONS = [
   {
     key: "springEquinox",
-    label: "춘분",
+    label: "異섎텇",
     fallbackMonth: 2,
     fallbackDay: 20
   },
   {
     key: "summerSolstice",
-    label: "?��?",
+    label: "?섏?",
     fallbackMonth: 5,
     fallbackDay: 21
   },
   {
     key: "autumnEquinox",
-    label: "추분",
+    label: "異붾텇",
     fallbackMonth: 8,
     fallbackDay: 22
   },
   {
     key: "winterSolstice",
-    label: "?��?",
+    label: "?숈?",
     fallbackMonth: 11,
     fallbackDay: 21
   }

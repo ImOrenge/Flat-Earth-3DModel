@@ -15,7 +15,7 @@ import {
 import { createAstronomyController } from "./modules/astronomy-controller.js?v=20260325-eclipse-selector1";
 import { createCameraController } from "./modules/camera-controller.js?v=20260328-mobiletouch1";
 import { createCelestialTrackingCameraController } from "./modules/celestial-tracking-camera-controller.js?v=20260320-constellation-precession1";
-import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js?v=20260405-surfacepatch1";
+import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js?v=20260405-surfacepatch2";
 import { createI18n } from "./modules/i18n.js?v=20260327-mobilehud1";
 import { createMagneticFieldController } from "./modules/magnetic-field-controller.js?v=20260314-magnetic-pinecone3";
 import { createRouteSimulationController } from "./modules/route-simulation-controller.js";
@@ -478,6 +478,14 @@ const MOBILE_LAYOUT_BREAKPOINT = 1080;
 const TAB_SWIPE_THRESHOLD_X = 48;
 const TAB_SWIPE_MAX_DRIFT_Y = 24;
 const TAB_ORDER_FALLBACK = ["astronomy", "routes", "constellations", "rockets"];
+const GLOBE_FEATURE_TOGGLES = Object.freeze({
+  constellationLayer: false,
+  domeLayer: false,
+  flatCelestialLayer: false
+});
+const DISABLED_CONTROL_TABS = new Set(
+  GLOBE_FEATURE_TOGGLES.constellationLayer ? [] : ["constellations"]
+);
 const HUD_PANEL_SECTION_DEFAULTS = {
   astronomy: "system",
   routes: "playback",
@@ -524,6 +532,61 @@ let currentControlTab = controlTabButtons.find((button) => button.classList.cont
 let lastFocusedBeforeHelpModal = null;
 let lastFocusedBeforeSettingsPanel = null;
 const hudPanelSectionState = { ...HUD_PANEL_SECTION_DEFAULTS };
+
+function applyDisabledControlTabs() {
+  for (const button of controlTabButtons) {
+    const tabKey = button.dataset.controlTab;
+    if (!tabKey) {
+      continue;
+    }
+    const disabled = DISABLED_CONTROL_TABS.has(tabKey);
+    button.hidden = disabled;
+    button.style.display = disabled ? "none" : "";
+    button.setAttribute("aria-hidden", disabled ? "true" : "false");
+  }
+
+  for (const panel of controlTabPanels) {
+    const tabKey = panel.dataset.controlPanel;
+    if (!tabKey) {
+      continue;
+    }
+    const disabled = DISABLED_CONTROL_TABS.has(tabKey);
+    panel.hidden = disabled;
+    panel.classList.toggle("active", false);
+  }
+}
+
+function hideOwningSubpanel(node) {
+  const subpanel = node?.closest("section.hud-subpanel");
+  if (!subpanel) {
+    return;
+  }
+  subpanel.hidden = true;
+  subpanel.classList.remove("active");
+  subpanel.style.display = "none";
+}
+
+function applyDisabledFeatureUi() {
+  if (!GLOBE_FEATURE_TOGGLES.flatCelestialLayer) {
+    hideOwningSubpanel(celestialTrailLengthEl);
+    hideOwningSubpanel(cameraTrackSummaryEl);
+    hideOwningSubpanel(orbitModeButtons[0]);
+    if (darkSunDebugEl) {
+      darkSunDebugEl.checked = false;
+      darkSunDebugEl.disabled = true;
+      darkSunDebugEl.closest(".sync-row")?.setAttribute("hidden", "");
+    }
+    if (darkSunDebugSummaryEl) {
+      darkSunDebugSummaryEl.hidden = true;
+    }
+  }
+}
+
+applyDisabledControlTabs();
+applyDisabledFeatureUi();
+if (DISABLED_CONTROL_TABS.has(currentControlTab)) {
+  currentControlTab = "astronomy";
+}
 
 function getInitialLayoutMode() {
   try {
@@ -1149,8 +1212,10 @@ window.addEventListener("resize", () => {
 function getControlTabOrder() {
   const tabs = controlTabButtons
     .map((button) => button.dataset.controlTab)
-    .filter(Boolean);
-  return tabs.length > 0 ? tabs : TAB_ORDER_FALLBACK;
+    .filter((tabKey) => Boolean(tabKey) && !DISABLED_CONTROL_TABS.has(tabKey));
+  return tabs.length > 0
+    ? tabs
+    : TAB_ORDER_FALLBACK.filter((tabKey) => !DISABLED_CONTROL_TABS.has(tabKey));
 }
 
 function scrollActiveControlTabIntoView() {
@@ -1187,6 +1252,9 @@ for (let i = 0; i < SPACEPORTS.length; i++) {
 }
 
 function setControlTab(tabKey) {
+  if (DISABLED_CONTROL_TABS.has(tabKey)) {
+    tabKey = "astronomy";
+  }
   currentControlTab = tabKey;
 
   for (const button of controlTabButtons) {
@@ -1430,11 +1498,45 @@ const {
   globeSurface
 } = setupScene({ canvas });
 
-// Add constellations
-const constellationApi = createConstellations();
-globeRuntimeStage.add(constellationApi.group);
-const zodiacWheelApi = createZodiacWheel({ i18n });
-globeRuntimeStage.add(zodiacWheelApi.group);
+function createDisabledConstellationApi() {
+  const group = new THREE.Group();
+  group.visible = false;
+  return {
+    group,
+    getConstellationState() { return null; },
+    getConstellationLinesVisible() { return false; },
+    getConstellationCatalog() { return []; },
+    setConstellationsVisible() {},
+    setConstellationLinesVisible() {},
+    setHighlightedConstellation() {},
+    setSeasonalEclipticAngle() {}
+  };
+}
+
+function createDisabledZodiacWheelApi() {
+  const group = new THREE.Group();
+  group.visible = false;
+  return {
+    group,
+    getVisible() { return false; },
+    getSeasonalAngle() { return 0; },
+    getAgeOffset() { return 0; },
+    getAgeSignIndex() { return 0; },
+    setVisible() {},
+    setSeasonalAngle() {},
+    setAgeOffset() {},
+    setSuppressed() {}
+  };
+}
+
+let constellationApi = createDisabledConstellationApi();
+let zodiacWheelApi = createDisabledZodiacWheelApi();
+if (GLOBE_FEATURE_TOGGLES.constellationLayer) {
+  constellationApi = createConstellations();
+  globeRuntimeStage.add(constellationApi.group);
+  zodiacWheelApi = createZodiacWheel({ i18n });
+  globeRuntimeStage.add(zodiacWheelApi.group);
+}
 const globeRouteStage = new THREE.Group();
 globeRouteStage.name = "globeRouteStage";
 globeSurface.add(globeRouteStage);
@@ -1471,6 +1573,51 @@ const simulationState = {
   timelineAnchorNowMs: initialTimelineNowMs,
   useRealityTimelineInDemo: true
 };
+
+function enforceDisabledVisualLayers() {
+  if (!GLOBE_FEATURE_TOGGLES.constellationLayer) {
+    constellationApi.group.visible = false;
+    zodiacWheelApi.group.visible = false;
+  }
+
+  if (!GLOBE_FEATURE_TOGGLES.domeLayer) {
+    dome.visible = false;
+    domeRing.visible = false;
+    polaris.visible = false;
+    polarisCore.visible = false;
+    polarisGlow.visible = false;
+    polarisHalo.visible = false;
+    glow.visible = false;
+  }
+
+  if (!GLOBE_FEATURE_TOGGLES.flatCelestialLayer) {
+    orbitSun.visible = false;
+    orbitDarkSun.visible = false;
+    orbitMoon.visible = false;
+    observerSun.visible = false;
+    observerDarkSun.visible = false;
+    observerMoon.visible = false;
+    firstPersonSunRayGroup.visible = false;
+
+    sunFullTrail.visible = false;
+    sunFullTrailPointsCloud.visible = false;
+    sunTrail.visible = false;
+    sunTrailPointsCloud.visible = false;
+    moonFullTrail.visible = false;
+    moonFullTrailPointsCloud.visible = false;
+    moonTrail.visible = false;
+    moonTrailPointsCloud.visible = false;
+    darkSunFullTrail.visible = false;
+    darkSunFullTrailPointsCloud.visible = false;
+    darkSunTrail.visible = false;
+    darkSunTrailPointsCloud.visible = false;
+
+    orbitSunLight.intensity = 0;
+    orbitMoonLight.intensity = 0;
+    observerSunLight.intensity = 0;
+    observerMoonLight.intensity = 0;
+  }
+}
 
 // Expose state for E2E testing
 if (typeof window !== "undefined") {
@@ -1869,43 +2016,52 @@ function focusCameraOnConstellation(entry) {
   cameraApi.clampCamera();
 }
 
-constellationTabApi = createConstellationTabController({
-  i18n,
-  constellationApi,
-  getObservationDate: () => astronomyState.selectedDate,
-  onSelectionChange: focusCameraOnConstellation,
-  zodiacWheelApi,
-  ui: {
-    constellationLineVisibilityTextEl,
-    constellationLineVisibilityToggleEl,
-    constellationVisibilityToggleEl,
-    constellationVisibilityTextEl,
-    zodiacWheelTextEl,
-    zodiacWheelToggleEl,
-    constellationSelectEl,
-    constellationMapEl,
-    constellationDirectionEl,
-    constellationRaEl,
-    constellationDecEl,
-    constellationHemisphereEl,
-    constellationSegmentsEl,
-    constellationStarsEl,
-    zodiacAgeViewEl,
-    zodiacAgeSummaryEl,
-    zodiacCurrentAgeEl,
-    zodiacCurrentTropicalEl,
-    zodiacAgeOffsetEl,
-    zodiacAgeCycleEl,
-    zodiacObservationDateEl,
-  },
-});
+if (GLOBE_FEATURE_TOGGLES.constellationLayer) {
+  constellationTabApi = createConstellationTabController({
+    i18n,
+    constellationApi,
+    getObservationDate: () => astronomyState.selectedDate,
+    onSelectionChange: focusCameraOnConstellation,
+    zodiacWheelApi,
+    ui: {
+      constellationLineVisibilityTextEl,
+      constellationLineVisibilityToggleEl,
+      constellationVisibilityToggleEl,
+      constellationVisibilityTextEl,
+      zodiacWheelTextEl,
+      zodiacWheelToggleEl,
+      constellationSelectEl,
+      constellationMapEl,
+      constellationDirectionEl,
+      constellationRaEl,
+      constellationDecEl,
+      constellationHemisphereEl,
+      constellationSegmentsEl,
+      constellationStarsEl,
+      zodiacAgeViewEl,
+      zodiacAgeSummaryEl,
+      zodiacCurrentAgeEl,
+      zodiacCurrentTropicalEl,
+      zodiacAgeOffsetEl,
+      zodiacAgeCycleEl,
+      zodiacObservationDateEl,
+    },
+  });
+  constellationTabApi.initialize();
+} else {
+  constellationTabApi = {
+    initialize() {},
+    refreshLocalizedUi() {},
+    refreshDynamicState() {},
+    setPanelActive() {}
+  };
+}
 
 i18n.subscribe(() => {
   constellationTabApi.refreshLocalizedUi();
   syncHudSideCard();
 });
 
-constellationTabApi.initialize();
 setDemoSeasonPhaseFromDate(astronomyState.selectedDate.getTime());
 const initialSeasonalAngle = getSeasonalEclipticAngle(astronomyState.selectedDate);
 const initialAgeOffset = getZodiacAgeOffsetRadians(astronomyState.selectedDate);
@@ -1913,6 +2069,7 @@ constellationApi.setSeasonalEclipticAngle(initialSeasonalAngle);
 zodiacWheelApi.setSeasonalAngle(initialSeasonalAngle);
 zodiacWheelApi.setAgeOffset(initialAgeOffset);
 constellationTabApi.refreshDynamicState({ force: true });
+enforceDisabledVisualLayers();
 
 celestialTrackingCameraApi = createCelestialTrackingCameraController({
   buttons: cameraTrackButtons,
@@ -2424,8 +2581,13 @@ function animate() {
     cameraState.mode === "free" &&
     cameraState.phi <= 0.5 &&
     cameraState.radius >= (constants.CAMERA_TOPDOWN_FULL_RADIUS * 0.72);
-  dome.visible = !isFreeTopViewPresentation;
-  domeRing.visible = !isFreeTopViewPresentation;
+  if (GLOBE_FEATURE_TOGGLES.domeLayer) {
+    dome.visible = !isFreeTopViewPresentation;
+    domeRing.visible = !isFreeTopViewPresentation;
+  } else {
+    dome.visible = false;
+    domeRing.visible = false;
+  }
 
   walkerApi.updateWalkerMovement(deltaSeconds);
   walkerApi.updateWalkerAvatar();
@@ -2569,6 +2731,7 @@ function animate() {
   }
 
   updateSunVisualEffects(snapshot);
+  enforceDisabledVisualLayers();
   magneticFieldApi.update(performance.now());
   
   if (walkerState.enabled) {
@@ -2602,7 +2765,7 @@ function runOnboarding() {
     { tab: "routes",         key: "onboardingRoutes" },
     { tab: "constellations", key: "onboardingConstellations" },
     { tab: "rockets",        key: "onboardingRockets" },
-  ];
+  ].filter(({ tab }) => !DISABLED_CONTROL_TABS.has(tab));
 
   let step = 0;
   let timer = null;

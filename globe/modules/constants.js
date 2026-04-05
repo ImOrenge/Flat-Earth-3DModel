@@ -1,10 +1,10 @@
-import * as THREE from "../../vendor/three.module.js";
+﻿import * as THREE from "../../vendor/three.module.js";
 import { projectedRadiusFromLatitude } from "./geo-utils.js";
 
 export const DEFAULT_MAP_PATH = "../assets/nasa-blue-marble-5400x2700.jpg";
 export const DEFAULT_MAP_LABEL = "assets/nasa-blue-marble-5400x2700.jpg";
 export const DEFAULT_GLOBE_TEXTURE_PATH = "../assets/nasa-blue-marble-5400x2700.jpg";
-export const DEFAULT_MOON_TEXTURE_PATH = "./output/imagegen/moon-full-source.png";
+export const DEFAULT_MOON_TEXTURE_PATH = "../output/imagegen/moon-full-source.png";
 export const DEFAULT_MOON_TEXTURE_FALLBACK_PATH = "../assets/moon-phases-360-ko.png";
 export const MODEL_SCALE = 2;
 export const scaleDimension = (value) => value * MODEL_SCALE;

@@ -28,8 +28,35 @@ function drawGroundTexture(context, size) {
   }
 }
 
+function createGroundMaskTexture(size = 1024) {
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext("2d");
+  const gradient = context.createRadialGradient(
+    size * 0.5,
+    size * 0.5,
+    size * 0.18,
+    size * 0.5,
+    size * 0.5,
+    size * 0.5
+  );
+  gradient.addColorStop(0, "rgba(255,255,255,1)");
+  gradient.addColorStop(0.72, "rgba(255,255,255,1)");
+  gradient.addColorStop(0.9, "rgba(255,255,255,0.96)");
+  gradient.addColorStop(1, "rgba(255,255,255,0)");
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, size, size);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.ClampToEdgeWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  return texture;
+}
+
 const GROUND_PATCH_RADIUS_DEGREES = 3.2;
 const GROUND_PATCH_REDRAW_THRESHOLD_DEGREES = 0.06;
+const GROUND_PATCH_SEGMENTS = 96;
 
 function createGlowTexture() {
   const canvas = document.createElement("canvas");
@@ -199,12 +226,25 @@ export function createFirstPersonWorldController({
   const groundContext = groundCanvas.getContext("2d");
   drawGroundTexture(groundContext, groundCanvas.width);
   const groundTexture = new THREE.CanvasTexture(groundCanvas);
+  const groundMaskTexture = createGroundMaskTexture(1024);
   groundTexture.colorSpace = THREE.SRGBColorSpace;
   groundTexture.wrapS = THREE.ClampToEdgeWrapping;
   groundTexture.wrapT = THREE.ClampToEdgeWrapping;
   groundTexture.magFilter = THREE.LinearFilter;
   groundTexture.minFilter = THREE.LinearMipmapLinearFilter;
   groundTexture.generateMipmaps = true;
+  const groundGeometry = new THREE.PlaneGeometry(
+    constants.FIRST_PERSON_WORLD_RADIUS * 2,
+    constants.FIRST_PERSON_WORLD_RADIUS * 2,
+    GROUND_PATCH_SEGMENTS,
+    GROUND_PATCH_SEGMENTS
+  );
+  const groundPositions = groundGeometry.attributes.position;
+  const groundBaseCoordinates = new Float32Array(groundPositions.count * 2);
+  for (let index = 0; index < groundPositions.count; index += 1) {
+    groundBaseCoordinates[(index * 2)] = groundPositions.getX(index);
+    groundBaseCoordinates[(index * 2) + 1] = groundPositions.getY(index);
+  }
   const oceanTexture = createOceanTexture(1024);
   const shallowsTexture = createOceanTexture(1024);
   const oceanRepeat = Math.max(14, Math.round(constants.FIRST_PERSON_WORLD_RADIUS / 20));
@@ -212,12 +252,15 @@ export function createFirstPersonWorldController({
   shallowsTexture.repeat.set(Math.max(10, Math.round(oceanRepeat * 0.65)), Math.max(10, Math.round(oceanRepeat * 0.65)));
 
   const ground = new THREE.Mesh(
-    new THREE.CircleGeometry(constants.FIRST_PERSON_WORLD_RADIUS, 160),
+    groundGeometry,
     new THREE.MeshStandardMaterial({
       map: groundTexture,
+      alphaMap: groundMaskTexture,
       color: 0x708676,
+      transparent: true,
       roughness: 0.96,
-      metalness: 0.02
+      metalness: 0.02,
+      depthWrite: false
     })
   );
   ground.rotation.x = -Math.PI / 2;
@@ -745,6 +788,56 @@ export function createFirstPersonWorldController({
     groundPatchCache.longitudeDegrees = observerGeo.longitudeDegrees;
     groundPatchCache.version = sampleVersion;
     groundTexture.needsUpdate = true;
+
+    const virtualCurvatureRadius = constants.FIRST_PERSON_WORLD_RADIUS * 11.5;
+    const terrainReliefScale = scaleDimension(1.45);
+    for (let index = 0; index < groundPositions.count; index += 1) {
+      const baseX = groundBaseCoordinates[index * 2];
+      const baseY = groundBaseCoordinates[(index * 2) + 1];
+      const normalizedEast = baseX / constants.FIRST_PERSON_WORLD_RADIUS;
+      const normalizedNorth = -baseY / constants.FIRST_PERSON_WORLD_RADIUS;
+      const radialFactor = Math.min(Math.hypot(normalizedEast, normalizedNorth), 1.35);
+      const eastOffsetDegrees = normalizedEast * GROUND_PATCH_RADIUS_DEGREES;
+      const northOffsetDegrees = normalizedNorth * GROUND_PATCH_RADIUS_DEGREES;
+      const distanceDegrees = Math.min(
+        Math.hypot(eastOffsetDegrees, northOffsetDegrees),
+        GROUND_PATCH_RADIUS_DEGREES * Math.SQRT2
+      );
+      const azimuthRadians = Math.atan2(eastOffsetDegrees, northOffsetDegrees);
+      const sampleGeo = getOffsetGeoFromAzimuth(
+        observerGeo,
+        azimuthRadians,
+        distanceDegrees
+      );
+      const sample = getSurfaceSample?.(
+        sampleGeo.latitudeDegrees,
+        sampleGeo.longitudeDegrees,
+        THREE.MathUtils.lerp(0.18, 0.52, Math.min(radialFactor, 1))
+      ) ?? null;
+      const waterness = sample?.waterness ?? 0.42;
+      const landness = 1 - waterness;
+      const vegetation = sample?.vegetation ?? 0;
+      const arid = sample?.arid ?? 0;
+      const ice = sample?.ice ?? 0;
+      const luminance = sample?.luminance ?? 0.5;
+      const reliefProfile = (
+        (landness * 0.92)
+        + (vegetation * 0.34)
+        + (arid * 0.22)
+        + (ice * 0.4)
+        + ((luminance - 0.5) * 0.28)
+        - (waterness * 0.38)
+      );
+      const edgeFade = 1 - THREE.MathUtils.smoothstep(radialFactor, 0.9, 1.18);
+      const reliefHeight = reliefProfile * terrainReliefScale * edgeFade;
+      const planarRadius = Math.hypot(baseX, baseY);
+      const curvatureSag = (planarRadius * planarRadius) / (2 * virtualCurvatureRadius);
+
+      groundPositions.setZ(index, reliefHeight - curvatureSag);
+    }
+
+    groundPositions.needsUpdate = true;
+    groundGeometry.computeVertexNormals();
   }
 
   function updateDistantLandFeatures(observerGeo, dayFactor, twilightFactor, nightFactor, surfacePalette) {
