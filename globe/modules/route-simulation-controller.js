@@ -1,12 +1,85 @@
 import * as THREE from "../../vendor/three.module.js";
-import {
+import * as geoUtils from "./geo-utils.js?v=20260406-globeposfix1";
+import { createRouteDataService } from "./route-data-service.js";
+
+const {
   createGlobeModelFrame,
   formatGeoPair,
   getGlobeNormalFromGeo,
-  getGlobePositionFromNormal,
   getGlobePositionFromGeo
-} from "./geo-utils.js";
-import { createRouteDataService } from "./route-data-service.js";
+} = geoUtils;
+
+const tempFallbackNormal = new THREE.Vector3();
+const tempFallbackQuaternion = new THREE.Quaternion();
+
+function resolveFrameAndCenter(centerOrFrame, frameOverride) {
+  const isFrameObject = (value) => Boolean(
+    value &&
+    typeof value === "object" &&
+    value.center &&
+    value.rotation
+  );
+  const frame = isFrameObject(frameOverride)
+    ? frameOverride
+    : (isFrameObject(centerOrFrame) ? centerOrFrame : null);
+  const centerCandidate = frame
+    ? (
+      Number.isFinite(centerOrFrame?.x) &&
+      Number.isFinite(centerOrFrame?.y) &&
+      Number.isFinite(centerOrFrame?.z)
+        ? centerOrFrame
+        : frame.center
+    )
+    : centerOrFrame;
+  return {
+    center: {
+      x: Number.isFinite(centerCandidate?.x) ? centerCandidate.x : 0,
+      y: Number.isFinite(centerCandidate?.y) ? centerCandidate.y : 0,
+      z: Number.isFinite(centerCandidate?.z) ? centerCandidate.z : 0
+    },
+    frame
+  };
+}
+
+const getGlobePositionFromNormal = typeof geoUtils.getGlobePositionFromNormal === "function"
+  ? geoUtils.getGlobePositionFromNormal
+  : function getGlobePositionFromNormalFallback(
+    normal,
+    globeRadius,
+    centerOrFrame,
+    frameOverride = null
+  ) {
+    const { center, frame } = resolveFrameAndCenter(centerOrFrame, frameOverride);
+    const radius = Number.isFinite(globeRadius)
+      ? Math.max(globeRadius, 0.0001)
+      : Math.max(frame?.radius ?? 1, 0.0001);
+
+    tempFallbackNormal.set(
+      Number.isFinite(normal?.x) ? normal.x : 0,
+      Number.isFinite(normal?.y) ? normal.y : 1,
+      Number.isFinite(normal?.z) ? normal.z : 0
+    );
+    if (tempFallbackNormal.lengthSq() < 1e-12) {
+      tempFallbackNormal.set(0, 1, 0);
+    }
+    tempFallbackNormal.normalize();
+
+    if (frame?.rotation && typeof frame.rotation === "object") {
+      tempFallbackQuaternion.set(
+        Number.isFinite(frame.rotation.x) ? frame.rotation.x : 0,
+        Number.isFinite(frame.rotation.y) ? frame.rotation.y : 0,
+        Number.isFinite(frame.rotation.z) ? frame.rotation.z : 0,
+        Number.isFinite(frame.rotation.w) ? frame.rotation.w : 1
+      ).normalize();
+      tempFallbackNormal.applyQuaternion(tempFallbackQuaternion);
+    }
+
+    return {
+      x: center.x + (tempFallbackNormal.x * radius),
+      y: center.y + (tempFallbackNormal.y * radius),
+      z: center.z + (tempFallbackNormal.z * radius)
+    };
+  };
 
 const BASE_ROUTE_CYCLE_SECONDS = 120;
 const EARTH_RADIUS_KM = 6371;

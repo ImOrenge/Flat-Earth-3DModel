@@ -19,7 +19,7 @@ import { createCelestialTrackingCameraController } from "./modules/celestial-tra
 import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js?v=20260405-surfacepatch2";
 import { createI18n } from "./modules/i18n.js?v=20260405-hybridroute1";
 import { createMagneticFieldController } from "./modules/magnetic-field-controller.js?v=20260314-magnetic-pinecone3";
-import { createRouteSimulationController } from "./modules/route-simulation-controller.js?v=20260405-hybridroute1";
+import { createRouteSimulationController } from "./modules/route-simulation-controller.js?v=20260406-globeposfix1";
 import { createTextureManager } from "./modules/texture-manager.js?v=20260405-surfacepatch1";
 import { createWalkerController } from "./modules/walker-controller.js?v=20260324-moon-cycle28";
 
