@@ -1,4 +1,4 @@
-import * as THREE from "../vendor/three.module.js";
+﻿import * as THREE from "../vendor/three.module.js";
 import {
   getGeoFromProjectedPosition,
   projectedRadiusFromLatitude
@@ -13,7 +13,7 @@ import {
   getSolarAltitudeFactor,
 } from "./modules/astronomy-utils.js?v=20260326-seasonal-ecliptic1";
 import { createAstronomyController } from "./modules/astronomy-controller.js?v=20260325-eclipse-selector1";
-import { createCameraController } from "./modules/camera-controller.js?v=20260328-mobiletouch1";
+import { createCameraController } from "./modules/camera-controller.js?v=20260406-globecam1";
 import { createCelestialTrackingCameraController } from "./modules/celestial-tracking-camera-controller.js?v=20260320-constellation-precession1";
 import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js?v=20260405-surfacepatch2";
 import { createI18n } from "./modules/i18n.js?v=20260327-mobilehud1";
@@ -2595,7 +2595,7 @@ function animate() {
   walkerApi.updateFirstPersonOverlay();
   routeSimulationApi.update(deltaSeconds);
   rocketApi.update(deltaSeconds);
-  // ── 로켓 텔레메트리 UI 업데이트 ──
+  // ?? 濡쒖폆 ?붾젅硫뷀듃由?UI ?낅뜲?댄듃 ??
   (function updateRocketTelemetry() {
     const panel = document.getElementById('rocket-telemetry-panel');
     if (!panel) return;
@@ -2603,15 +2603,15 @@ function animate() {
     if (!tel) { panel.style.display = 'none'; return; }
     panel.style.display = '';
     const STATE_KO = {
-      STAGE1: '1단 연소', PITCHOVER: '자세 제어', SEPARATION: '단 분리',
-      STAGE2: '2단 점화', SCRAPE: '궁창 접촉', FALL: '낙하', LAUNCH: '발사'
+      STAGE1: '1???곗냼', PITCHOVER: '?먯꽭 ?쒖뼱', SEPARATION: '??遺꾨━',
+      STAGE2: '2???먰솕', SCRAPE: '沅곸갹 ?묒큺', FALL: '?숉븯', LAUNCH: '諛쒖궗'
     };
     document.getElementById('tel-state').textContent    = STATE_KO[tel.state] ?? tel.state;
     document.getElementById('tel-alt').textContent      = tel.altitude + '%';
     document.getElementById('tel-speed').textContent    = tel.speed + ' u/s';
     document.getElementById('tel-stage-t').textContent  = tel.stageTimer + 's';
-    document.getElementById('tel-scrape-t').textContent = tel.state === 'SCRAPE' ? tel.scrapeTimer + 's' : '—';
-    document.getElementById('tel-debris').textContent   = tel.debrisCount + '개';
+    document.getElementById('tel-scrape-t').textContent = tel.state === 'SCRAPE' ? (tel.scrapeTimer + 's') : '-';
+    document.getElementById('tel-debris').textContent   = tel.debrisCount + ' pcs';
   })();
   astronomyApi.syncSeasonalSunUi();
   if (snapshot) {
@@ -2831,7 +2831,7 @@ astronomyApi.enableRealityMode({ live: true, date: astronomyState.selectedDate }
 animate();
 runOnboarding();
 
-// ── 하단 패널 접기 ──────────────────────────
+// ?? ?섎떒 ?⑤꼸 ?묎린 ??????????????????????????
 (function initDetailPanelCollapse() {
   const btn = document.getElementById('detail-panel-collapse');
   const shell = btn && btn.closest('.detail-panel-shell');
@@ -2844,8 +2844,8 @@ runOnboarding();
   btn.addEventListener('click', () => {
     const isCollapsed = shell.classList.toggle('detail-panel-shell--collapsed');
     try { localStorage.setItem(STORAGE_KEY, isCollapsed ? '1' : '0'); } catch {}
-    btn.title = isCollapsed ? '패널 펼치기' : '패널 접기';
-    btn.setAttribute('aria-label', isCollapsed ? '패널 펼치기' : '패널 접기');
+    btn.title = isCollapsed ? 'Expand details' : 'Collapse details';
+    btn.setAttribute('aria-label', isCollapsed ? 'Expand details' : 'Collapse details');
   });
 })();
 
