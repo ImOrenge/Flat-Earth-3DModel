@@ -1,9 +1,14 @@
 import * as THREE from "../../vendor/three.module.js";
-import { getGlobeBasisFromGeo, getGeoFromGlobePosition } from "./geo-utils.js";
+import {
+  createGlobeModelFrame,
+  getGlobeBasisFromGeo,
+  getGeoFromGlobePosition
+} from "./geo-utils.js";
 
 export function createCameraController({
   camera,
   cameraState,
+  globeSurface,
   walkerState,
   renderState,
   renderer,
@@ -23,8 +28,14 @@ export function createCameraController({
   const tempWalkerNorth = new THREE.Vector3();
   const tempWalkerEast = new THREE.Vector3();
   const tempWalkerUp = new THREE.Vector3();
+  const globeFrame = createGlobeModelFrame(globeSurface, { space: "parent" });
+
+  function getGlobeFrame() {
+    return globeFrame;
+  }
 
   function getWalkerGeo() {
+    const frame = getGlobeFrame();
     if (Number.isFinite(walkerState.latitudeDegrees) && Number.isFinite(walkerState.longitudeDegrees)) {
       return {
         latitudeDegrees: walkerState.latitudeDegrees,
@@ -34,15 +45,19 @@ export function createCameraController({
 
     return getGeoFromGlobePosition(
       walkerState.position,
-      new THREE.Vector3(),
-      Math.max(walkerState.surfaceRadius ?? 1, 0.0001)
+      frame.center,
+      Math.max(walkerState.surfaceRadius ?? frame.radius, 0.0001),
+      frame
     );
   }
 
   function getWalkerBasis() {
+    const frame = getGlobeFrame();
+    const walkerGeo = getWalkerGeo();
     const basis = getGlobeBasisFromGeo(
-      getWalkerGeo().latitudeDegrees,
-      getWalkerGeo().longitudeDegrees
+      walkerGeo.latitudeDegrees,
+      walkerGeo.longitudeDegrees,
+      frame
     );
     tempWalkerNorth.set(basis.north.x, basis.north.y, basis.north.z).normalize();
     tempWalkerEast.set(basis.east.x, basis.east.y, basis.east.z).normalize();

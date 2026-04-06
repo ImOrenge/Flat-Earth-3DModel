@@ -742,12 +742,58 @@
             <button class="hud-subtab" data-hud-panel-tab="summary" type="button"><span class="subtab-icon" aria-hidden="true">??/span><span data-i18n="hudRoutesSectionSummary">Summary</span></button>
           </div>
           <section class="route-panel hud-subpanel active" data-hud-panel-section="playback">
-            <p class="orbit-title" data-i18n="offlineRouteLibraryTitle">Offline Route Library</p>
-            <p class="sync-copy" id="route-dataset-status">Loading offline route library...</p>
-            <label class="field" for="route-select">
-              <span class="field-label" data-i18n="routeLabel">Route</span>
-              <select class="select-input" id="route-select" disabled></select>
+            <p class="orbit-title" data-i18n="offlineRouteLibraryTitle">Globe Route Builder</p>
+            <p class="sync-copy" id="route-dataset-status">Loading globe route builder...</p>
+            <div class="button-row compact">
+              <button class="button secondary compact-button" id="route-refresh" type="button" data-i18n="routeRefreshButton">Refresh Data</button>
+            </div>
+            <div class="sync-row">
+              <span class="sync-title" data-i18n="routeDataSourceTitle">Data Source</span>
+              <strong class="route-speed-value" id="route-data-source">Bundled</strong>
+            </div>
+            <div class="sync-row">
+              <span class="sync-title" data-i18n="routeLastSyncTitle">Last Sync</span>
+              <strong class="route-speed-value" id="route-last-sync">Not synced yet</strong>
+            </div>
+            <label class="field" for="route-mode-select">
+              <span class="field-label" data-i18n="routeModeLabel">Route Mode</span>
+              <select class="select-input" id="route-mode-select" disabled>
+                <option value="recommended" data-i18n="routeModeRecommended">Recommended</option>
+                <option value="advanced" data-i18n="routeModeAdvanced">Advanced</option>
+              </select>
             </label>
+            <div id="route-recommended-panel">
+              <label class="field" for="route-origin-continent">
+                <span class="field-label" data-i18n="routeOriginContinentLabel">Origin Continent</span>
+                <select class="select-input" id="route-origin-continent" disabled></select>
+              </label>
+              <label class="field" for="route-destination-continent">
+                <span class="field-label" data-i18n="routeDestinationContinentLabel">Destination Continent</span>
+                <select class="select-input" id="route-destination-continent" disabled></select>
+              </label>
+              <label class="field" for="route-recommended-route">
+                <span class="field-label" data-i18n="routeRecommendedListLabel">Recommended Route</span>
+                <select class="select-input" id="route-recommended-route" disabled></select>
+              </label>
+            </div>
+            <div id="route-advanced-panel" hidden>
+              <label class="field" for="route-origin-country">
+                <span class="field-label" data-i18n="routeOriginCountryLabel">Origin Country</span>
+                <select class="select-input" id="route-origin-country" disabled></select>
+              </label>
+              <label class="field" for="route-origin-airport">
+                <span class="field-label" data-i18n="routeOriginAirportLabel">Origin Airport</span>
+                <select class="select-input" id="route-origin-airport" disabled></select>
+              </label>
+              <label class="field" for="route-destination-country">
+                <span class="field-label" data-i18n="routeDestinationCountryLabel">Destination Country</span>
+                <select class="select-input" id="route-destination-country" disabled></select>
+              </label>
+              <label class="field" for="route-destination-airport">
+                <span class="field-label" data-i18n="routeDestinationAirportLabel">Destination Airport</span>
+                <select class="select-input" id="route-destination-airport" disabled></select>
+              </label>
+            </div>
             <label class="field" for="route-speed">
               <span class="field-label" data-i18n="playbackSpeedLabel">Playback Speed</span>
               <input class="slider-input" id="route-speed" type="range" min="1" max="24" step="1" value="8" disabled>
@@ -763,14 +809,14 @@
           </section>
 
           <section class="route-panel route-summary-panel hud-subpanel" data-hud-panel-section="summary">
-            <p class="orbit-title" data-i18n="activeRouteTitle">Active Route</p>
+            <p class="orbit-title" data-i18n="activeRouteTitle">Active Globe Route</p>
             <p class="sync-copy" id="route-summary">
-              Offline route metadata and aircraft position will appear here once the dataset is ready.
+              Choose origin and destination airports to build a globe route.
             </p>
             <div class="coord-grid">
               <div class="coord-card">
                 <span class="coord-label" data-i18n="routeLegLabel">Leg</span>
-                <strong class="coord-value" id="route-leg">Select a route</strong>
+                <strong class="coord-value" id="route-leg">Choose airports</strong>
               </div>
               <div class="coord-card">
                 <span class="coord-label" data-i18n="routeAircraftLabel">Aircraft</span>
@@ -787,6 +833,10 @@
               <div class="coord-card">
                 <span class="coord-label" data-i18n="routeCountriesLabel">Countries</span>
                 <strong class="coord-value" id="route-countries">-</strong>
+              </div>
+              <div class="coord-card">
+                <span class="coord-label" data-i18n="routeLayoversLabel">Layovers</span>
+                <strong class="coord-value" id="route-layovers">-</strong>
               </div>
               <div class="coord-card">
                 <span class="coord-label" data-i18n="routePlannedBlockLabel">Planned Block</span>
@@ -968,8 +1018,8 @@
     </div>
   </div>
 
-  <script type="module" src="./app.js?v=20260406-globecam4"></script>
-  </body>
+  <script type="module" src="./app.js?v=20260406-merge-routes1"></script>
+</body>
 </html>
 
 

@@ -18,7 +18,7 @@ import { createFirstPersonWorldController } from "./modules/first-person-world-c
 import { createI18n } from "./modules/i18n.js?v=20260327-mobilehud1";
 import { createMagneticFieldController } from "./modules/magnetic-field-controller.js?v=20260314-magnetic-pinecone3";
 import { createModelComparisonController } from "./modules/model-comparison-controller.js?v=20260329-compare1";
-import { createRouteSimulationController } from "./modules/route-simulation-controller.js";
+import { createRouteSimulationController } from "./modules/route-simulation-controller.js?v=20260405-mainroutes3";
 import { createTextureManager } from "./modules/texture-manager.js?v=20260311-gpu-daynight";
 import { createWalkerController } from "./modules/walker-controller.js?v=20260324-moon-cycle28";
 
@@ -26,7 +26,7 @@ import * as constants from "./modules/constants.js";
 import { createEclipseController } from "./modules/eclipse-controller.js?v=20260320-reality-eclipse-sync2";
 import { createCelestialVisualsController } from "./modules/celestial-visuals-controller.js?v=20260321-sunset5";
 import { createConstellationTabController } from "./modules/constellation-tab-controller.js?v=20260320-constellation-precession1";
-import { setupInputHandlers } from "./modules/input-handler.js?v=20260328-mobileratio1";
+import { setupInputHandlers } from "./modules/input-handler.js?v=20260405-mainroutes1";
 import { createRocketController, SPACEPORTS } from "./modules/rocket-controller.js?v=20260319-parabola";
 const {
   DEFAULT_MAP_PATH,
@@ -343,7 +343,9 @@ const hudSideCardTitleEl = document.getElementById("hud-side-card-title");
 const hudSideCardSlotEl = document.getElementById("hud-side-card-slot");
 const rocketSpaceportSelect = document.getElementById("rocket-spaceport-select");
 const rocketTypeSelect      = document.getElementById("rocket-type-select");
+const rocketStandbyBtn      = document.getElementById("rocket-standby-btn");
 const rocketLaunchBtn       = document.getElementById("rocket-launch-btn");
+const rocketCameraSummaryEl = document.getElementById("rocket-camera-summary");
 const controlTabButtons = [...document.querySelectorAll("[data-control-tab]")];
 const cameraPresetButtons = [...document.querySelectorAll("[data-camera-preset]")];
 const controlTabPanels = [...document.querySelectorAll("[data-control-panel]")];
@@ -436,7 +438,16 @@ const walkerCoordinatesEl = document.getElementById("walker-coordinates");
 const walkerLightEl = document.getElementById("walker-light");
 const resetWalkerButton = document.getElementById("reset-walker");
 const routeDatasetStatusEl = document.getElementById("route-dataset-status");
-const routeSelectEl = document.getElementById("route-select");
+const routeModeSelectEl = document.getElementById("route-mode-select");
+const routeRecommendedPanelEl = document.getElementById("route-recommended-panel");
+const routeAdvancedPanelEl = document.getElementById("route-advanced-panel");
+const routeOriginContinentEl = document.getElementById("route-origin-continent");
+const routeDestinationContinentEl = document.getElementById("route-destination-continent");
+const routeRecommendedRouteEl = document.getElementById("route-recommended-route");
+const routeOriginCountryEl = document.getElementById("route-origin-country");
+const routeOriginAirportEl = document.getElementById("route-origin-airport");
+const routeDestinationCountryEl = document.getElementById("route-destination-country");
+const routeDestinationAirportEl = document.getElementById("route-destination-airport");
 const routeSpeedEl = document.getElementById("route-speed");
 const routeSpeedValueEl = document.getElementById("route-speed-value");
 const routePlaybackButton = document.getElementById("route-playback");
@@ -447,6 +458,7 @@ const routeAircraftEl = document.getElementById("route-aircraft");
 const routeOriginEl = document.getElementById("route-origin");
 const routeDestinationEl = document.getElementById("route-destination");
 const routeCountriesEl = document.getElementById("route-countries");
+const routeLayoversEl = document.getElementById("route-layovers");
 const routeDurationEl = document.getElementById("route-duration");
 const routeProgressEl = document.getElementById("route-progress");
 const routeGeoSummaryEl = document.getElementById("route-geo-summary");
@@ -1291,6 +1303,7 @@ const {
   stage,
   scalableStage,
   globeStage,
+  globeSurface,
   topMaterial,
   sideMaterial,
   bottomMaterial,
@@ -1430,6 +1443,8 @@ const {
   createSunRayTexture,
   createSunRayMesh,
   createOrbitTrack,
+  orbitGuideGroups,
+  domeWaterApi,
   setEarthModelView
 } = setupScene({ canvas });
 
@@ -1652,6 +1667,8 @@ const ui = {
   walkerSummaryEl,
   rocketSpaceportSelect,
   rocketTypeSelect,
+  rocketStandbyBtn,
+  rocketCameraSummaryEl,
   rocketLaunchBtn
 };
 
@@ -1773,22 +1790,35 @@ const firstPersonWorldApi = createFirstPersonWorldController({
 });
 
 const routeSimulationApi = createRouteSimulationController({
+  cameraState,
   constants,
+  globeStage,
+  globeSurface,
   i18n,
   scalableStage,
   ui: {
     routeAircraftEl,
+    routeAdvancedPanelEl,
     routeCountriesEl,
     routeDatasetStatusEl,
+    routeDestinationAirportEl,
+    routeDestinationContinentEl,
+    routeDestinationCountryEl,
     routeDestinationEl,
     routeDurationEl,
     routeGeoSummaryEl,
     routeLegEl,
+    routeLayoversEl,
+    routeModeSelectEl,
     routeOriginEl,
+    routeOriginAirportEl,
+    routeOriginContinentEl,
+    routeOriginCountryEl,
     routePlaybackButton,
     routeProgressEl,
+    routeRecommendedPanelEl,
+    routeRecommendedRouteEl,
     routeResetButton,
-    routeSelectEl,
     routeSpeedEl,
     routeSpeedValueEl,
     routeSummaryEl
@@ -1914,8 +1944,276 @@ celestialTrackingCameraApi = createCelestialTrackingCameraController({
 
 const rocketApi = createRocketController({
   scalableStage,
-  constants
+  constants,
+  domeWaterApi
 });
+
+const rocketCameraUiState = {
+  activeProfileKey: "",
+  engaged: false,
+  lastEndedLaunchpadName: ""
+};
+const rocketCameraTempRadial = new THREE.Vector3();
+const rocketCameraTempTangent = new THREE.Vector3();
+const rocketCameraTempHeading = new THREE.Vector3();
+const rocketCameraLockedPosition = new THREE.Vector3();
+const ROCKET_FRONT_VIEW_TRANSITION_SECONDS = 1.15;
+const ROCKET_FIXED_CAMERA_HEIGHT = SURFACE_Y + scaleDimension(0.18);
+const ROCKET_CAMERA_COPY = {
+  en: {
+    idle: "Choose a launchpad and stage a rocket to preview the pad camera.",
+    standby: "Standby camera is locked on {launchpad}. Launch when ready.",
+    standbyButton: "Stage Standby",
+    states: {
+      FALL: "Fall",
+      LAUNCH: "Launch",
+      PITCHOVER: "Pitchover",
+      SCRAPE: "Dome Scrape",
+      SEPARATION: "Stage Separation",
+      STAGE1: "Stage 1 Burn",
+      STAGE2: "Stage 2 Burn",
+      STANDBY: "Standby"
+    },
+    tracking: "Tracking the {launchpad} launch through {stage}. Drag and zoom stay enabled.",
+    ended: "Tracking finished for the {launchpad} launch. Stage another rocket to preview a pad again."
+  },
+  ko: {
+    idle: "諛쒖궗?瑜??좏깮?섍퀬 濡쒖폆???ㅽ깲諛붿씠濡?諛곗튂?섎㈃ 諛쒖궗??移대찓??誘몃━蹂닿린媛 ?쒖옉?⑸땲??",
+    standby: "{launchpad}???ㅽ깲諛붿씠 移대찓?쇰? 怨좎젙?덉뒿?덈떎. 以鍮꾨릺硫?諛쒖궗?섏꽭??",
+    standbyButton: "?ㅽ깲諛붿씠 諛곗튂",
+    states: {
+      FALL: "?숉븯",
+      LAUNCH: "諛쒖궗",
+      PITCHOVER: "?먯꽭 ?꾪솚",
+      SCRAPE: "沅곸갹 ?묒큺",
+      SEPARATION: "??遺꾨━",
+      STAGE1: "1???곗냼",
+      STAGE2: "2???곗냼",
+      STANDBY: "?ㅽ깲諛붿씠"
+    },
+    tracking: "{launchpad} 諛쒖궗瑜?{stage} ?④퀎源뚯? 異붿쟻 以묒엯?덈떎. ?쒕옒洹몄? 以뚯? 怨꾩냽 ?ъ슜?????덉뒿?덈떎.",
+    ended: "{launchpad} 諛쒖궗 異붿쟻??醫낅즺?섏뿀?듬땲?? ?ㅼ쓬 諛쒖궗瑜?誘몃━ 蹂대젮硫??ㅼ떆 ?ㅽ깲諛붿씠瑜?諛곗튂?섏꽭??"
+  }
+};
+
+function getRocketCameraCopy() {
+  return ROCKET_CAMERA_COPY[i18n.getLanguage()] ?? ROCKET_CAMERA_COPY.en;
+}
+
+function getRocketStateLabelKey(state) {
+  return getRocketCameraCopy().states[state] ?? state;
+}
+
+function getRocketStateLabel(state) {
+  return getRocketStateLabelKey(state);
+}
+
+function wrapTrackingAngle(angle) {
+  return Math.atan2(Math.sin(angle), Math.cos(angle));
+}
+
+function lerpTrackingAngle(fromAngle, toAngle, alpha) {
+  const delta = wrapTrackingAngle(toAngle - fromAngle);
+  return wrapTrackingAngle(fromAngle + delta * alpha);
+}
+
+function getRocketFrontViewAzimuth(snapshot) {
+  rocketCameraTempRadial.set(snapshot?.position?.x ?? 0, 0, snapshot?.position?.z ?? 0);
+  if (rocketCameraTempRadial.lengthSq() < 0.0001) {
+    rocketCameraTempRadial.set(0, 0, 1);
+  } else {
+    rocketCameraTempRadial.normalize();
+  }
+
+  rocketCameraTempTangent.set(-rocketCameraTempRadial.z, 0, rocketCameraTempRadial.x);
+  const headingSource = snapshot?.headingDirection?.lengthSq?.() > 0.0001
+    ? snapshot.headingDirection
+    : snapshot?.forward;
+  rocketCameraTempHeading.set(headingSource?.x ?? 0, 0, headingSource?.z ?? 0);
+
+  if (rocketCameraTempHeading.lengthSq() < 0.0001) {
+    return -0.38;
+  }
+
+  rocketCameraTempHeading.normalize();
+  return Math.atan2(
+    rocketCameraTempHeading.dot(rocketCameraTempTangent),
+    rocketCameraTempHeading.dot(rocketCameraTempRadial)
+  );
+}
+
+function blendRocketTrackingProfile(fromProfile, toProfile, alpha) {
+  return {
+    azimuth: lerpTrackingAngle(fromProfile.azimuth, toProfile.azimuth, alpha),
+    distance: THREE.MathUtils.lerp(fromProfile.distance, toProfile.distance, alpha),
+    elevation: THREE.MathUtils.lerp(fromProfile.elevation, toProfile.elevation, alpha)
+  };
+}
+
+function shouldContinuouslyUpdateRocketProfile(snapshot) {
+  return Boolean(
+    snapshot
+    && (snapshot.state === "STAGE1" || snapshot.state === "LAUNCH")
+    && (snapshot.stageTimer ?? 0) < ROCKET_FRONT_VIEW_TRANSITION_SECONDS
+  );
+}
+
+function getRocketTrackingSummary(snapshot) {
+  const copy = getRocketCameraCopy();
+  if (!snapshot) {
+    return copy.idle;
+  }
+
+  if (snapshot.state === "STANDBY") {
+    return copy.standby.replace("{launchpad}", snapshot.launchpadName ?? "");
+  }
+
+  return copy.tracking
+    .replace("{launchpad}", snapshot.launchpadName ?? "")
+    .replace("{stage}", getRocketStateLabel(snapshot.state));
+}
+
+function getRocketTrackingProfile(snapshot) {
+  switch (snapshot?.state) {
+    case "STANDBY": {
+      return {
+        azimuth: getRocketFrontViewAzimuth(snapshot),
+        distance: constants.CAMERA_TRACKING_MIN_DISTANCE * 1.12,
+        elevation: 0.16
+      };
+    }
+    case "STAGE1":
+    case "LAUNCH": {
+      const frontProfile = {
+        azimuth: getRocketFrontViewAzimuth(snapshot),
+        distance: constants.CAMERA_TRACKING_MIN_DISTANCE * 1.18,
+        elevation: 0.18
+      };
+      const followProfile = {
+        azimuth: -0.9,
+        distance: constants.CAMERA_TRACKING_DEFAULT_DISTANCE * 0.96,
+        elevation: 0.5
+      };
+      const rawProgress = THREE.MathUtils.clamp(
+        (snapshot.stageTimer ?? 0) / ROCKET_FRONT_VIEW_TRANSITION_SECONDS,
+        0,
+        1
+      );
+      const progress = THREE.MathUtils.smootherstep(rawProgress, 0, 1);
+      return blendRocketTrackingProfile(frontProfile, followProfile, progress);
+    }
+    case "SEPARATION":
+      return {
+        azimuth: -0.64,
+        distance: constants.CAMERA_TRACKING_DEFAULT_DISTANCE * 1.18,
+        elevation: 0.74
+      };
+    case "STAGE2":
+      return {
+        azimuth: -0.52,
+        distance: constants.CAMERA_TRACKING_DEFAULT_DISTANCE * 0.88,
+        elevation: 0.68
+      };
+    case "SCRAPE":
+    case "FALL":
+      return {
+        azimuth: -0.44,
+        distance: constants.CAMERA_TRACKING_DEFAULT_DISTANCE * 1.3,
+        elevation: 0.82
+      };
+    default:
+      return {
+        azimuth: constants.CAMERA_TRACKING_DEFAULT_AZIMUTH,
+        distance: constants.CAMERA_TRACKING_DEFAULT_DISTANCE,
+        elevation: constants.CAMERA_TRACKING_DEFAULT_ELEVATION
+      };
+  }
+}
+
+function syncRocketCameraAndUi() {
+  const activeSnapshot = rocketApi.getActiveRocketSnapshot();
+  const standbySnapshot = activeSnapshot ? null : rocketApi.getStandbySnapshot();
+  const snapshot = activeSnapshot ?? standbySnapshot;
+  const completedLaunchpadName = rocketApi.getLastCompletedLaunchpadName();
+  const copy = getRocketCameraCopy();
+  const shouldHideOrbitGuides = Boolean(activeSnapshot);
+
+  if (orbitGuideGroups) {
+    orbitGuideGroups.north.visible = !shouldHideOrbitGuides;
+    orbitGuideGroups.equator.visible = !shouldHideOrbitGuides;
+    orbitGuideGroups.south.visible = !shouldHideOrbitGuides;
+  }
+
+  if (rocketStandbyBtn) {
+    rocketStandbyBtn.textContent = copy.standbyButton;
+  }
+
+  if (snapshot) {
+    const summaryText = getRocketTrackingSummary(snapshot);
+    const profileKey = `${snapshot.state}:${snapshot.spaceportIndex ?? "none"}:${snapshot.rocketType ?? "default"}`;
+    celestialTrackingCameraApi.setTrackedCustomTargetResolver(
+      () => {
+        const latestActive = rocketApi.getActiveRocketSnapshot();
+        const latestStandby = latestActive ? null : rocketApi.getStandbySnapshot();
+        return latestActive?.lookTarget ?? latestStandby?.lookTarget ?? null;
+      },
+      summaryText,
+      { immediate: !rocketCameraUiState.engaged || rocketCameraUiState.activeProfileKey !== profileKey }
+    );
+
+    const profile = getRocketTrackingProfile(snapshot);
+    if (shouldContinuouslyUpdateRocketProfile(snapshot) || rocketCameraUiState.activeProfileKey !== profileKey) {
+      cameraState.targetTrackingAzimuth = profile.azimuth;
+      cameraState.targetTrackingElevation = profile.elevation;
+      cameraState.targetTrackingDistance = profile.distance;
+      cameraState.targetTrackingGroundLocked = true;
+      cameraState.targetTrackingGroundHeight = ROCKET_FIXED_CAMERA_HEIGHT;
+      cameraApi.clampCamera();
+      rocketCameraUiState.activeProfileKey = profileKey;
+    }
+
+    if (activeSnapshot) {
+      if (!cameraState.targetTrackingPositionLocked) {
+        rocketCameraLockedPosition.copy(camera.position);
+        rocketCameraLockedPosition.y = Math.max(rocketCameraLockedPosition.y, ROCKET_FIXED_CAMERA_HEIGHT);
+        cameraState.targetTrackingLockedPosition.copy(rocketCameraLockedPosition);
+      }
+      cameraState.targetTrackingPositionLocked = true;
+    } else {
+      cameraState.targetTrackingPositionLocked = false;
+    }
+
+    rocketCameraUiState.engaged = true;
+    rocketCameraUiState.lastEndedLaunchpadName = "";
+    if (rocketCameraSummaryEl) {
+      rocketCameraSummaryEl.textContent = summaryText;
+    }
+    return;
+  }
+
+  if (completedLaunchpadName) {
+    rocketCameraUiState.lastEndedLaunchpadName = completedLaunchpadName;
+  }
+
+  if (rocketCameraUiState.engaged) {
+    celestialTrackingCameraApi.clearCustomTracking({ immediate: false });
+    rocketCameraUiState.engaged = false;
+    rocketCameraUiState.activeProfileKey = "";
+  }
+  cameraState.targetTrackingGroundLocked = false;
+  cameraState.trackingGroundLocked = false;
+  cameraState.targetTrackingGroundHeight = ROCKET_FIXED_CAMERA_HEIGHT;
+  cameraState.targetTrackingPositionLocked = false;
+  cameraState.trackingPositionLocked = false;
+
+  if (!rocketCameraSummaryEl) {
+    return;
+  }
+
+  rocketCameraSummaryEl.textContent = rocketCameraUiState.lastEndedLaunchpadName
+    ? copy.ended.replace("{launchpad}", rocketCameraUiState.lastEndedLaunchpadName)
+    : copy.idle;
+}
 
 
   const eclipseApi = createEclipseController({
@@ -2079,7 +2377,9 @@ const rocketApi = createRocketController({
     resetDarkSunOcclusionMotion: eclipseApi.resetDarkSunOcclusionMotion, darkSunOcclusionState,
     controlTabButtons, cameraPresetButtons, cameraViewToggleEl, syncCameraViewToggleUi, languageToggleEl, i18n, resetButton,
     exitFirstPersonMode, enterFirstPersonMode, walkerModeEl, resetWalkerButton,
-    routeSelectEl, routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl,
+    routeModeSelectEl, routeOriginContinentEl, routeDestinationContinentEl, routeRecommendedRouteEl,
+    routeOriginCountryEl, routeOriginAirportEl, routeDestinationCountryEl, routeDestinationAirportEl,
+    routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl,
     celestialSpeedPresetButtons,
     celestialFullTrailEl, routePlaybackButton, routeResetButton, realitySyncEl,
     realityLiveEl, observationTimeEl, observationMinusHourButton, observationPlusHourButton,
@@ -2409,12 +2709,8 @@ function animate() {
   zodiacWheelApi.setSuppressed(walkerState.enabled);
   constellationTabApi.refreshDynamicState();
 
-  const isFreeTopViewPresentation = !walkerState.enabled &&
-    cameraState.mode === "free" &&
-    cameraState.phi <= 0.5 &&
-    cameraState.radius >= (constants.CAMERA_TOPDOWN_FULL_RADIUS * 0.72);
-  dome.visible = !isFreeTopViewPresentation;
-  domeRing.visible = !isFreeTopViewPresentation;
+  dome.visible = true;
+  domeRing.visible = true;
 
   walkerApi.updateWalkerMovement(deltaSeconds);
   walkerApi.updateWalkerAvatar();
@@ -2422,24 +2718,20 @@ function animate() {
   walkerApi.updateFirstPersonOverlay();
   routeSimulationApi.update(deltaSeconds);
   rocketApi.update(deltaSeconds);
-  // ?? 濡쒖폆 ?붾젅硫뷀듃由?UI ?낅뜲?댄듃 ??
   (function updateRocketTelemetry() {
-    const panel = document.getElementById('rocket-telemetry-panel');
+    const panel = document.getElementById("rocket-telemetry-panel");
     if (!panel) return;
     const tel = rocketApi.getTelemetry();
-    if (!tel) { panel.style.display = 'none'; return; }
-    panel.style.display = '';
-    const STATE_KO = {
-      STAGE1: '1???곗냼', PITCHOVER: '?먯꽭 ?쒖뼱', SEPARATION: '??遺꾨━',
-      STAGE2: '2???먰솕', SCRAPE: '沅곸갹 ?묒큺', FALL: '?숉븯', LAUNCH: '諛쒖궗'
-    };
-    document.getElementById('tel-state').textContent    = STATE_KO[tel.state] ?? tel.state;
-    document.getElementById('tel-alt').textContent      = tel.altitude + '%';
-    document.getElementById('tel-speed').textContent    = tel.speed + ' u/s';
-    document.getElementById('tel-stage-t').textContent  = tel.stageTimer + 's';
-    document.getElementById('tel-scrape-t').textContent = tel.state === 'SCRAPE' ? (tel.scrapeTimer + 's') : '-';
-    document.getElementById('tel-debris').textContent   = tel.debrisCount + ' pcs';
+    if (!tel) { panel.style.display = "none"; return; }
+    panel.style.display = "";
+    document.getElementById("tel-state").textContent = getRocketStateLabel(tel.state);
+    document.getElementById("tel-alt").textContent = `${tel.altitude}%`;
+    document.getElementById("tel-speed").textContent = `${tel.speed} u/s`;
+    document.getElementById("tel-stage-t").textContent = `${tel.stageTimer}s`;
+    document.getElementById("tel-scrape-t").textContent = tel.state === "SCRAPE" ? `${tel.scrapeTimer}s` : "-";
+    document.getElementById("tel-debris").textContent = `${tel.debrisCount}`;
   })();
+  syncRocketCameraAndUi();
   astronomyApi.syncSeasonalSunUi();
   if (snapshot) {
     walkerApi.updateWalkerUi(snapshot);
@@ -2448,6 +2740,7 @@ function animate() {
   syncPreparationPresentation();
   celestialTrackingCameraApi.update();
   cameraApi.updateCamera();
+  domeWaterApi.update(deltaSeconds, camera.position);
   if (snapshot) {
     if (!walkerState.enabled) {
       resetDarkSunOcclusionMotion(darkSunOcclusionState.orbit);
@@ -2671,8 +2964,8 @@ runOnboarding();
   btn.addEventListener('click', () => {
     const isCollapsed = shell.classList.toggle('detail-panel-shell--collapsed');
     try { localStorage.setItem(STORAGE_KEY, isCollapsed ? '1' : '0'); } catch {}
-    btn.title = isCollapsed ? 'Expand details' : 'Collapse details';
-    btn.setAttribute('aria-label', isCollapsed ? 'Expand details' : 'Collapse details');
+    btn.title = isCollapsed ? "Expand details" : "Collapse details";
+    btn.setAttribute("aria-label", isCollapsed ? "Expand details" : "Collapse details");
   });
 })();
 

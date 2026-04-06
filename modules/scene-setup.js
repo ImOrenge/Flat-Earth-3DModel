@@ -26,6 +26,26 @@ const {
   DOME_RADIUS,
   DOME_BASE_Y,
   DOME_VERTICAL_SCALE,
+  DOME_WATER_BASE_OPACITY,
+  DOME_WATER_TRANSMISSION,
+  DOME_WATER_THICKNESS,
+  DOME_WATER_IOR,
+  DOME_WATER_FRESNEL_STRENGTH,
+  DOME_WATER_HIGHLIGHT_STRENGTH,
+  DOME_WATER_FLOW_SPEED,
+  DOME_WATER_FLOW_SCALE,
+  DOME_WATER_RIPPLE_SPEED,
+  DOME_WATER_RIPPLE_WIDTH,
+  DOME_WATER_IMPACT_LIFETIME,
+  DOME_WATER_TRAIL_LIFETIME,
+  DOME_WATER_MAX_IMPACTS,
+  DOME_WATER_MAX_TRAILS,
+  DOME_WATER_CAMERA_PROXIMITY_RANGE,
+  DOME_WATER_TRAIL_WIDTH,
+  DOME_WATER_TRAIL_LENGTH,
+  DOME_WATER_TRAIL_WIDTH_SPEED_FACTOR,
+  DOME_WATER_TRAIL_LENGTH_SPEED_FACTOR,
+  DOME_WATER_TRAIL_SPECULAR_BOOST,
   CELESTIAL_HEIGHT_DROP,
   CELESTIAL_ALTITUDE_DROP_DEGREES,
   CELESTIAL_ORBIT_Y_SPREAD_SCALE,
@@ -248,6 +268,9 @@ const {
 } = constants;
 
 export function setupScene({ canvas }) {
+  const DOME_WATER_IMPACT_SLOT_COUNT = Math.max(1, Math.floor(DOME_WATER_MAX_IMPACTS));
+  const DOME_WATER_TRAIL_SLOT_COUNT = Math.max(1, Math.floor(DOME_WATER_MAX_TRAILS));
+
   function getResponsivePixelRatio() {
     const maxRatio = window.innerWidth <= 1080 ? 1.5 : 2;
     return Math.min(window.devicePixelRatio || 1, maxRatio);
@@ -691,6 +714,30 @@ export function setupScene({ canvas }) {
   iceCrown.rotation.x = Math.PI / 2;
   iceCrown.position.y = RIM_TOP_Y + 0.01;
   scalableStage.add(iceCrown);
+
+  const domeWaterState = {
+    cameraLocalPosition: new THREE.Vector3(0, DOME_RADIUS * 0.74, DOME_RADIUS * 0.16),
+    cameraProximity: 0,
+    impactAges: Array(DOME_WATER_IMPACT_SLOT_COUNT).fill(DOME_WATER_IMPACT_LIFETIME + 1),
+    impactCenters: Array.from(
+      { length: DOME_WATER_IMPACT_SLOT_COUNT },
+      () => new THREE.Vector4(0, 1, 0, 0)
+    ),
+    time: 0,
+    trailAges: Array(DOME_WATER_TRAIL_SLOT_COUNT).fill(DOME_WATER_TRAIL_LIFETIME + 1),
+    trailCenters: Array.from(
+      { length: DOME_WATER_TRAIL_SLOT_COUNT },
+      () => new THREE.Vector4(0, 1, 0, 0)
+    ),
+    trailDirections: Array.from(
+      { length: DOME_WATER_TRAIL_SLOT_COUNT },
+      () => new THREE.Vector4(0, 0, 1, 0)
+    ),
+    trailShape: Array.from(
+      { length: DOME_WATER_TRAIL_SLOT_COUNT },
+      () => new THREE.Vector4(DOME_WATER_TRAIL_WIDTH, DOME_WATER_TRAIL_LENGTH, 0, 0)
+    ),
+  };
   
   function enhanceDomeMaterialWithSunGlow(material) {
     material.onBeforeCompile = (shader) => {
@@ -698,18 +745,38 @@ export function setupScene({ canvas }) {
         value: new THREE.Vector3(0, DOME_RADIUS, 0)
       };
       shader.uniforms.sunPulse = { value: 0.5 };
+      shader.uniforms.waterTime = { value: domeWaterState.time };
+      shader.uniforms.waterCameraLocalPosition = { value: domeWaterState.cameraLocalPosition };
+      shader.uniforms.waterCameraProximity = { value: domeWaterState.cameraProximity };
+      shader.uniforms.waterFresnelStrength = { value: DOME_WATER_FRESNEL_STRENGTH };
+      shader.uniforms.waterHighlightStrength = { value: DOME_WATER_HIGHLIGHT_STRENGTH };
+      shader.uniforms.waterFlowSpeed = { value: DOME_WATER_FLOW_SPEED };
+      shader.uniforms.waterFlowScale = { value: DOME_WATER_FLOW_SCALE };
+      shader.uniforms.waterRippleSpeed = { value: DOME_WATER_RIPPLE_SPEED };
+      shader.uniforms.waterRippleWidth = { value: DOME_WATER_RIPPLE_WIDTH };
+      shader.uniforms.waterTrailSpecularBoost = { value: DOME_WATER_TRAIL_SPECULAR_BOOST };
+      shader.uniforms.waterImpactLifetime = { value: DOME_WATER_IMPACT_LIFETIME };
+      shader.uniforms.waterTrailLifetime = { value: DOME_WATER_TRAIL_LIFETIME };
+      shader.uniforms.waterImpactCenters = { value: domeWaterState.impactCenters };
+      shader.uniforms.waterImpactAges = { value: domeWaterState.impactAges };
+      shader.uniforms.waterTrailCenters = { value: domeWaterState.trailCenters };
+      shader.uniforms.waterTrailDirections = { value: domeWaterState.trailDirections };
+      shader.uniforms.waterTrailShape = { value: domeWaterState.trailShape };
+      shader.uniforms.waterTrailAges = { value: domeWaterState.trailAges };
       material.userData.shader = shader;
   
       shader.vertexShader = shader.vertexShader
         .replace(
           "#include <common>",
           `#include <common>
-  varying vec3 vDomeLocalPosition;`
+  varying vec3 vDomeLocalPosition;
+  varying vec3 vDomeWorldPosition;`
         )
         .replace(
           "#include <begin_vertex>",
           `#include <begin_vertex>
-  vDomeLocalPosition = position;`
+  vDomeLocalPosition = position;
+  vDomeWorldPosition = (modelMatrix * vec4(transformed, 1.0)).xyz;`
         );
   
       shader.fragmentShader = shader.fragmentShader
@@ -717,8 +784,34 @@ export function setupScene({ canvas }) {
           "#include <common>",
           `#include <common>
   varying vec3 vDomeLocalPosition;
+  varying vec3 vDomeWorldPosition;
   uniform vec3 sunLocalPosition;
-  uniform float sunPulse;`
+  uniform float sunPulse;
+  uniform float waterTime;
+  uniform vec3 waterCameraLocalPosition;
+  uniform float waterCameraProximity;
+  uniform float waterFresnelStrength;
+  uniform float waterHighlightStrength;
+  uniform float waterFlowSpeed;
+  uniform float waterFlowScale;
+  uniform float waterRippleSpeed;
+  uniform float waterRippleWidth;
+  uniform float waterTrailSpecularBoost;
+  uniform float waterImpactLifetime;
+  uniform float waterTrailLifetime;
+  uniform vec4 waterImpactCenters[${DOME_WATER_IMPACT_SLOT_COUNT}];
+  uniform float waterImpactAges[${DOME_WATER_IMPACT_SLOT_COUNT}];
+  uniform vec4 waterTrailCenters[${DOME_WATER_TRAIL_SLOT_COUNT}];
+  uniform vec4 waterTrailDirections[${DOME_WATER_TRAIL_SLOT_COUNT}];
+  uniform vec4 waterTrailShape[${DOME_WATER_TRAIL_SLOT_COUNT}];
+  uniform float waterTrailAges[${DOME_WATER_TRAIL_SLOT_COUNT}];
+
+  float domeFlowNoise(vec2 uv) {
+    float waveA = sin((uv.x * 2.1) + (waterTime * waterFlowSpeed * 2.4));
+    float waveB = cos((uv.y * 2.7) - (waterTime * waterFlowSpeed * 1.7));
+    float waveC = sin(((uv.x + uv.y) * 1.8) + (waterTime * waterFlowSpeed * 3.1));
+    return (waveA + waveB + waveC) / 3.0;
+  }`
         )
         .replace(
           "#include <opaque_fragment>",
@@ -729,15 +822,103 @@ export function setupScene({ canvas }) {
   float sunBloom = 1.0 - smoothstep(0.18, 0.94, sunArcDistance);
   float sunCore = 1.0 - smoothstep(0.06, 0.24, sunArcDistance);
   float upperDome = smoothstep(-0.04, 0.72, domeSurfaceDirection.y);
+  float waterVisibility = smoothstep(-0.32, 0.18, domeSurfaceDirection.y);
+  float wakeVisibility = max(waterVisibility, upperDome * 0.7);
   float pulse = 0.92 + (sunPulse * 0.08);
   vec3 atmosphericBlue = mix(vec3(0.46, 0.76, 1.0), vec3(0.9, 0.97, 1.0), sunCore);
-  outgoingLight += atmosphericBlue * ((sunHaze * 0.26) + (sunBloom * 0.44) + (sunCore * 0.38)) * upperDome * pulse;
-  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.64, 0.84, 1.0), ((sunHaze * 0.22) + (sunBloom * 0.18)) * upperDome);
-  diffuseColor.a = min(0.82, diffuseColor.a + (sunHaze * 0.06) + (sunBloom * 0.12) + (sunCore * 0.2));
+  vec3 cameraDirection = normalize(waterCameraLocalPosition - vDomeLocalPosition);
+  float fresnel = pow(1.0 - max(dot(domeSurfaceDirection, cameraDirection), 0.0), 2.4) * waterFresnelStrength;
+  vec2 flowUv = domeSurfaceDirection.xz * waterFlowScale;
+  float flowNoise = domeFlowNoise(flowUv);
+  float flowNoiseSecondary = domeFlowNoise((flowUv * 1.43) + vec2(1.7, -2.3));
+  float flowMix = (flowNoise * 0.55) + (flowNoiseSecondary * 0.45);
+  float rippleField = 0.0;
+  float trailField = 0.0;
+
+  for (int i = 0; i < ${DOME_WATER_IMPACT_SLOT_COUNT}; i += 1) {
+    vec4 impactCenter = waterImpactCenters[i];
+    float impactAge = waterImpactAges[i];
+    if (impactCenter.w > 0.001 && impactAge < waterImpactLifetime) {
+      float impactDistance = distance(domeSurfaceDirection, normalize(impactCenter.xyz));
+      float waveRadius = impactAge * waterRippleSpeed;
+      float ring = exp(-pow((impactDistance - waveRadius) / max(waterRippleWidth * 0.82, 0.0001), 2.0));
+      float secondaryRing = exp(-pow((impactDistance - (waveRadius * 0.68)) / max(waterRippleWidth * 1.18, 0.0001), 2.0));
+      float tertiaryRing = exp(-pow((impactDistance - (waveRadius * 1.28)) / max(waterRippleWidth * 1.48, 0.0001), 2.0));
+      float ageFade = 1.0 - smoothstep(0.0, waterImpactLifetime, impactAge);
+      rippleField += ((ring * 1.35) + (secondaryRing * 0.82) + (tertiaryRing * 0.56)) * impactCenter.w * ageFade;
+    }
+  }
+
+  for (int i = 0; i < ${DOME_WATER_TRAIL_SLOT_COUNT}; i += 1) {
+    vec4 trailCenter = waterTrailCenters[i];
+    float trailAge = waterTrailAges[i];
+    if (trailCenter.w > 0.001 && trailAge < waterTrailLifetime) {
+      vec3 trailDirection = normalize(waterTrailDirections[i].xyz);
+      vec4 trailShape = waterTrailShape[i];
+      vec3 trailCenterDirection = normalize(trailCenter.xyz);
+      vec3 flattenedTailDirection = trailDirection - (trailCenterDirection * dot(trailDirection, trailCenterDirection));
+      float flattenedTailLength = length(flattenedTailDirection);
+      if (flattenedTailLength < 0.0001) {
+        flattenedTailDirection = vec3(-trailCenterDirection.z, 0.0, trailCenterDirection.x);
+        if (length(flattenedTailDirection) < 0.0001) {
+          flattenedTailDirection = vec3(1.0, 0.0, 0.0);
+        } else {
+          flattenedTailDirection = normalize(flattenedTailDirection);
+        }
+      } else {
+        flattenedTailDirection /= flattenedTailLength;
+      }
+      vec3 offsetVector = domeSurfaceDirection - trailCenterDirection;
+      float along = dot(offsetVector, flattenedTailDirection);
+      vec3 perpendicularVector = offsetVector - (flattenedTailDirection * along);
+      float sideDistance = length(perpendicularVector);
+      float width = max(0.003, trailShape.x + (trailAge * 0.0075));
+      float trailLength = max(width * 4.0, trailShape.y + (trailAge * 0.0035));
+      float behindDistance = max(0.0, -along);
+      float trailHeadDistance = max(0.0, along);
+      float bodyMask = exp(-pow(sideDistance / width, 2.0));
+      float spreadMask = exp(-pow(sideDistance / max(width * 1.95, 0.004), 2.0));
+      float tailFade = 1.0 - smoothstep(0.0, trailLength, behindDistance);
+      float headCut = 1.0 - smoothstep(0.0, width * 1.4, trailHeadDistance);
+      float ribbonBody = bodyMask * max(tailFade, headCut * 0.82);
+      float edgeSpread = max(0.0, spreadMask - (bodyMask * 0.58)) * max(tailFade, headCut * 0.55);
+      float noseFlash = exp(-pow(length(domeSurfaceDirection - trailCenterDirection) / max(width * 2.2, 0.004), 2.0));
+      float ageFade = 1.0 - smoothstep(waterTrailLifetime * 0.74, waterTrailLifetime, trailAge);
+      float directional = 0.45 + (0.55 * max(dot(cameraDirection, flattenedTailDirection), 0.0));
+      trailField += ((ribbonBody * 1.45) + (edgeSpread * 1.22) + (noseFlash * 0.48)) * directional * trailCenter.w * ageFade;
+    }
+  }
+
+  float waterSurfaceEnergy = max(0.0, flowMix) * 0.08;
+  float waterSpecular = (fresnel * (0.45 + (waterCameraProximity * 0.55)))
+    + (rippleField * (0.88 + (waterCameraProximity * 0.42)))
+    + (trailField * 0.72)
+    + waterSurfaceEnergy;
+  waterSpecular += trailField * waterTrailSpecularBoost * (0.45 + waterCameraProximity);
+  waterSpecular += rippleField * 0.78;
+  vec3 waterTint = mix(vec3(0.24, 0.57, 0.82), vec3(0.76, 0.91, 1.0), fresnel * 0.7);
+  outgoingLight += atmosphericBlue * ((sunHaze * 0.24) + (sunBloom * 0.42) + (sunCore * 0.36)) * upperDome * pulse;
+  outgoingLight += waterTint * waterSpecular * waterHighlightStrength * wakeVisibility;
+  outgoingLight += vec3(0.72, 0.9, 1.0) * rippleField * 0.42 * wakeVisibility;
+  diffuseColor.rgb = mix(
+    diffuseColor.rgb,
+    waterTint,
+    min(0.96, ((sunHaze * 0.12) + (sunBloom * 0.16) + (fresnel * 0.28) + (rippleField * 0.34) + (trailField * 0.46)) * wakeVisibility)
+  );
+  diffuseColor.a = min(
+    0.96,
+    diffuseColor.a
+      + (sunHaze * 0.05)
+      + (sunBloom * 0.1)
+      + (sunCore * 0.16)
+      + (fresnel * 0.12)
+      + (rippleField * 0.28 * wakeVisibility)
+      + (trailField * 0.32 * wakeVisibility)
+  );
   #include <opaque_fragment>`
         );
     };
-    material.customProgramCacheKey = () => "dome-sun-atmosphere-v1";
+    material.customProgramCacheKey = () => "dome-water-atmosphere-v3";
   }
   
   function enhanceMoonMaterialWithPhase(material) {
@@ -1041,11 +1222,11 @@ export function setupScene({ canvas }) {
       color: 0x9fd8ff,
       roughness: 0.08,
       metalness: 0,
-      transmission: 0.72,
+      transmission: DOME_WATER_TRANSMISSION,
       transparent: true,
-      opacity: 0.24,
-      thickness: scaleDimension(0.18),
-      ior: 1.22,
+      opacity: DOME_WATER_BASE_OPACITY,
+      thickness: DOME_WATER_THICKNESS,
+      ior: DOME_WATER_IOR,
       side: THREE.DoubleSide
     })
   );
@@ -1053,6 +1234,131 @@ export function setupScene({ canvas }) {
   dome.scale.y = DOME_VERTICAL_SCALE;
   dome.position.y = DOME_BASE_Y;
   scalableStage.add(dome);
+
+  const domeWaterLocalPosition = new THREE.Vector3();
+  const domeWaterLocalDirection = new THREE.Vector3();
+  const domeWaterWorldPosition = new THREE.Vector3();
+
+  function getOldestWaveSlot(ages) {
+    let oldestIndex = 0;
+    let oldestAge = -Infinity;
+    for (let index = 0; index < ages.length; index += 1) {
+      if (ages[index] > oldestAge) {
+        oldestAge = ages[index];
+        oldestIndex = index;
+      }
+    }
+    return oldestIndex;
+  }
+
+  function convertStagePositionToDomeLocal(position, target) {
+    target.copy(position);
+    target.sub(dome.position);
+    target.y /= dome.scale.y || 1;
+    if (target.lengthSq() < 0.000001) {
+      target.set(0, DOME_RADIUS, 0);
+    }
+    return target.normalize();
+  }
+
+  function convertStageDirectionToDomeLocal(direction, target) {
+    target.copy(direction);
+    target.y /= dome.scale.y || 1;
+    if (target.lengthSq() < 0.000001) {
+      target.set(0, 0, 1);
+    }
+    return target.normalize();
+  }
+
+  const domeWaterApi = {
+    registerImpact({ position, velocity, strength = 1 }) {
+      const slot = getOldestWaveSlot(domeWaterState.impactAges);
+      convertStagePositionToDomeLocal(position, domeWaterLocalPosition);
+      domeWaterState.impactCenters[slot].set(
+        domeWaterLocalPosition.x,
+        domeWaterLocalPosition.y,
+        domeWaterLocalPosition.z,
+        THREE.MathUtils.clamp(strength, 0.2, 1.5)
+      );
+      domeWaterState.impactAges[slot] = 0;
+
+      if (velocity) {
+        this.registerTrail({
+          position,
+          direction: velocity,
+          strength: THREE.MathUtils.clamp(strength * 0.58, 0.12, 0.85)
+        });
+      }
+    },
+    registerTrail({ position, direction, strength = 1, speed = 0, width = null, length = null }) {
+      const slot = getOldestWaveSlot(domeWaterState.trailAges);
+      convertStagePositionToDomeLocal(position, domeWaterLocalPosition);
+      convertStageDirectionToDomeLocal(direction, domeWaterLocalDirection);
+      const resolvedWidth = Math.max(
+        0.008,
+        width ?? (DOME_WATER_TRAIL_WIDTH + (speed * DOME_WATER_TRAIL_WIDTH_SPEED_FACTOR))
+      );
+      const resolvedLength = Math.max(
+        resolvedWidth * 2.4,
+        length ?? (DOME_WATER_TRAIL_LENGTH + (speed * DOME_WATER_TRAIL_LENGTH_SPEED_FACTOR))
+      );
+      domeWaterState.trailCenters[slot].set(
+        domeWaterLocalPosition.x,
+        domeWaterLocalPosition.y,
+        domeWaterLocalPosition.z,
+        THREE.MathUtils.clamp(strength, 0.08, 1.0)
+      );
+      domeWaterState.trailDirections[slot].set(
+        domeWaterLocalDirection.x,
+        domeWaterLocalDirection.y,
+        domeWaterLocalDirection.z,
+        1
+      );
+      domeWaterState.trailShape[slot].set(
+        resolvedWidth,
+        resolvedLength,
+        speed,
+        1
+      );
+      domeWaterState.trailAges[slot] = 0;
+    },
+    update(deltaSeconds, cameraWorldPosition) {
+      domeWaterState.time += deltaSeconds;
+
+      for (let index = 0; index < domeWaterState.impactAges.length; index += 1) {
+        domeWaterState.impactAges[index] = Math.min(
+          domeWaterState.impactAges[index] + deltaSeconds,
+          DOME_WATER_IMPACT_LIFETIME + 1
+        );
+      }
+
+      for (let index = 0; index < domeWaterState.trailAges.length; index += 1) {
+        domeWaterState.trailAges[index] = Math.min(
+          domeWaterState.trailAges[index] + deltaSeconds,
+          DOME_WATER_TRAIL_LIFETIME + 1
+        );
+      }
+
+      domeWaterWorldPosition.copy(cameraWorldPosition);
+      dome.worldToLocal(domeWaterWorldPosition);
+      domeWaterState.cameraLocalPosition.copy(domeWaterWorldPosition);
+
+      const surfaceGap = Math.max(0, domeWaterWorldPosition.length() - DOME_RADIUS);
+      domeWaterState.cameraProximity = 1 - THREE.MathUtils.clamp(
+        surfaceGap / Math.max(DOME_WATER_CAMERA_PROXIMITY_RANGE, 0.0001),
+        0,
+        1
+      );
+
+      const shader = dome.material.userData.shader;
+      if (!shader) {
+        return;
+      }
+
+      shader.uniforms.waterTime.value = domeWaterState.time;
+      shader.uniforms.waterCameraProximity.value = domeWaterState.cameraProximity;
+    }
+  };
   
   const domeRing = new THREE.Mesh(
     new THREE.TorusGeometry(DOME_RADIUS, scaleDimension(0.045), 12, 96),
@@ -1914,9 +2220,14 @@ export function setupScene({ canvas }) {
     return trackGroup;
   }
   
-  scalableStage.add(createOrbitTrack(TROPIC_CANCER_RADIUS, 0xffc96c, 0.88, ORBIT_SUN_HEIGHT_NORTH));
-  scalableStage.add(createOrbitTrack(EQUATOR_RADIUS, 0x7fd8ff, 0.78, ORBIT_SUN_HEIGHT));
-  scalableStage.add(createOrbitTrack(TROPIC_CAPRICORN_RADIUS, 0xff93b6, 0.88, ORBIT_SUN_HEIGHT_SOUTH));
+  const orbitGuideGroups = {
+    north: createOrbitTrack(TROPIC_CANCER_RADIUS, 0xffc96c, 0.88, ORBIT_SUN_HEIGHT_NORTH),
+    equator: createOrbitTrack(EQUATOR_RADIUS, 0x7fd8ff, 0.78, ORBIT_SUN_HEIGHT),
+    south: createOrbitTrack(TROPIC_CAPRICORN_RADIUS, 0xff93b6, 0.88, ORBIT_SUN_HEIGHT_SOUTH)
+  };
+  scalableStage.add(orbitGuideGroups.north);
+  scalableStage.add(orbitGuideGroups.equator);
+  scalableStage.add(orbitGuideGroups.south);
 
   function setEarthModelView(mode = "flat") {
     const spherical = mode === "spherical";
@@ -2080,11 +2391,13 @@ export function setupScene({ canvas }) {
     createSunRayTexture,
     createSunRayMesh,
     createOrbitTrack,
+    orbitGuideGroups,
     globeSurface,
     globeAtmosphere,
     globeGridGroup,
     globeEquatorGuide,
     globeTiltGuide,
+    domeWaterApi,
     setEarthModelView,
   };
 }

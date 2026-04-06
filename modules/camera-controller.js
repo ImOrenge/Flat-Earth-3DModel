@@ -25,6 +25,14 @@ export function createCameraController({
   cameraState.targetTrackingAzimuth = cameraState.targetTrackingAzimuth ?? constants.CAMERA_TRACKING_DEFAULT_AZIMUTH;
   cameraState.targetTrackingElevation = cameraState.targetTrackingElevation ?? constants.CAMERA_TRACKING_DEFAULT_ELEVATION;
   cameraState.targetTrackingDistance = cameraState.targetTrackingDistance ?? constants.CAMERA_TRACKING_DEFAULT_DISTANCE;
+  cameraState.trackingGroundLocked = cameraState.trackingGroundLocked ?? false;
+  cameraState.targetTrackingGroundLocked = cameraState.targetTrackingGroundLocked ?? false;
+  cameraState.trackingGroundHeight = cameraState.trackingGroundHeight ?? constants.WALKER_EYE_HEIGHT;
+  cameraState.targetTrackingGroundHeight = cameraState.targetTrackingGroundHeight ?? constants.WALKER_EYE_HEIGHT;
+  cameraState.trackingPositionLocked = cameraState.trackingPositionLocked ?? false;
+  cameraState.targetTrackingPositionLocked = cameraState.targetTrackingPositionLocked ?? false;
+  cameraState.trackingLockedPosition = cameraState.trackingLockedPosition ?? new THREE.Vector3();
+  cameraState.targetTrackingLockedPosition = cameraState.targetTrackingLockedPosition ?? new THREE.Vector3();
 
   function getResponsivePixelRatio() {
     const maxRatio = window.innerWidth <= 1080 ? 1.5 : 2;
@@ -67,6 +75,10 @@ export function createCameraController({
     cameraState.trackingAzimuth += (cameraState.targetTrackingAzimuth - cameraState.trackingAzimuth) * 0.08;
     cameraState.trackingElevation += (cameraState.targetTrackingElevation - cameraState.trackingElevation) * 0.08;
     cameraState.trackingDistance += (cameraState.targetTrackingDistance - cameraState.trackingDistance) * 0.08;
+    cameraState.trackingGroundLocked = Boolean(cameraState.targetTrackingGroundLocked);
+    cameraState.trackingGroundHeight += (cameraState.targetTrackingGroundHeight - cameraState.trackingGroundHeight) * 0.16;
+    cameraState.trackingPositionLocked = Boolean(cameraState.targetTrackingPositionLocked);
+    cameraState.trackingLockedPosition.lerp(cameraState.targetTrackingLockedPosition, 0.16);
     cameraState.lookTarget.lerp(cameraState.targetLookTarget, 0.16);
 
     tempTrackingRadial.copy(cameraState.lookTarget).sub(trackingDiscCenter);
@@ -94,7 +106,14 @@ export function createCameraController({
     );
     tempTrackingOffset.y += verticalDistance;
 
-    camera.position.copy(cameraState.lookTarget).add(tempTrackingOffset);
+    if (cameraState.trackingPositionLocked) {
+      camera.position.copy(cameraState.trackingLockedPosition);
+    } else {
+      camera.position.copy(cameraState.lookTarget).add(tempTrackingOffset);
+      if (cameraState.trackingGroundLocked) {
+        camera.position.y = cameraState.trackingGroundHeight;
+      }
+    }
     camera.lookAt(cameraState.lookTarget);
   }
 

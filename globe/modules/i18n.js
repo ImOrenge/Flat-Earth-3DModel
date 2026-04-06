@@ -1143,3 +1143,127 @@ Object.assign(TRANSLATIONS.en, {
 Object.assign(TRANSLATIONS.ko, {
   sunReferenceSummary: "태양 하위점 {geo}. 적위 {declination}. 관측자 {observerGeo} 기준 태양은 고도 {altitude}, 방위 {azimuth}에 있습니다."
 });
+
+Object.assign(TRANSLATIONS.en, {
+  helpRoutesCopy: "Choose an origin country and airport, choose a destination country and airport, and replay the generated great-circle route with live progress metadata.",
+  offlineRouteLibraryTitle: "Globe Route Builder",
+  routeOriginCountryLabel: "Origin Country",
+  routeOriginAirportLabel: "Origin Airport",
+  routeDestinationCountryLabel: "Destination Country",
+  routeDestinationAirportLabel: "Destination Airport",
+  activeRouteTitle: "Active Globe Route",
+  routeSummaryNone: "Choose origin and destination airports to build a globe route.",
+  routeSelectPrompt: "Choose airports",
+  routeGeoSummaryPlaceholder: "Selected airport coordinates and great-circle distance will appear here.",
+  routeSummaryActiveText: "{originCountry} / {originAirport} to {destinationCountry} / {destinationAirport}. Great-circle {greatCircle}, planned block {duration}, cruise {cruise}.",
+  routeGeoSelectionValue: "{originGeo} -> {destinationGeo}",
+  routeGeoPathValue: "{originGeo} -> {destinationGeo} | great-circle {greatCircle}",
+  routeDatasetLoading: "Loading globe route builder...",
+  routeDatasetNoRoutes: "Globe route builder loaded, but not enough airports were found to build a route.",
+  routeDatasetLoaded: "Loaded {countries} countries, {airports} airports, {centroids} country centroids, and {aircraftTypes} aircraft types.",
+  routeDatasetFailed: "Failed to load the globe route builder.",
+  routeSelectionConflict: "Choose different origin and destination airports."
+});
+
+Object.assign(TRANSLATIONS.ko, {
+  helpRoutesCopy: "\ucd9c\ubc1c \uad6d\uac00\uc640 \uacf5\ud56d, \ub3c4\ucc29 \uad6d\uac00\uc640 \uacf5\ud56d\uc744 \uc120\ud0dd\ud558\uba74 \ud574\ub2f9 \uacf5\ud56d \uc88c\ud45c\ub97c \uc787\ub294 \ub300\uad8c \uacbd\ub85c\uc640 \uc9c4\ud589 \uc815\ubcf4\ub97c \uc7ac\uc0dd\ud560 \uc218 \uc788\uc2b5\ub2c8\ub2e4.",
+  offlineRouteLibraryTitle: "\uad6c\ud615 \uacbd\ub85c \ube4c\ub354",
+  routeOriginCountryLabel: "\ucd9c\ubc1c \uad6d\uac00",
+  routeOriginAirportLabel: "\ucd9c\ubc1c \uacf5\ud56d",
+  routeDestinationCountryLabel: "\ub3c4\ucc29 \uad6d\uac00",
+  routeDestinationAirportLabel: "\ub3c4\ucc29 \uacf5\ud56d",
+  activeRouteTitle: "\ud65c\uc131 \uad6c\ud615 \uacbd\ub85c",
+  routeSummaryNone: "\ucd9c\ubc1c \uacf5\ud56d\uacfc \ub3c4\ucc29 \uacf5\ud56d\uc744 \uc120\ud0dd\ud574 \uad6c\ud615 \uacbd\ub85c\ub97c \ub9cc\ub4dc\uc138\uc694.",
+  routeSelectPrompt: "\uacf5\ud56d\uc744 \uc120\ud0dd\ud558\uc138\uc694",
+  routeGeoSummaryPlaceholder: "\uc120\ud0dd\ud55c \uacf5\ud56d \uc88c\ud45c\uc640 \ub300\uad8c \uac70\ub9ac\uac00 \uc5ec\uae30\uc5d0 \ud45c\uc2dc\ub429\ub2c8\ub2e4.",
+  routeSummaryActiveText: "{originCountry} / {originAirport}\uc5d0\uc11c {destinationCountry} / {destinationAirport}\uae4c\uc9c0 \uc5f0\uacb0\ud569\ub2c8\ub2e4. \ub300\uad8c {greatCircle}, \uacc4\ud68d \ube14\ub85d {duration}, \uc21c\ud56d {cruise}.",
+  routeGeoSelectionValue: "{originGeo} -> {destinationGeo}",
+  routeGeoPathValue: "{originGeo} -> {destinationGeo} | \ub300\uad8c {greatCircle}",
+  routeDatasetLoading: "\uad6c\ud615 \uacbd\ub85c \ube4c\ub354\ub97c \ubd88\ub7ec\uc624\ub294 \uc911...",
+  routeDatasetNoRoutes: "\uad6c\ud615 \uacbd\ub85c \ube4c\ub354\ub294 \ubd88\ub7ec\uc654\uc9c0\ub9cc \uacbd\ub85c\ub97c \ub9cc\ub4e4 \ub9cc\ud07c \uacf5\ud56d\uc774 \ucda9\ubd84\ud558\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4.",
+  routeDatasetLoaded: "\uad6d\uac00 {countries}\uac1c, \uacf5\ud56d {airports}\uac1c, \uad6d\uac00 \uc911\uc2ec\uc810 {centroids}\uac1c, \ud56d\uacf5\uae30 \ud615\uc2dd {aircraftTypes}\uac1c\ub97c \ubd88\ub7ec\uc654\uc2b5\ub2c8\ub2e4.",
+  routeDatasetFailed: "\uad6c\ud615 \uacbd\ub85c \ube4c\ub354\ub97c \ubd88\ub7ec\uc624\uc9c0 \ubabb\ud588\uc2b5\ub2c8\ub2e4.",
+  routeSelectionConflict: "\ucd9c\ubc1c \uacf5\ud56d\uacfc \ub3c4\ucc29 \uacf5\ud56d\uc740 \uc11c\ub85c \ub2ec\ub77c\uc57c \ud569\ub2c8\ub2e4."
+});
+
+Object.assign(TRANSLATIONS.en, {
+  routeRefreshButton: "Refresh Data",
+  routeDataSourceTitle: "Data Source",
+  routeDataSourceBundled: "Bundled",
+  routeDataSourceCached: "Cached",
+  routeDataSourceLiveApi: "Live API",
+  routeLastSyncTitle: "Last Sync",
+  routeLastSyncUnknown: "Not synced yet",
+  routeLastSyncValue: "{time}",
+  routeDatasetLoaded: "Loaded {countries} countries, {airports} airports, {centroids} country centroids, and {aircraftTypes} aircraft types from {source}.",
+  routeDatasetRefreshing: "Syncing latest route dataset from free APIs...",
+  routeDatasetRefreshSuccess: "{source} sync completed.",
+  routeDatasetRefreshPartial: "{source} sync completed, but GeoNames data is currently unavailable.",
+  routeDatasetRefreshFailed: "Remote sync failed. Continuing with {source} dataset."
+});
+
+Object.assign(TRANSLATIONS.ko, {
+  routeRefreshButton: "\ub370\uc774\ud130 \uac31\uc2e0",
+  routeDataSourceTitle: "\ub370\uc774\ud130 \uc18c\uc2a4",
+  routeDataSourceBundled: "\ubc88\ub4e4",
+  routeDataSourceCached: "\uce90\uc2dc",
+  routeDataSourceLiveApi: "\uc2e4\uc2dc\uac04 API",
+  routeLastSyncTitle: "\ub9c8\uc9c0\ub9c9 \ub3d9\uae30\ud654",
+  routeLastSyncUnknown: "\uc544\uc9c1 \ub3d9\uae30\ud654\ub418\uc9c0 \uc54a\uc74c",
+  routeLastSyncValue: "{time}",
+  routeDatasetLoaded: "{source} \ub370\uc774\ud130\ub85c \uad6d\uac00 {countries}\uac1c, \uacf5\ud56d {airports}\uac1c, \uad6d\uac00 \uc911\uc2ec\uc810 {centroids}\uac1c, \ud56d\uacf5\uae30 \ud615\uc2dd {aircraftTypes}\uac1c\ub97c \uc900\ube44\ud588\uc2b5\ub2c8\ub2e4.",
+  routeDatasetRefreshing: "\ubb34\ub8cc API\uc5d0\uc11c \ucd5c\uc2e0 \uacbd\ub85c \ub370\uc774\ud130\ub97c \ub3d9\uae30\ud654\ud558\ub294 \uc911...",
+  routeDatasetRefreshSuccess: "{source} \ub3d9\uae30\ud654\uac00 \uc644\ub8cc\ub418\uc5c8\uc2b5\ub2c8\ub2e4.",
+  routeDatasetRefreshPartial: "{source} \ub3d9\uae30\ud654\ub294 \uc644\ub8cc\ub418\uc5c8\uc9c0\ub9cc GeoNames \ub370\uc774\ud130\ub97c \uc0ac\uc6a9\ud560 \uc218 \uc5c6\uc2b5\ub2c8\ub2e4.",
+  routeDatasetRefreshFailed: "\uc6d0\uaca9 \ub3d9\uae30\ud654\uc5d0 \uc2e4\ud328\ud588\uc2b5\ub2c8\ub2e4. \ud604\uc7ac {source} \ub370\uc774\ud130\ub97c \uacc4\uc18d \uc0ac\uc6a9\ud569\ub2c8\ub2e4."
+});
+
+Object.assign(TRANSLATIONS.en, {
+  helpRoutesCopy: "Pick Recommended mode for intercontinental multi-leg routes, or switch to Advanced mode for direct country/airport selection.",
+  routeModeLabel: "Route Mode",
+  routeModeRecommended: "Recommended",
+  routeModeAdvanced: "Advanced",
+  routeOriginContinentLabel: "Origin Continent",
+  routeDestinationContinentLabel: "Destination Continent",
+  routeRecommendedListLabel: "Recommended Route",
+  routeContinentAmericas: "Americas",
+  routeContinentEurope: "Europe",
+  routeContinentAfrica: "Africa",
+  routeContinentAsia: "Asia",
+  routeContinentOceania: "Oceania",
+  routeContinentUnknown: "Unknown",
+  routeRecommendedPrompt: "Choose an intercontinental route",
+  routeRecommendedNone: "No recommended intercontinental routes are available for {originContinent} -> {destinationContinent}.",
+  routeContinentConflict: "Origin and destination continents must be different in recommended mode.",
+  routeLayoversLabel: "Layovers",
+  routeLayoversNone: "Non-stop",
+  routeLayoversValue: "{count} stop(s): {layovers} ({seconds}s each)",
+  routeProgressLayover: "Holding at {airport} ({seconds}s)",
+  routeSummaryActiveText: "{originCountry} / {originAirport} to {destinationCountry} / {destinationAirport}. Stops: {layovers}. Great-circle {greatCircle}, total block {duration}.",
+  routeGeoPathValue: "{waypointGeo} | great-circle {greatCircle}"
+});
+
+Object.assign(TRANSLATIONS.ko, {
+  helpRoutesCopy: "\ucd94\ucc9c \ubaa8\ub4dc\uc5d0\uc11c \ub300\ub959\uac04 \ub2e4\uad6c\uac04 \uacbd\ub85c\ub97c \uc120\ud0dd\ud558\uace0, \uace0\uae09 \ubaa8\ub4dc\uc5d0\uc11c \uad6d\uac00/\uacf5\ud56d \uc9c1\uc811 \uc120\ud0dd\uc73c\ub85c \uc804\ud658\ud560 \uc218 \uc788\uc2b5\ub2c8\ub2e4.",
+  routeModeLabel: "\uacbd\ub85c \ubaa8\ub4dc",
+  routeModeRecommended: "\ucd94\ucc9c",
+  routeModeAdvanced: "\uace0\uae09",
+  routeOriginContinentLabel: "\ucd9c\ubc1c \ub300\ub959",
+  routeDestinationContinentLabel: "\ub3c4\ucc29 \ub300\ub959",
+  routeRecommendedListLabel: "\ucd94\ucc9c \ub178\uc120",
+  routeContinentAmericas: "\uc544\uba54\ub9ac\uce74",
+  routeContinentEurope: "\uc720\ub7fd",
+  routeContinentAfrica: "\uc544\ud504\ub9ac\uce74",
+  routeContinentAsia: "\uc544\uc2dc\uc544",
+  routeContinentOceania: "\uc624\uc138\uc544\ub2c8\uc544",
+  routeContinentUnknown: "\ubbf8\uc0c1",
+  routeRecommendedPrompt: "\ub300\ub959\uac04 \uacbd\ub85c\ub97c \uc120\ud0dd\ud558\uc138\uc694",
+  routeRecommendedNone: "{originContinent} -> {destinationContinent} \uad6c\uac04\uc5d0\uc11c \uc0ac\uc6a9 \uac00\ub2a5\ud55c \ucd94\ucc9c \ub2e4\uad6c\uac04 \ub178\uc120\uc774 \uc5c6\uc2b5\ub2c8\ub2e4.",
+  routeContinentConflict: "\ucd94\ucc9c \ubaa8\ub4dc\uc5d0\uc11c\ub294 \ucd9c\ubc1c/\ub3c4\ucc29 \ub300\ub959\uc774 \uc11c\ub85c \ub2ec\ub77c\uc57c \ud569\ub2c8\ub2e4.",
+  routeLayoversLabel: "\uacbd\uc720\uc9c0",
+  routeLayoversNone: "\ubb34\ucc29\ub959",
+  routeLayoversValue: "{count}\ud68c \uacbd\uc720: {layovers} (\uac01 {seconds}\ucd08 \uc815\uc9c0)",
+  routeProgressLayover: "{airport}\uc5d0\uc11c \uc815\ucc28 \uc911 ({seconds}\ucd08)",
+  routeSummaryActiveText: "{originCountry} / {originAirport}\uc5d0\uc11c {destinationCountry} / {destinationAirport}\uae4c\uc9c0 \uc5f0\uacb0\ud569\ub2c8\ub2e4. \uacbd\uc720: {layovers}. \ub300\uad8c {greatCircle}, \ucd1d \ube14\ub85d {duration}.",
+  routeGeoPathValue: "{waypointGeo} | \ub300\uad8c {greatCircle}"
+});

@@ -1,5 +1,6 @@
 ﻿import * as THREE from "../vendor/three.module.js";
 import {
+  createGlobeModelFrame,
   getGeoFromProjectedPosition,
   projectedRadiusFromLatitude
 } from "./modules/geo-utils.js";
@@ -16,9 +17,9 @@ import { createAstronomyController } from "./modules/astronomy-controller.js?v=2
 import { createCameraController } from "./modules/camera-controller.js?v=20260406-globecam1";
 import { createCelestialTrackingCameraController } from "./modules/celestial-tracking-camera-controller.js?v=20260320-constellation-precession1";
 import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js?v=20260405-surfacepatch2";
-import { createI18n } from "./modules/i18n.js?v=20260327-mobilehud1";
+import { createI18n } from "./modules/i18n.js?v=20260405-hybridroute1";
 import { createMagneticFieldController } from "./modules/magnetic-field-controller.js?v=20260314-magnetic-pinecone3";
-import { createRouteSimulationController } from "./modules/route-simulation-controller.js";
+import { createRouteSimulationController } from "./modules/route-simulation-controller.js?v=20260405-hybridroute1";
 import { createTextureManager } from "./modules/texture-manager.js?v=20260405-surfacepatch1";
 import { createWalkerController } from "./modules/walker-controller.js?v=20260324-moon-cycle28";
 
@@ -26,7 +27,7 @@ import * as constants from "./modules/constants.js";
 import { createEclipseController } from "./modules/eclipse-controller.js?v=20260320-reality-eclipse-sync2";
 import { createCelestialVisualsController } from "./modules/celestial-visuals-controller.js?v=20260321-sunset5";
 import { createConstellationTabController } from "./modules/constellation-tab-controller.js?v=20260320-constellation-precession1";
-import { setupInputHandlers } from "./modules/input-handler.js?v=20260328-mobileratio1";
+import { setupInputHandlers } from "./modules/input-handler.js?v=20260405-hybridroute1";
 import { createRocketController, SPACEPORTS } from "./modules/rocket-controller.js?v=20260319-parabola";
 const {
   MODEL_SCALE,
@@ -433,7 +434,19 @@ const walkerCoordinatesEl = document.getElementById("walker-coordinates");
 const walkerLightEl = document.getElementById("walker-light");
 const resetWalkerButton = document.getElementById("reset-walker");
 const routeDatasetStatusEl = document.getElementById("route-dataset-status");
-const routeSelectEl = document.getElementById("route-select");
+const routeRefreshButton = document.getElementById("route-refresh");
+const routeDataSourceEl = document.getElementById("route-data-source");
+const routeLastSyncEl = document.getElementById("route-last-sync");
+const routeModeSelectEl = document.getElementById("route-mode-select");
+const routeRecommendedPanelEl = document.getElementById("route-recommended-panel");
+const routeAdvancedPanelEl = document.getElementById("route-advanced-panel");
+const routeOriginContinentEl = document.getElementById("route-origin-continent");
+const routeDestinationContinentEl = document.getElementById("route-destination-continent");
+const routeRecommendedRouteEl = document.getElementById("route-recommended-route");
+const routeOriginCountryEl = document.getElementById("route-origin-country");
+const routeOriginAirportEl = document.getElementById("route-origin-airport");
+const routeDestinationCountryEl = document.getElementById("route-destination-country");
+const routeDestinationAirportEl = document.getElementById("route-destination-airport");
 const routeSpeedEl = document.getElementById("route-speed");
 const routeSpeedValueEl = document.getElementById("route-speed-value");
 const routePlaybackButton = document.getElementById("route-playback");
@@ -444,6 +457,7 @@ const routeAircraftEl = document.getElementById("route-aircraft");
 const routeOriginEl = document.getElementById("route-origin");
 const routeDestinationEl = document.getElementById("route-destination");
 const routeCountriesEl = document.getElementById("route-countries");
+const routeLayoversEl = document.getElementById("route-layovers");
 const routeDurationEl = document.getElementById("route-duration");
 const routeProgressEl = document.getElementById("route-progress");
 const routeGeoSummaryEl = document.getElementById("route-geo-summary");
@@ -1540,8 +1554,9 @@ if (GLOBE_FEATURE_TOGGLES.constellationLayer) {
 const globeRouteStage = new THREE.Group();
 globeRouteStage.name = "globeRouteStage";
 globeSurface.add(globeRouteStage);
-const globeCenter = new THREE.Vector3();
-const globeRadius = globeSurface.geometry?.parameters?.radius ?? (constants.DISC_RADIUS * 0.82);
+const globeFrame = createGlobeModelFrame(globeSurface, { space: "parent" });
+const globeCenter = new THREE.Vector3(globeFrame.center.x, globeFrame.center.y, globeFrame.center.z);
+const globeRadius = globeFrame.radius;
 
 const initialTimelineDateMs = Date.now();
 const initialTimelineNowMs = performance.now();
@@ -1859,6 +1874,7 @@ const cameraApi = createCameraController({
   cameraState,
   constants,
   defaultLookTarget: defaultCameraLookTarget,
+  globeSurface,
   renderState,
   renderer,
   trackingCenter: defaultCameraLookTarget,
@@ -1869,6 +1885,7 @@ astronomyApi = createAstronomyController({
   constants,
   i18n,
   ui,
+  globeSurface,
   magneticFieldApi,
   astronomyState,
   eclipseSelectionState,
@@ -1909,6 +1926,7 @@ astronomyApi = createAstronomyController({
 
 const walkerApi = createWalkerController({
   constants,
+  globeSurface,
   i18n,
   renderState,
   walkerState,
@@ -1927,6 +1945,7 @@ const walkerApi = createWalkerController({
 const firstPersonWorldApi = createFirstPersonWorldController({
   scene: firstPersonScene,
   constants,
+  globeSurface,
   walkerState,
   renderState,
   drawSurfacePatch: (...args) => textureApi.drawSurfacePatch(...args),
@@ -1949,19 +1968,32 @@ const routeSimulationApi = createRouteSimulationController({
   ui: {
     routeAircraftEl,
     routeCountriesEl,
+    routeDataSourceEl,
     routeDatasetStatusEl,
     routeDestinationEl,
+    routeDestinationAirportEl,
+    routeDestinationCountryEl,
     routeDurationEl,
     routeGeoSummaryEl,
     routeLegEl,
+    routeLastSyncEl,
+    routeModeSelectEl,
+    routeRecommendedPanelEl,
+    routeAdvancedPanelEl,
+    routeOriginContinentEl,
+    routeDestinationContinentEl,
+    routeRecommendedRouteEl,
     routeOriginEl,
+    routeOriginAirportEl,
+    routeOriginCountryEl,
     routePlaybackButton,
     routeProgressEl,
+    routeRefreshButton,
     routeResetButton,
-    routeSelectEl,
     routeSpeedEl,
     routeSpeedValueEl,
-    routeSummaryEl
+    routeSummaryEl,
+    routeLayoversEl
   }
 });
 
@@ -2211,6 +2243,7 @@ const rocketApi = createRocketController({
     orbitDarkSunRim, orbitDarkSunBody, orbitSunHalo, orbitSunAureole, orbitSunCorona, orbitMoonBody,
     orbitMoonHalo, orbitMoonCoolGlow, orbitMoonCorona, orbitMoonAureole, orbitMoonWarmFringe,
     orbitMoonLight, observerMoonBody, scene, firstPersonScene, camera, stage, scalableStage: globeRuntimeStage, globeStage, dome,
+    globeSurface,
     dayNightOverlayMaterial, firstPersonSunRayGroup, firstPersonSunRayMeshes, simulationState,
     astronomyState, renderState, walkerState, movementState, astronomyApi, walkerApi,
     ambient: firstPersonAmbient, keyLight: firstPersonKeyLight, rimLight: firstPersonRimLight,
@@ -2251,7 +2284,9 @@ const inputHandlersApi = setupInputHandlers({
     resetDarkSunOcclusionMotion: eclipseApi.resetDarkSunOcclusionMotion, darkSunOcclusionState,
     controlTabButtons, cameraPresetButtons, cameraViewToggleEl, syncCameraViewToggleUi, languageToggleEl, i18n, resetButton,
     exitFirstPersonMode, enterFirstPersonMode, walkerModeEl, resetWalkerButton,
-    routeSelectEl, routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl,
+    routeModeSelectEl, routeOriginContinentEl, routeDestinationContinentEl, routeRecommendedRouteEl,
+    routeOriginCountryEl, routeOriginAirportEl, routeDestinationCountryEl, routeDestinationAirportEl,
+    routeRefreshButton, routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl,
     celestialSpeedPresetButtons,
     celestialFullTrailEl, routePlaybackButton, routeResetButton, realitySyncEl,
     realityLiveEl, observationTimeEl, observationMinusHourButton, observationPlusHourButton,

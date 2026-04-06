@@ -731,10 +731,45 @@
           <section class="route-panel hud-subpanel active" data-hud-panel-section="playback">
             <p class="orbit-title" data-i18n="offlineRouteLibraryTitle">Offline Route Library</p>
             <p class="sync-copy" id="route-dataset-status">Loading offline route library...</p>
-            <label class="field" for="route-select">
-              <span class="field-label" data-i18n="routeLabel">Route</span>
-              <select class="select-input" id="route-select" disabled></select>
+            <label class="field" for="route-mode-select">
+              <span class="field-label" data-i18n="routeModeLabel">Route Mode</span>
+              <select class="select-input" id="route-mode-select" disabled>
+                <option value="recommended" data-i18n="routeModeRecommended">Recommended</option>
+                <option value="advanced" data-i18n="routeModeAdvanced">Advanced</option>
+              </select>
             </label>
+            <div id="route-recommended-panel">
+              <label class="field" for="route-origin-continent">
+                <span class="field-label" data-i18n="routeOriginContinentLabel">Origin Continent</span>
+                <select class="select-input" id="route-origin-continent" disabled></select>
+              </label>
+              <label class="field" for="route-destination-continent">
+                <span class="field-label" data-i18n="routeDestinationContinentLabel">Destination Continent</span>
+                <select class="select-input" id="route-destination-continent" disabled></select>
+              </label>
+              <label class="field" for="route-recommended-route">
+                <span class="field-label" data-i18n="routeRecommendedListLabel">Recommended Route</span>
+                <select class="select-input" id="route-recommended-route" disabled></select>
+              </label>
+            </div>
+            <div id="route-advanced-panel" hidden>
+              <label class="field" for="route-origin-country">
+                <span class="field-label" data-i18n="routeOriginCountryLabel">Origin Country</span>
+                <select class="select-input" id="route-origin-country" disabled></select>
+              </label>
+              <label class="field" for="route-origin-airport">
+                <span class="field-label" data-i18n="routeOriginAirportLabel">Origin Airport</span>
+                <select class="select-input" id="route-origin-airport" disabled></select>
+              </label>
+              <label class="field" for="route-destination-country">
+                <span class="field-label" data-i18n="routeDestinationCountryLabel">Destination Country</span>
+                <select class="select-input" id="route-destination-country" disabled></select>
+              </label>
+              <label class="field" for="route-destination-airport">
+                <span class="field-label" data-i18n="routeDestinationAirportLabel">Destination Airport</span>
+                <select class="select-input" id="route-destination-airport" disabled></select>
+              </label>
+            </div>
             <label class="field" for="route-speed">
               <span class="field-label" data-i18n="playbackSpeedLabel">Playback Speed</span>
               <input class="slider-input" id="route-speed" type="range" min="1" max="24" step="1" value="8" disabled>
@@ -774,6 +809,10 @@
               <div class="coord-card">
                 <span class="coord-label" data-i18n="routeCountriesLabel">Countries</span>
                 <strong class="coord-value" id="route-countries">-</strong>
+              </div>
+              <div class="coord-card">
+                <span class="coord-label" data-i18n="routeLayoversLabel">Layovers</span>
+                <strong class="coord-value" id="route-layovers">-</strong>
               </div>
               <div class="coord-card">
                 <span class="coord-label" data-i18n="routePlannedBlockLabel">Planned Block</span>
@@ -964,7 +1003,11 @@
                 <option value="single" data-i18n="rocketSingleStageLabel">Single Stage</option>
               </select>
             </label>
+            <p class="sync-copy" id="rocket-camera-summary">
+              Choose a launchpad and stage a rocket to preview the pad camera.
+            </p>
             <div class="button-row compact" style="margin-top: 16px;">
+              <button class="button secondary compact-button" id="rocket-standby-btn" type="button">Stage Standby</button>
               <button class="button primary compact-button" id="rocket-launch-btn" type="button" data-i18n="rocketLaunchButton">Launch Rocket</button>
             </div>
           </section>
@@ -1004,6 +1047,6 @@
     </div>
   </div>
 
-  <script type="module" src="./app.js?v=20260406-globecam4"></script>
+  <script type="module" src="./app.js?v=20260406-merge-routes1"></script>
   </body>
 </html>

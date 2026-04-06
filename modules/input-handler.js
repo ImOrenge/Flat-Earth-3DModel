@@ -31,7 +31,9 @@ export function setupInputHandlers(deps) {
     darkSunOcclusionState,
     controlTabButtons, cameraPresetButtons = [], cameraViewToggleEl = null, syncCameraViewToggleUi = () => {}, languageToggleEl, i18n, resetButton,
     exitFirstPersonMode, enterFirstPersonMode, walkerModeEl, resetWalkerButton,
-    routeSelectEl, routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl, celestialSpeedPresetButtons = [],
+    routeModeSelectEl, routeOriginContinentEl, routeDestinationContinentEl, routeRecommendedRouteEl,
+    routeOriginCountryEl, routeOriginAirportEl, routeDestinationCountryEl, routeDestinationAirportEl,
+    routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl, celestialSpeedPresetButtons = [],
     celestialFullTrailEl, routePlaybackButton, routeResetButton, realitySyncEl,
     realityLiveEl, observationTimeEl, observationMinusHourButton, observationPlusHourButton,
     eclipseCatalogSourceEl, eclipseCatalogUploadEl, eclipseKindSelectEl, eclipseYearSelectEl,
@@ -46,7 +48,7 @@ export function setupInputHandlers(deps) {
     seasonalEventButtons
   } = deps;
 
-  const { rocketSpaceportSelect, rocketTypeSelect, rocketLaunchBtn } = ui;
+  const { rocketSpaceportSelect, rocketTypeSelect, rocketLaunchBtn, rocketStandbyBtn } = ui;
 
   const {
     WALKER_PITCH_MIN,
@@ -127,6 +129,30 @@ export function setupInputHandlers(deps) {
       cameraViewToggleEl.checked = preset === "angle";
       syncCameraViewToggleUi();
     }
+  }
+
+  function getSelectedRocketConfig() {
+    if (!rocketSpaceportSelect) {
+      return null;
+    }
+
+    const index = Number.parseInt(rocketSpaceportSelect.value, 10);
+    if (Number.isNaN(index)) {
+      return null;
+    }
+
+    return {
+      index,
+      rocketType: rocketTypeSelect ? rocketTypeSelect.value : "two-stage"
+    };
+  }
+
+  function stageSelectedRocket() {
+    const config = getSelectedRocketConfig();
+    if (!config) {
+      return null;
+    }
+    return rocketApi.enterStandby(config.index, config.rocketType);
   }
   
   
@@ -578,19 +604,59 @@ export function setupInputHandlers(deps) {
   
   
   
-  routeSelectEl.addEventListener("change", () => {
-  
-    routeSimulationApi.selectRoute(routeSelectEl.value);
-  
-  });
-  
-  
-  
-  routeSpeedEl.addEventListener("input", () => {
-  
-    routeSimulationApi.setSpeedMultiplier(routeSpeedEl.value);
-  
-  });
+  if (routeModeSelectEl) {
+    routeModeSelectEl.addEventListener("change", () => {
+      routeSimulationApi.setRouteMode(routeModeSelectEl.value);
+    });
+  }
+
+  if (routeOriginContinentEl) {
+    routeOriginContinentEl.addEventListener("change", () => {
+      routeSimulationApi.setOriginContinent(routeOriginContinentEl.value);
+    });
+  }
+
+  if (routeDestinationContinentEl) {
+    routeDestinationContinentEl.addEventListener("change", () => {
+      routeSimulationApi.setDestinationContinent(routeDestinationContinentEl.value);
+    });
+  }
+
+  if (routeRecommendedRouteEl) {
+    routeRecommendedRouteEl.addEventListener("change", () => {
+      routeSimulationApi.setRecommendedRoute(routeRecommendedRouteEl.value);
+    });
+  }
+
+  if (routeOriginCountryEl) {
+    routeOriginCountryEl.addEventListener("change", () => {
+      routeSimulationApi.setOriginCountry(routeOriginCountryEl.value);
+    });
+  }
+
+  if (routeOriginAirportEl) {
+    routeOriginAirportEl.addEventListener("change", () => {
+      routeSimulationApi.setOriginAirport(routeOriginAirportEl.value);
+    });
+  }
+
+  if (routeDestinationCountryEl) {
+    routeDestinationCountryEl.addEventListener("change", () => {
+      routeSimulationApi.setDestinationCountry(routeDestinationCountryEl.value);
+    });
+  }
+
+  if (routeDestinationAirportEl) {
+    routeDestinationAirportEl.addEventListener("change", () => {
+      routeSimulationApi.setDestinationAirport(routeDestinationAirportEl.value);
+    });
+  }
+
+  if (routeSpeedEl) {
+    routeSpeedEl.addEventListener("input", () => {
+      routeSimulationApi.setSpeedMultiplier(routeSpeedEl.value);
+    });
+  }
   
   
   
@@ -1162,13 +1228,35 @@ export function setupInputHandlers(deps) {
     }
   });
 
+  if (rocketStandbyBtn && rocketSpaceportSelect) {
+    rocketStandbyBtn.addEventListener("click", () => {
+      stageSelectedRocket();
+    });
+  }
+
+  if (rocketSpaceportSelect) {
+    rocketSpaceportSelect.addEventListener("change", () => {
+      if (rocketApi.getStandbySnapshot() && !rocketApi.getActiveRocketSnapshot()) {
+        stageSelectedRocket();
+      }
+    });
+  }
+
+  if (rocketTypeSelect) {
+    rocketTypeSelect.addEventListener("change", () => {
+      if (rocketApi.getStandbySnapshot() && !rocketApi.getActiveRocketSnapshot()) {
+        stageSelectedRocket();
+      }
+    });
+  }
+
   if (rocketLaunchBtn && rocketSpaceportSelect) {
     rocketLaunchBtn.addEventListener("click", () => {
-      const index     = parseInt(rocketSpaceportSelect.value, 10);
-      const rocketType = rocketTypeSelect ? rocketTypeSelect.value : "two-stage";
-      if (!isNaN(index)) {
-        rocketApi.launchRocket(index, rocketType);
+      const config = getSelectedRocketConfig();
+      if (!config) {
+        return;
       }
+      rocketApi.launchRocket(config.index, config.rocketType);
     });
   }
 
