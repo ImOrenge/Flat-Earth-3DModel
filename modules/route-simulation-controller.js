@@ -16,7 +16,8 @@ import {
   getContinentLabelKey,
   inferContinentCode,
   uniqueByIcao
-} from "./route-multileg-core.js?v=20260406-americasflex1";
+} from "./route-multileg-core.js?v=20260406-legrelax1";
+import { createRouteDataService } from "./route-data-service.js?v=20260406-mainremote1";
 
 const DATASET_BASE_PATHS = ["./assets/data", "../assets/data", "/assets/data"];
 const DATASET_FILENAMES = {
@@ -355,6 +356,7 @@ export function createRouteSimulationController({
   scalableStage,
   ui
 }) {
+  const routeDataService = createRouteDataService({ sourceMode: "remote" });
   const scaleDimension = (value) => value * (constants.MODEL_SCALE ?? 1);
   const routeSurfaceOffset = scaleDimension(ROUTE_SURFACE_OFFSET);
   const routeAltitudeBase = scaleDimension(ROUTE_ALTITUDE_BASE);
@@ -1648,15 +1650,11 @@ export function createRouteSimulationController({
     syncControlAvailability();
 
     try {
-      const [countries, airports, aircraftTypes] = await Promise.all([
-        loadJson(buildDatasetPathCandidates(DATASET_FILENAMES.countries), "countries"),
-        loadJson(buildDatasetPathCandidates(DATASET_FILENAMES.airports), "airports"),
-        loadJson(buildDatasetPathCandidates(DATASET_FILENAMES.aircraftTypes), "aircraftTypes")
-      ]);
+      const initialLoad = await routeDataService.loadInitialDataset({ language: i18n.getLanguage?.() ?? "en" });
 
       routeState.loading = false;
       const applied = applyLibraryDataset(
-        { countries, airports, aircraftTypes },
+        initialLoad.dataset,
         { preserveSelection: false }
       );
 

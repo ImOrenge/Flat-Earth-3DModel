@@ -51,14 +51,14 @@ export const FLAGSHIP_ROUTE_CONSTRAINTS = Object.freeze([
     originContinent: "AMERICAS",
     destinationContinent: "OCEANIA",
     originIata: "SCL",
-    hubIataChain: ["NRT"],
+    hubIataChain: ["LAX"],
     destinationIata: "SYD"
   },
   {
     originContinent: "OCEANIA",
     destinationContinent: "AMERICAS",
     originIata: "SYD",
-    hubIataChain: ["NRT"],
+    hubIataChain: ["LAX"],
     destinationIata: "SCL"
   },
   {
@@ -403,9 +403,9 @@ export function hasOnlyIntercontinentalLegs(route, getAirportContinentCode) {
 }
 
 function isStrictRecommendedCandidate(route, { getAirportContinentCode, minFinalLegDistanceKm }) {
+  void getAirportContinentCode;
   return (
     hasLayover(route)
-    && hasOnlyIntercontinentalLegs(route, getAirportContinentCode)
     && !isLayoverTooCloseToEndpoints(route, minFinalLegDistanceKm)
   );
 }

@@ -18,7 +18,7 @@ import { createFirstPersonWorldController } from "./modules/first-person-world-c
 import { createI18n } from "./modules/i18n.js?v=20260327-mobilehud1";
 import { createMagneticFieldController } from "./modules/magnetic-field-controller.js?v=20260314-magnetic-pinecone3";
 import { createModelComparisonController } from "./modules/model-comparison-controller.js?v=20260329-compare1";
-import { createRouteSimulationController } from "./modules/route-simulation-controller.js?v=20260406-americasflex1";
+import { createRouteSimulationController } from "./modules/route-simulation-controller.js?v=20260406-mainremote3";
 import { createTextureManager } from "./modules/texture-manager.js?v=20260311-gpu-daynight";
 import { createWalkerController } from "./modules/walker-controller.js?v=20260324-moon-cycle28";
 
