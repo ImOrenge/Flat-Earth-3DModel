@@ -16,7 +16,7 @@ import {
   getContinentLabelKey,
   inferContinentCode,
   uniqueByIcao
-} from "./route-multileg-core.js?v=20260405-endpointfilter1";
+} from "./route-multileg-core.js?v=20260406-americasflex1";
 
 const DATASET_BASE_PATHS = ["./assets/data", "../assets/data", "/assets/data"];
 const DATASET_FILENAMES = {
@@ -305,10 +305,11 @@ function geoToUnitVector(latitudeDegrees, longitudeDegrees, target) {
   const latitudeRadians = THREE.MathUtils.degToRad(latitudeDegrees);
   const longitudeRadians = THREE.MathUtils.degToRad(longitudeDegrees);
   const cosLatitude = Math.cos(latitudeRadians);
+  // Match Three.js SphereGeometry UV orientation used by globe surface mapping.
   target.set(
     cosLatitude * Math.cos(longitudeRadians),
     Math.sin(latitudeRadians),
-    cosLatitude * Math.sin(longitudeRadians)
+    -cosLatitude * Math.sin(longitudeRadians)
   );
   return target.normalize();
 }
@@ -706,9 +707,7 @@ export function createRouteSimulationController({
       if (legIndex < route.legs.length - 1) {
         const layoverStart = normalizedCursor;
         const layoverShare = LAYOVER_DWELL_SECONDS / BASE_ROUTE_CYCLE_SECONDS;
-        const layoverEnd = legIndex === route.legs.length - 2
-          ? 1
-          : Math.min(1, layoverStart + layoverShare);
+        const layoverEnd = Math.min(1, layoverStart + layoverShare);
 
         timelineSegments.push({
           type: "layover",
@@ -1005,19 +1004,22 @@ export function createRouteSimulationController({
       routeState.selectedOriginContinentCode
     );
 
+    const destinationContinentOptions = routeLibrary.continentsWithAirports.length > 1
+      ? routeLibrary.continentsWithAirports.filter((continentCode) => (
+        continentCode !== routeState.selectedOriginContinentCode
+      ))
+      : routeLibrary.continentsWithAirports;
+
     const preferredDestinationContinent = (
       routeState.selectedDestinationContinentCode
-      && routeLibrary.continentsWithAirports.includes(routeState.selectedDestinationContinentCode)
-      && routeState.selectedDestinationContinentCode !== routeState.selectedOriginContinentCode
+      && destinationContinentOptions.includes(routeState.selectedDestinationContinentCode)
     )
       ? routeState.selectedDestinationContinentCode
-      : (routeLibrary.continentsWithAirports.find((continentCode) => (
-        continentCode !== routeState.selectedOriginContinentCode
-      )) ?? routeState.selectedOriginContinentCode);
+      : (destinationContinentOptions[0] ?? routeState.selectedOriginContinentCode);
 
     routeState.selectedDestinationContinentCode = populateSelectOptions(
       ui.routeDestinationContinentEl,
-      routeLibrary.continentsWithAirports,
+      destinationContinentOptions,
       (continentCode) => continentCode,
       (continentCode) => i18n.t(getContinentLabelKey(continentCode)),
       preferredDestinationContinent

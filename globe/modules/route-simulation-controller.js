@@ -54,6 +54,14 @@ const CONTINENT_HUB_PRIORITY = Object.freeze({
   ASIA: ["DXB", "DOH", "SIN", "HKG", "ICN", "NRT"],
   OCEANIA: ["SYD", "MEL", "BNE", "PER", "AKL"]
 });
+const SOUTH_AMERICA_COUNTRY_CODES = Object.freeze(new Set([
+  "AR", "BO", "BR", "CL", "CO", "EC", "FK", "GF", "GY", "PE", "PY", "SR", "UY", "VE"
+]));
+const NORTH_AMERICA_COUNTRY_CODES = Object.freeze(new Set([
+  "AG", "AI", "AW", "BB", "BL", "BM", "BQ", "BS", "BZ", "CA", "CR", "CU", "CW", "DM",
+  "DO", "GD", "GL", "GP", "GT", "HN", "HT", "JM", "KN", "KY", "LC", "MF", "MQ", "MS",
+  "MX", "NI", "PA", "PM", "PR", "SV", "SX", "TC", "TT", "US", "VC", "VG", "VI"
+]));
 const GLOBAL_HUB_PRIORITY = Object.freeze([
   "LAX", "JFK", "DFW", "MIA",
   "LHR", "CDG", "FRA", "AMS",
@@ -66,15 +74,71 @@ const FLAGSHIP_ROUTE_CONSTRAINTS = Object.freeze([
     originContinent: "AMERICAS",
     destinationContinent: "OCEANIA",
     originIata: "SCL",
-    hubIataChain: ["LAX"],
+    hubIataChain: ["NRT"],
     destinationIata: "SYD"
   },
   {
     originContinent: "OCEANIA",
     destinationContinent: "AMERICAS",
     originIata: "SYD",
-    hubIataChain: ["LAX"],
+    hubIataChain: ["NRT"],
     destinationIata: "SCL"
+  },
+  {
+    originContinent: "AMERICAS",
+    destinationContinent: "ASIA",
+    originIata: "LAX",
+    hubIataChain: ["AMS"],
+    destinationIata: "ICN"
+  },
+  {
+    originContinent: "ASIA",
+    destinationContinent: "AMERICAS",
+    originIata: "ICN",
+    hubIataChain: ["AMS"],
+    destinationIata: "LAX"
+  },
+  {
+    originContinent: "EUROPE",
+    destinationContinent: "OCEANIA",
+    originIata: "LHR",
+    hubIataChain: ["SIN"],
+    destinationIata: "SYD"
+  },
+  {
+    originContinent: "OCEANIA",
+    destinationContinent: "EUROPE",
+    originIata: "SYD",
+    hubIataChain: ["SIN"],
+    destinationIata: "LHR"
+  },
+  {
+    originContinent: "EUROPE",
+    destinationContinent: "AFRICA",
+    originIata: "CDG",
+    hubIataChain: ["DXB"],
+    destinationIata: "JNB"
+  },
+  {
+    originContinent: "AFRICA",
+    destinationContinent: "EUROPE",
+    originIata: "JNB",
+    hubIataChain: ["DXB"],
+    destinationIata: "CDG"
+  },
+  {
+    originContinent: "ASIA",
+    destinationContinent: "OCEANIA",
+    originIata: "ICN",
+    hubIataChain: ["LAX"],
+    destinationIata: "SYD"
+  },
+  {
+    originContinent: "OCEANIA",
+    destinationContinent: "ASIA",
+    originIata: "SYD",
+    hubIataChain: ["LAX"],
+    destinationIata: "ICN"
   }
 ]);
 
@@ -911,9 +975,7 @@ export function createRouteSimulationController({
       if (hasLayoverAfterLeg) {
         const layoverStart = normalizedCursor;
         const layoverShare = LAYOVER_DWELL_SECONDS / BASE_ROUTE_CYCLE_SECONDS;
-        const layoverEnd = legIndex === route.legs.length - 2
-          ? 1
-          : Math.min(1, layoverStart + layoverShare);
+        const layoverEnd = Math.min(1, layoverStart + layoverShare);
 
         timelineSegments.push({
           type: "layover",
@@ -1180,6 +1242,62 @@ export function createRouteSimulationController({
       || finalLegDistanceKm <= MIN_FINAL_LEG_DISTANCE_KM;
   }
 
+  function hasLayover(route) {
+    return (route?.totals?.layoverCount ?? 0) >= 1;
+  }
+
+  function isIntercontinentalLeg(leg) {
+    if (!leg) {
+      return false;
+    }
+
+    const originContinentCode = getAirportContinentCode(leg.origin);
+    const destinationContinentCode = getAirportContinentCode(leg.destination);
+    const originIntercontinentalBucket = getIntercontinentalBucket(leg.origin, originContinentCode);
+    const destinationIntercontinentalBucket = getIntercontinentalBucket(leg.destination, destinationContinentCode);
+    return Boolean(
+      originIntercontinentalBucket
+      && destinationIntercontinentalBucket
+      && originIntercontinentalBucket !== destinationIntercontinentalBucket
+    );
+  }
+
+  function getIntercontinentalBucket(airport, continentCode) {
+    if (continentCode !== "AMERICAS") {
+      return continentCode;
+    }
+
+    const countryCode = String(airport?.countryCode ?? "").trim().toUpperCase();
+    if (SOUTH_AMERICA_COUNTRY_CODES.has(countryCode)) {
+      return "AMERICAS_SOUTH";
+    }
+    if (NORTH_AMERICA_COUNTRY_CODES.has(countryCode)) {
+      return "AMERICAS_NORTH";
+    }
+
+    const latitude = Number(airport?.latitude);
+    if (Number.isFinite(latitude) && latitude < 0) {
+      return "AMERICAS_SOUTH";
+    }
+    return "AMERICAS_NORTH";
+  }
+
+  function hasOnlyIntercontinentalLegs(route) {
+    const legs = Array.isArray(route?.legs) ? route.legs : [];
+    if (legs.length === 0) {
+      return false;
+    }
+    return legs.every((leg) => isIntercontinentalLeg(leg));
+  }
+
+  function isStrictRecommendedCandidate(route) {
+    return (
+      hasLayover(route)
+      && hasOnlyIntercontinentalLegs(route)
+      && !isLayoverTooCloseToDestination(route)
+    );
+  }
+
   function buildRecommendedRoutesForPair(originContinentCode, destinationContinentCode) {
     if (!originContinentCode || !destinationContinentCode || originContinentCode === destinationContinentCode) {
       return [];
@@ -1236,11 +1354,7 @@ export function createRouteSimulationController({
         idPrefix: `recommended-${originContinentCode.toLowerCase()}-${destinationContinentCode.toLowerCase()}`,
         routeMode: ROUTE_MODE_RECOMMENDED
       });
-      if (!builtRoute) {
-        return;
-      }
-
-      if (isLayoverTooCloseToDestination(builtRoute)) {
+      if (!isStrictRecommendedCandidate(builtRoute)) {
         return;
       }
 
@@ -1281,8 +1395,6 @@ export function createRouteSimulationController({
 
     for (const originAirport of originCandidates.slice(0, 3)) {
       for (const destinationAirport of destinationCandidates.slice(0, 3)) {
-        addCandidate([originAirport, destinationAirport], 2200);
-
         for (const hubAirport of oneStopHubs.slice(0, 12)) {
           addCandidate([originAirport, hubAirport, destinationAirport], 360);
         }
@@ -1358,11 +1470,7 @@ export function createRouteSimulationController({
         idPrefix: `recommended-${originContinentCode.toLowerCase()}-${destinationContinentCode.toLowerCase()}-flagship`,
         routeMode: ROUTE_MODE_RECOMMENDED
       });
-      if (!flagshipRoute) {
-        continue;
-      }
-
-      if (isLayoverTooCloseToDestination(flagshipRoute)) {
+      if (!isStrictRecommendedCandidate(flagshipRoute)) {
         continue;
       }
 
@@ -1422,18 +1530,22 @@ export function createRouteSimulationController({
       routeState.selectedOriginContinentCode
     );
 
+    const destinationContinentOptions = routeLibrary.continentsWithAirports.length > 1
+      ? routeLibrary.continentsWithAirports.filter((continentCode) => (
+        continentCode !== routeState.selectedOriginContinentCode
+      ))
+      : routeLibrary.continentsWithAirports;
+
     const preferredDestinationContinent = (
       routeState.selectedDestinationContinentCode
-      && routeLibrary.continentsWithAirports.includes(routeState.selectedDestinationContinentCode)
+      && destinationContinentOptions.includes(routeState.selectedDestinationContinentCode)
     )
       ? routeState.selectedDestinationContinentCode
-      : (routeLibrary.continentsWithAirports.find((continentCode) => (
-        continentCode !== routeState.selectedOriginContinentCode
-      )) ?? routeState.selectedOriginContinentCode);
+      : (destinationContinentOptions[0] ?? routeState.selectedOriginContinentCode);
 
     routeState.selectedDestinationContinentCode = populateSelectOptions(
       ui.routeDestinationContinentEl,
-      routeLibrary.continentsWithAirports,
+      destinationContinentOptions,
       (continentCode) => continentCode,
       (continentCode) => i18n.t(getContinentLabelKey(continentCode)),
       preferredDestinationContinent
