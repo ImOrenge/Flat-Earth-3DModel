@@ -15,11 +15,11 @@ import {
 } from "./modules/astronomy-utils.js?v=20260326-seasonal-ecliptic1";
 import { createAstronomyController } from "./modules/astronomy-controller.js?v=20260325-eclipse-selector1";
 import { createCameraController } from "./modules/camera-controller.js?v=20260406-globecam1";
-import { createCelestialTrackingCameraController } from "./modules/celestial-tracking-camera-controller.js?v=20260320-constellation-precession1";
+import { createCelestialTrackingCameraController } from "./modules/celestial-tracking-camera-controller.js?v=20260407-aircraft-tracking1";
 import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js?v=20260405-surfacepatch2";
 import { createI18n } from "./modules/i18n.js?v=20260405-hybridroute1";
 import { createMagneticFieldController } from "./modules/magnetic-field-controller.js?v=20260314-magnetic-pinecone3";
-import { createRouteSimulationController } from "./modules/route-simulation-controller.js?v=20260406-globeposfix1";
+import { createRouteSimulationController } from "./modules/route-simulation-controller.js?v=20260406-routecore-sync8";
 import { createTextureManager } from "./modules/texture-manager.js?v=20260405-surfacepatch1";
 import { createWalkerController } from "./modules/walker-controller.js?v=20260324-moon-cycle28";
 
@@ -451,6 +451,7 @@ const routeSpeedEl = document.getElementById("route-speed");
 const routeSpeedValueEl = document.getElementById("route-speed-value");
 const routePlaybackButton = document.getElementById("route-playback");
 const routeResetButton = document.getElementById("route-reset");
+const routeTrackCameraButtonEl = document.getElementById("route-track-camera");
 const routeSummaryEl = document.getElementById("route-summary");
 const routeLegEl = document.getElementById("route-leg");
 const routeAircraftEl = document.getElementById("route-aircraft");
@@ -1997,6 +1998,30 @@ const routeSimulationApi = createRouteSimulationController({
   }
 });
 
+const routeCameraTrackingState = {
+  enabled: false,
+  applied: false
+};
+const ROUTE_CAMERA_TRACKING_COPY = {
+  en: {
+    start: "Track Aircraft",
+    stop: "Stop Tracking",
+    summary: "Tracking the aircraft along the selected route."
+  },
+  ko: {
+    start: "항공기 추적",
+    stop: "추적 중지",
+    summary: "선택한 항로를 따라 항공기를 추적 중입니다."
+  }
+};
+const routeCameraTrackingTarget = new THREE.Vector3();
+const routeCameraTrackingTangent = new THREE.Vector3();
+const routeCameraTrackingLocalTangent = new THREE.Vector3();
+const routeCameraTrackingGlobeWorldQuaternion = new THREE.Quaternion();
+const routeCameraTrackingGlobeWorldQuaternionInverse = new THREE.Quaternion();
+const ROUTE_CAMERA_TRACKING_GLOBE_ROTATION_LERP = 0.2;
+const ROUTE_CAMERA_TRACKING_GLOBE_RESET_LERP = 0.12;
+
 
 let celestialTrackingCameraApi;
 
@@ -2092,6 +2117,7 @@ if (GLOBE_FEATURE_TOGGLES.constellationLayer) {
 i18n.subscribe(() => {
   constellationTabApi.refreshLocalizedUi();
   syncHudSideCard();
+  syncRouteCameraTrackingUi();
 });
 
 setDemoSeasonPhaseFromDate(astronomyState.selectedDate.getTime());
@@ -2120,6 +2146,174 @@ const rocketApi = createRocketController({
   scalableStage: globeRuntimeStage,
   constants
 });
+
+function getRouteCameraTrackingCopy() {
+  return ROUTE_CAMERA_TRACKING_COPY[i18n.getLanguage()] ?? ROUTE_CAMERA_TRACKING_COPY.en;
+}
+
+function wrapRouteTrackingAngle(angle) {
+  return Math.atan2(Math.sin(angle), Math.cos(angle));
+}
+
+function lerpRouteTrackingAngle(fromAngle, toAngle, alpha) {
+  const delta = wrapRouteTrackingAngle(toAngle - fromAngle);
+  return wrapRouteTrackingAngle(fromAngle + (delta * alpha));
+}
+
+function getRouteTrackingPose() {
+  const pose = routeSimulationApi.getAircraftTrackingPose?.(
+    routeCameraTrackingTarget,
+    routeCameraTrackingTangent
+  );
+  if (pose?.position) {
+    return pose;
+  }
+
+  const target = routeSimulationApi.getAircraftTrackingTarget?.(routeCameraTrackingTarget);
+  if (!target) {
+    return null;
+  }
+
+  return {
+    position: target,
+    tangent: null
+  };
+}
+
+function syncRouteTrackingGlobeRotation(pose = null, { resetOnly = false } = {}) {
+  if (!globeStage) {
+    return;
+  }
+
+  const spherical = cameraState.earthModelView === "spherical";
+  if (!spherical || resetOnly || !pose?.tangent) {
+    globeStage.rotation.y = lerpRouteTrackingAngle(
+      globeStage.rotation.y,
+      0,
+      ROUTE_CAMERA_TRACKING_GLOBE_RESET_LERP
+    );
+    return;
+  }
+
+  routeCameraTrackingLocalTangent.copy(pose.tangent);
+  globeStage.getWorldQuaternion(routeCameraTrackingGlobeWorldQuaternion);
+  routeCameraTrackingGlobeWorldQuaternionInverse
+    .copy(routeCameraTrackingGlobeWorldQuaternion)
+    .invert();
+  routeCameraTrackingLocalTangent
+    .applyQuaternion(routeCameraTrackingGlobeWorldQuaternionInverse);
+  routeCameraTrackingLocalTangent.y = 0;
+
+  if (routeCameraTrackingLocalTangent.lengthSq() < 1e-8) {
+    return;
+  }
+
+  routeCameraTrackingLocalTangent.normalize();
+  const headingRadians = Math.atan2(
+    routeCameraTrackingLocalTangent.x,
+    routeCameraTrackingLocalTangent.z
+  );
+  const desiredRotation = wrapRouteTrackingAngle(-headingRadians);
+  globeStage.rotation.y = lerpRouteTrackingAngle(
+    globeStage.rotation.y,
+    desiredRotation,
+    ROUTE_CAMERA_TRACKING_GLOBE_ROTATION_LERP
+  );
+}
+
+function syncRouteCameraTrackingUi() {
+  if (!routeTrackCameraButtonEl) {
+    return;
+  }
+
+  const pose = getRouteTrackingPose();
+  const copy = getRouteCameraTrackingCopy();
+  const canTrack = Boolean(pose?.position);
+
+  if (!canTrack && routeCameraTrackingState.enabled) {
+    routeCameraTrackingState.enabled = false;
+  }
+
+  routeTrackCameraButtonEl.disabled = !canTrack;
+  routeTrackCameraButtonEl.textContent = routeCameraTrackingState.enabled ? copy.stop : copy.start;
+  routeTrackCameraButtonEl.classList.toggle("active", routeCameraTrackingState.enabled);
+}
+
+function setRouteCameraTrackingEnabled(enabled) {
+  const nextEnabled = Boolean(enabled);
+  if (routeCameraTrackingState.enabled === nextEnabled) {
+    syncRouteCameraTrackingUi();
+    return;
+  }
+
+  routeCameraTrackingState.enabled = nextEnabled;
+  if (!nextEnabled && routeCameraTrackingState.applied) {
+    celestialTrackingCameraApi.clearCustomTracking({ immediate: false });
+    routeCameraTrackingState.applied = false;
+  }
+  if (!nextEnabled) {
+    syncRouteTrackingGlobeRotation(null, { resetOnly: true });
+  }
+
+  if (nextEnabled) {
+    cameraState.targetTrackingAzimuth = constants.CAMERA_TRACKING_DEFAULT_AZIMUTH;
+    cameraState.targetTrackingElevation = THREE.MathUtils.clamp(
+      constants.CAMERA_TRACKING_DEFAULT_ELEVATION * 0.9,
+      constants.CAMERA_TRACKING_MIN_ELEVATION,
+      constants.CAMERA_TRACKING_MAX_ELEVATION
+    );
+    cameraState.targetTrackingDistance = THREE.MathUtils.clamp(
+      constants.CAMERA_TRACKING_DEFAULT_DISTANCE * 0.92,
+      constants.CAMERA_TRACKING_MIN_DISTANCE,
+      constants.CAMERA_TRACKING_MAX_DISTANCE
+    );
+    cameraState.targetTrackingGroundLocked = false;
+    cameraState.targetTrackingPositionLocked = false;
+    cameraApi.clampCamera();
+  }
+
+  syncRouteCameraTrackingUi();
+}
+
+function syncRouteCameraTracking() {
+  if (!routeCameraTrackingState.enabled) {
+    if (routeCameraTrackingState.applied) {
+      celestialTrackingCameraApi.clearCustomTracking({ immediate: false });
+      routeCameraTrackingState.applied = false;
+    }
+    syncRouteTrackingGlobeRotation(null, { resetOnly: true });
+    syncRouteCameraTrackingUi();
+    return;
+  }
+
+  const pose = getRouteTrackingPose();
+  if (!pose?.position) {
+    routeCameraTrackingState.enabled = false;
+    if (routeCameraTrackingState.applied) {
+      celestialTrackingCameraApi.clearCustomTracking({ immediate: false });
+      routeCameraTrackingState.applied = false;
+    }
+    syncRouteTrackingGlobeRotation(null, { resetOnly: true });
+    syncRouteCameraTrackingUi();
+    return;
+  }
+
+  syncRouteTrackingGlobeRotation(pose);
+  const copy = getRouteCameraTrackingCopy();
+  celestialTrackingCameraApi.setTrackedCustomTargetResolver(
+    () => getRouteTrackingPose()?.position ?? null,
+    copy.summary,
+    { immediate: !routeCameraTrackingState.applied }
+  );
+  routeCameraTrackingState.applied = true;
+  syncRouteCameraTrackingUi();
+}
+
+if (routeTrackCameraButtonEl) {
+  routeTrackCameraButtonEl.addEventListener("click", () => {
+    setRouteCameraTrackingEnabled(!routeCameraTrackingState.enabled);
+  });
+}
 
 
   const eclipseApi = createEclipseController({
@@ -2629,6 +2823,7 @@ function animate() {
   walkerApi.updateWalkerPerspectiveGuides();
   walkerApi.updateFirstPersonOverlay();
   routeSimulationApi.update(deltaSeconds);
+  syncRouteCameraTracking();
   rocketApi.update(deltaSeconds);
   // ?? 濡쒖폆 ?붾젅硫뷀듃由?UI ?낅뜲?댄듃 ??
   (function updateRocketTelemetry() {

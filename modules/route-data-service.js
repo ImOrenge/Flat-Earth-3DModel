@@ -1,17 +1,15 @@
-const DATASET_BASE_PATHS = ["../assets/data", "/assets/data", "./assets/data"];
+const DATASET_BASE_PATHS = ["./assets/data", "../assets/data", "/assets/data"];
 const DATASET_FILENAMES = Object.freeze({
   countries: ["countries.json"],
-  countryCentroids: ["country-centroids.json"],
   airports: ["airports.json"],
   aircraftTypes: ["aircraft-types.json"]
 });
 
 const REMOTE_AIRPORTS_URL = "https://raw.githubusercontent.com/mwgg/Airports/master/airports.json";
 const REMOTE_COUNTRIES_URL = "https://raw.githubusercontent.com/mledoze/countries/master/countries.json";
-const GEONAMES_PROXY_URL = "/api/geonames/country-info";
 
-const CACHE_KEY = "globe.routes.dataset.v2";
-const CACHE_VERSION = 2;
+const CACHE_KEY = "routes.dataset.v1";
+const CACHE_VERSION = 1;
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const AIRPORTS_PER_COUNTRY_CAP = 15;
 const PINNED_AIRPORT_IATA = Object.freeze([
@@ -36,35 +34,9 @@ function toFiniteNumber(value) {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
-function normalizeLongitude(value) {
-  if (!Number.isFinite(value)) {
-    return null;
-  }
-
-  let longitude = value;
-  while (longitude > 180) {
-    longitude -= 360;
-  }
-  while (longitude < -180) {
-    longitude += 360;
-  }
-  return longitude;
-}
-
-function datelineSafeMidpointLongitude(west, east) {
-  const westNorm = normalizeLongitude(west);
-  const eastNorm = normalizeLongitude(east);
-  if (westNorm === null || eastNorm === null) {
-    return null;
-  }
-
-  let delta = eastNorm - westNorm;
-  if (delta > 180) {
-    delta -= 360;
-  } else if (delta < -180) {
-    delta += 360;
-  }
-  return normalizeLongitude(westNorm + (delta / 2));
+function sanitizeCountryCode(value) {
+  const code = String(value ?? "").trim().toUpperCase();
+  return code.length === 2 ? code : "";
 }
 
 function buildDatasetPathCandidates(filenames) {
@@ -111,11 +83,6 @@ async function fetchJson(url, fetchImpl) {
   return response.json();
 }
 
-function sanitizeCountryCode(value) {
-  const code = String(value ?? "").trim().toUpperCase();
-  return code.length === 2 ? code : "";
-}
-
 function normalizeBundledCountries(rawCountries) {
   if (!Array.isArray(rawCountries)) {
     return [];
@@ -136,33 +103,6 @@ function normalizeBundledCountries(rawCountries) {
       numeric: String(country?.numeric ?? "").trim(),
       name: String(country?.name ?? alpha2).trim(),
       region: String(country?.region ?? "").trim()
-    });
-  }
-
-  return normalized;
-}
-
-function normalizeBundledCentroids(rawCentroids) {
-  if (!Array.isArray(rawCentroids)) {
-    return [];
-  }
-
-  const normalized = [];
-  const seen = new Set();
-
-  for (const centroid of rawCentroids) {
-    const alpha2 = sanitizeCountryCode(centroid?.alpha2);
-    const latitude = toFiniteNumber(centroid?.latitude);
-    const longitude = toFiniteNumber(centroid?.longitude);
-    if (!alpha2 || latitude === null || longitude === null || seen.has(alpha2)) {
-      continue;
-    }
-    seen.add(alpha2);
-    normalized.push({
-      alpha2,
-      name: String(centroid?.name ?? alpha2).trim(),
-      latitude,
-      longitude
     });
   }
 
@@ -323,8 +263,7 @@ function normalizeRemoteCountries(rawCountries, countryCodes) {
       alpha3: String(country?.cca3 ?? "").trim().toUpperCase(),
       numeric: String(country?.ccn3 ?? "").trim(),
       name: String(country?.name?.common ?? country?.name?.official ?? alpha2).trim(),
-      region: String(country?.region ?? "").trim(),
-      latlng: Array.isArray(country?.latlng) ? country.latlng : null
+      region: String(country?.region ?? "").trim()
     });
   }
 
@@ -332,13 +271,7 @@ function normalizeRemoteCountries(rawCountries, countryCodes) {
   for (const alpha2 of countryCodes) {
     const country = countriesByCode.get(alpha2);
     if (country) {
-      normalized.push({
-        alpha2: country.alpha2,
-        alpha3: country.alpha3,
-        numeric: country.numeric,
-        name: country.name,
-        region: country.region
-      });
+      normalized.push(country);
     } else {
       normalized.push({
         alpha2,
@@ -351,137 +284,6 @@ function normalizeRemoteCountries(rawCountries, countryCodes) {
   }
 
   return normalized.sort((left, right) => compareText(left.name, right.name));
-}
-
-function buildCentroidsFromCountries(rawCountries, countryCodes) {
-  const centroids = new Map();
-  for (const country of (Array.isArray(rawCountries) ? rawCountries : [])) {
-    const alpha2 = sanitizeCountryCode(country?.cca2);
-    if (!alpha2 || !countryCodes.has(alpha2)) {
-      continue;
-    }
-    const latlng = Array.isArray(country?.latlng) ? country.latlng : [];
-    const latitude = toFiniteNumber(latlng[0]);
-    const longitude = toFiniteNumber(latlng[1]);
-    if (latitude === null || longitude === null) {
-      continue;
-    }
-    centroids.set(alpha2, {
-      alpha2,
-      name: String(country?.name?.common ?? alpha2).trim(),
-      latitude,
-      longitude
-    });
-  }
-  return centroids;
-}
-
-function extractGeoNamesRows(payload) {
-  if (Array.isArray(payload)) {
-    return payload;
-  }
-  if (Array.isArray(payload?.countries)) {
-    return payload.countries;
-  }
-  if (Array.isArray(payload?.geonames)) {
-    return payload.geonames;
-  }
-  if (Array.isArray(payload?.data)) {
-    return payload.data;
-  }
-  return [];
-}
-
-function buildCentroidsFromGeoNames(rows, countryCodes) {
-  const centroids = new Map();
-
-  for (const row of rows) {
-    const alpha2 = sanitizeCountryCode(row?.alpha2 ?? row?.countryCode ?? row?.country);
-    if (!alpha2 || !countryCodes.has(alpha2)) {
-      continue;
-    }
-
-    const north = toFiniteNumber(row?.north);
-    const south = toFiniteNumber(row?.south);
-    const east = toFiniteNumber(row?.east);
-    const west = toFiniteNumber(row?.west);
-    if (north === null || south === null || east === null || west === null) {
-      continue;
-    }
-
-    const latitude = (north + south) / 2;
-    const longitude = datelineSafeMidpointLongitude(west, east);
-    if (longitude === null) {
-      continue;
-    }
-
-    centroids.set(alpha2, {
-      alpha2,
-      name: String(row?.name ?? row?.countryName ?? alpha2).trim(),
-      latitude,
-      longitude
-    });
-  }
-
-  return centroids;
-}
-
-function buildAirportFallbackCentroids(airports) {
-  const countryStats = new Map();
-
-  for (const airport of airports) {
-    if (!countryStats.has(airport.countryCode)) {
-      countryStats.set(airport.countryCode, {
-        latitudeSum: 0,
-        longitudeSum: 0,
-        count: 0
-      });
-    }
-    const stats = countryStats.get(airport.countryCode);
-    stats.latitudeSum += airport.latitude;
-    stats.longitudeSum += airport.longitude;
-    stats.count += 1;
-  }
-
-  const centroids = new Map();
-  for (const [countryCode, stats] of countryStats.entries()) {
-    if (stats.count <= 0) {
-      continue;
-    }
-    centroids.set(countryCode, {
-      alpha2: countryCode,
-      name: countryCode,
-      latitude: stats.latitudeSum / stats.count,
-      longitude: stats.longitudeSum / stats.count
-    });
-  }
-
-  return centroids;
-}
-
-function mergeCentroids({ countries, airports, fromCountries, fromGeoNames }) {
-  const airportFallback = buildAirportFallbackCentroids(airports);
-  const merged = [];
-
-  for (const country of countries) {
-    const alpha2 = country.alpha2;
-    const centroid = fromGeoNames.get(alpha2)
-      ?? fromCountries.get(alpha2)
-      ?? airportFallback.get(alpha2);
-
-    if (!centroid) {
-      continue;
-    }
-
-    merged.push({
-      alpha2,
-      name: country.name,
-      latitude: centroid.latitude,
-      longitude: centroid.longitude
-    });
-  }
-
-  return merged.sort((left, right) => compareText(left.name, right.name));
 }
 
 function getSafeStorage(storage) {
@@ -511,7 +313,6 @@ function loadCachedDataset(storage) {
       && parsed.version === CACHE_VERSION
       && Number.isFinite(parsed.fetchedAt)
       && Array.isArray(parsed.countries)
-      && Array.isArray(parsed.countryCentroids)
       && Array.isArray(parsed.airports);
 
     if (!validShape) {
@@ -531,7 +332,6 @@ function loadCachedDataset(storage) {
         source: String(parsed.source ?? "cached"),
         fetchedAt: parsed.fetchedAt,
         countries: parsed.countries,
-        countryCentroids: parsed.countryCentroids,
         airports: parsed.airports
       }
     };
@@ -554,46 +354,73 @@ function saveCachedDataset(storage, payload) {
       fetchedAt: payload.fetchedAt,
       source: payload.source,
       countries: payload.countries,
-      countryCentroids: payload.countryCentroids,
       airports: payload.airports
     };
     storage.setItem(CACHE_KEY, JSON.stringify(cachePayload));
   } catch {}
 }
 
-async function fetchGeoNamesCountryInfo(fetchImpl, language) {
-  const lang = String(language ?? "en").toLowerCase().startsWith("ko") ? "ko" : "en";
-  const url = `${GEONAMES_PROXY_URL}?lang=${encodeURIComponent(lang)}`;
-  return fetchJson(url, fetchImpl);
-}
-
 export function createRouteDataService({
   fetchImpl = (...args) => fetch(...args),
   storage = null,
-  sourceMode = "hybrid"
+  sourceMode = "remote"
 } = {}) {
   const safeStorage = getSafeStorage(storage);
-  const normalizedSourceMode = String(sourceMode ?? "hybrid").toLowerCase();
+  const normalizedSourceMode = String(sourceMode ?? "remote").toLowerCase();
   const bundledOnly = normalizedSourceMode === "bundled";
   const remoteOnly = normalizedSourceMode === "remote";
 
   async function loadBundledDataset() {
-    const [countriesRaw, countryCentroidsRaw, airportsRaw, aircraftTypesRaw] = await Promise.all([
+    const [countriesRaw, airportsRaw, aircraftTypesRaw] = await Promise.all([
       loadJson(buildDatasetPathCandidates(DATASET_FILENAMES.countries), "countries", fetchImpl),
-      loadJson(buildDatasetPathCandidates(DATASET_FILENAMES.countryCentroids), "countryCentroids", fetchImpl),
       loadJson(buildDatasetPathCandidates(DATASET_FILENAMES.airports), "airports", fetchImpl),
       loadJson(buildDatasetPathCandidates(DATASET_FILENAMES.aircraftTypes), "aircraftTypes", fetchImpl)
     ]);
 
     return {
       countries: normalizeBundledCountries(countriesRaw),
-      countryCentroids: normalizeBundledCentroids(countryCentroidsRaw),
       airports: normalizeBundledAirports(airportsRaw),
       aircraftTypes: normalizeBundledAircraftTypes(aircraftTypesRaw)
     };
   }
 
-  async function loadInitialDataset({ language = "en" } = {}) {
+  async function refreshRemote() {
+    const [airportsRaw, countriesRaw, bundledAircraftTypes] = await Promise.all([
+      fetchJson(REMOTE_AIRPORTS_URL, fetchImpl),
+      fetchJson(REMOTE_COUNTRIES_URL, fetchImpl),
+      loadJson(buildDatasetPathCandidates(DATASET_FILENAMES.aircraftTypes), "aircraftTypes", fetchImpl)
+    ]);
+
+    const airports = normalizeRemoteAirports(airportsRaw);
+    if (airports.length < 2) {
+      throw new Error("Remote airport dataset is insufficient for routing.");
+    }
+
+    const countryCodes = new Set(airports.map((airport) => airport.countryCode));
+    const countries = normalizeRemoteCountries(countriesRaw, countryCodes);
+    const aircraftTypes = normalizeBundledAircraftTypes(bundledAircraftTypes);
+    const fetchedAt = Date.now();
+
+    saveCachedDataset(safeStorage, {
+      fetchedAt,
+      source: "live_api",
+      countries,
+      airports
+    });
+
+    return {
+      source: "live_api",
+      fetchedAt,
+      warnings: [],
+      dataset: {
+        countries,
+        airports,
+        aircraftTypes
+      }
+    };
+  }
+
+  async function loadInitialDataset() {
     const bundled = await loadBundledDataset();
     if (bundledOnly) {
       return {
@@ -609,16 +436,13 @@ export function createRouteDataService({
 
     if (remoteOnly) {
       try {
-        const remote = await refreshRemote({ language, forceRemote: true });
+        const remote = await refreshRemote();
         return {
           source: remote.source ?? "live_api",
           fetchedAt: remote.fetchedAt ?? Date.now(),
           shouldAutoRefresh: false,
           warnings: remote.warnings ?? [],
-          dataset: {
-            ...remote.dataset,
-            aircraftTypes: bundled.aircraftTypes
-          }
+          dataset: remote.dataset
         };
       } catch {
         if (cacheEntry.status === "valid" && cacheEntry.payload) {
@@ -629,7 +453,6 @@ export function createRouteDataService({
             warnings: ["remote_unavailable"],
             dataset: {
               countries: normalizeBundledCountries(cacheEntry.payload.countries),
-              countryCentroids: normalizeBundledCentroids(cacheEntry.payload.countryCentroids),
               airports: normalizeBundledAirports(cacheEntry.payload.airports),
               aircraftTypes: bundled.aircraftTypes
             }
@@ -654,7 +477,6 @@ export function createRouteDataService({
         warnings: [],
         dataset: {
           countries: normalizeBundledCountries(cacheEntry.payload.countries),
-          countryCentroids: normalizeBundledCentroids(cacheEntry.payload.countryCentroids),
           airports: normalizeBundledAirports(cacheEntry.payload.airports),
           aircraftTypes: bundled.aircraftTypes
         }
@@ -664,76 +486,9 @@ export function createRouteDataService({
     return {
       source: "bundled",
       fetchedAt: null,
-      shouldAutoRefresh: cacheEntry.status === "missing"
-        || cacheEntry.status === "expired"
-        || cacheEntry.status === "invalid"
-        || cacheEntry.status === "unavailable",
+      shouldAutoRefresh: true,
       warnings: [],
       dataset: bundled
-    };
-  }
-
-  async function refreshRemote({ language = "en", forceRemote = false } = {}) {
-    void forceRemote;
-    if (bundledOnly) {
-      const bundled = await loadBundledDataset();
-      return {
-        source: "bundled",
-        fetchedAt: null,
-        warnings: [],
-        dataset: bundled
-      };
-    }
-    const [airportsRaw, countriesRaw] = await Promise.all([
-      fetchJson(REMOTE_AIRPORTS_URL, fetchImpl),
-      fetchJson(REMOTE_COUNTRIES_URL, fetchImpl)
-    ]);
-
-    const airports = normalizeRemoteAirports(airportsRaw);
-    if (airports.length < 2) {
-      throw new Error("Remote airport dataset is insufficient for routing.");
-    }
-
-    const countryCodes = new Set(airports.map((airport) => airport.countryCode));
-    const countries = normalizeRemoteCountries(countriesRaw, countryCodes);
-    const centroidsFromCountries = buildCentroidsFromCountries(countriesRaw, countryCodes);
-
-    const warnings = [];
-    let geoNamesRows = [];
-
-    try {
-      const geoNamesPayload = await fetchGeoNamesCountryInfo(fetchImpl, language);
-      geoNamesRows = extractGeoNamesRows(geoNamesPayload);
-    } catch {
-      warnings.push("geonames_unavailable");
-    }
-
-    const centroidsFromGeoNames = buildCentroidsFromGeoNames(geoNamesRows, countryCodes);
-    const countryCentroids = mergeCentroids({
-      countries,
-      airports,
-      fromCountries: centroidsFromCountries,
-      fromGeoNames: centroidsFromGeoNames
-    });
-
-    const fetchedAt = Date.now();
-    saveCachedDataset(safeStorage, {
-      fetchedAt,
-      source: "live_api",
-      countries,
-      countryCentroids,
-      airports
-    });
-
-    return {
-      source: "live_api",
-      fetchedAt,
-      warnings,
-      dataset: {
-        countries,
-        countryCentroids,
-        airports
-      }
     };
   }
 

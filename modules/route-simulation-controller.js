@@ -16,7 +16,8 @@ import {
   getContinentLabelKey,
   inferContinentCode,
   uniqueByIcao
-} from "./route-multileg-core.js?v=20260405-endpointfilter1";
+} from "./route-multileg-core.js?v=20260406-legrelax1";
+import { createRouteDataService } from "./route-data-service.js?v=20260406-mainremote1";
 
 const DATASET_BASE_PATHS = ["./assets/data", "../assets/data", "/assets/data"];
 const DATASET_FILENAMES = {
@@ -305,10 +306,11 @@ function geoToUnitVector(latitudeDegrees, longitudeDegrees, target) {
   const latitudeRadians = THREE.MathUtils.degToRad(latitudeDegrees);
   const longitudeRadians = THREE.MathUtils.degToRad(longitudeDegrees);
   const cosLatitude = Math.cos(latitudeRadians);
+  // Match Three.js SphereGeometry UV orientation used by globe surface mapping.
   target.set(
     cosLatitude * Math.cos(longitudeRadians),
     Math.sin(latitudeRadians),
-    cosLatitude * Math.sin(longitudeRadians)
+    -cosLatitude * Math.sin(longitudeRadians)
   );
   return target.normalize();
 }
@@ -354,6 +356,7 @@ export function createRouteSimulationController({
   scalableStage,
   ui
 }) {
+  const routeDataService = createRouteDataService({ sourceMode: "remote" });
   const scaleDimension = (value) => value * (constants.MODEL_SCALE ?? 1);
   const routeSurfaceOffset = scaleDimension(ROUTE_SURFACE_OFFSET);
   const routeAltitudeBase = scaleDimension(ROUTE_ALTITUDE_BASE);
@@ -420,6 +423,8 @@ export function createRouteSimulationController({
   const tempTangent = new THREE.Vector3();
   const tempTarget = new THREE.Vector3();
   const tempUp = new THREE.Vector3();
+  const tempAircraftWorldPosition = new THREE.Vector3();
+  const tempAircraftWorldTangent = new THREE.Vector3();
   const tempGlobeCenter = new THREE.Vector3();
   const tempGreatCircleSample = new THREE.Vector3();
   const tempGreatCircleOrtho = new THREE.Vector3();
@@ -706,9 +711,7 @@ export function createRouteSimulationController({
       if (legIndex < route.legs.length - 1) {
         const layoverStart = normalizedCursor;
         const layoverShare = LAYOVER_DWELL_SECONDS / BASE_ROUTE_CYCLE_SECONDS;
-        const layoverEnd = legIndex === route.legs.length - 2
-          ? 1
-          : Math.min(1, layoverStart + layoverShare);
+        const layoverEnd = Math.min(1, layoverStart + layoverShare);
 
         timelineSegments.push({
           type: "layover",
@@ -1005,19 +1008,22 @@ export function createRouteSimulationController({
       routeState.selectedOriginContinentCode
     );
 
+    const destinationContinentOptions = routeLibrary.continentsWithAirports.length > 1
+      ? routeLibrary.continentsWithAirports.filter((continentCode) => (
+        continentCode !== routeState.selectedOriginContinentCode
+      ))
+      : routeLibrary.continentsWithAirports;
+
     const preferredDestinationContinent = (
       routeState.selectedDestinationContinentCode
-      && routeLibrary.continentsWithAirports.includes(routeState.selectedDestinationContinentCode)
-      && routeState.selectedDestinationContinentCode !== routeState.selectedOriginContinentCode
+      && destinationContinentOptions.includes(routeState.selectedDestinationContinentCode)
     )
       ? routeState.selectedDestinationContinentCode
-      : (routeLibrary.continentsWithAirports.find((continentCode) => (
-        continentCode !== routeState.selectedOriginContinentCode
-      )) ?? routeState.selectedOriginContinentCode);
+      : (destinationContinentOptions[0] ?? routeState.selectedOriginContinentCode);
 
     routeState.selectedDestinationContinentCode = populateSelectOptions(
       ui.routeDestinationContinentEl,
-      routeLibrary.continentsWithAirports,
+      destinationContinentOptions,
       (continentCode) => continentCode,
       (continentCode) => i18n.t(getContinentLabelKey(continentCode)),
       preferredDestinationContinent
@@ -1646,15 +1652,11 @@ export function createRouteSimulationController({
     syncControlAvailability();
 
     try {
-      const [countries, airports, aircraftTypes] = await Promise.all([
-        loadJson(buildDatasetPathCandidates(DATASET_FILENAMES.countries), "countries"),
-        loadJson(buildDatasetPathCandidates(DATASET_FILENAMES.airports), "airports"),
-        loadJson(buildDatasetPathCandidates(DATASET_FILENAMES.aircraftTypes), "aircraftTypes")
-      ]);
+      const initialLoad = await routeDataService.loadInitialDataset({ language: i18n.getLanguage?.() ?? "en" });
 
       routeState.loading = false;
       const applied = applyLibraryDataset(
-        { countries, airports, aircraftTypes },
+        initialLoad.dataset,
         { preserveSelection: false }
       );
 
@@ -1714,6 +1716,38 @@ export function createRouteSimulationController({
     syncAircraftPose();
   }
 
+  function getAircraftTrackingPose(
+    positionTarget = tempAircraftWorldPosition,
+    tangentTarget = tempAircraftWorldTangent
+  ) {
+    if (!routeState.selectedRoute) {
+      return null;
+    }
+
+    const activeLayer = isSphericalView() ? globeLayer : flatLayer;
+    if (!activeLayer.aircraft.visible) {
+      return null;
+    }
+
+    activeLayer.aircraft.getWorldPosition(positionTarget);
+    activeLayer.aircraft.getWorldDirection(tangentTarget);
+    if (tangentTarget.lengthSq() < 1e-8) {
+      tangentTarget.set(0, 0, 1);
+    } else {
+      tangentTarget.normalize();
+    }
+
+    return {
+      position: positionTarget,
+      tangent: tangentTarget
+    };
+  }
+
+  function getAircraftTrackingTarget(target = tempAircraftWorldPosition) {
+    const pose = getAircraftTrackingPose(target, tempAircraftWorldTangent);
+    return pose ? pose.position : null;
+  }
+
   function refreshLocalizedUi() {
     setDatasetStatus(routeState.datasetStatusKey, routeState.datasetStatusParams, routeState.datasetStatusError);
     if (routeState.libraryReady) {
@@ -1742,6 +1776,8 @@ export function createRouteSimulationController({
     setDestinationAirport,
     setSpeedMultiplier,
     syncRouteUi,
+    getAircraftTrackingPose,
+    getAircraftTrackingTarget,
     togglePlayback,
     update
   };

@@ -1,6 +1,7 @@
 import * as THREE from "../../vendor/three.module.js";
 import * as geoUtils from "./geo-utils.js?v=20260406-globeposfix1";
-import { createRouteDataService } from "./route-data-service.js";
+import { buildRecommendedRoutesForPair as buildRecommendedRoutesForPairCore } from "../../modules/route-multileg-core.js?v=20260406-legrelax1";
+import { createRouteDataService } from "./route-data-service.js?v=20260406-remotesync1";
 
 const {
   createGlobeModelFrame,
@@ -127,6 +128,14 @@ const CONTINENT_HUB_PRIORITY = Object.freeze({
   ASIA: ["DXB", "DOH", "SIN", "HKG", "ICN", "NRT"],
   OCEANIA: ["SYD", "MEL", "BNE", "PER", "AKL"]
 });
+const SOUTH_AMERICA_COUNTRY_CODES = Object.freeze(new Set([
+  "AR", "BO", "BR", "CL", "CO", "EC", "FK", "GF", "GY", "PE", "PY", "SR", "UY", "VE"
+]));
+const NORTH_AMERICA_COUNTRY_CODES = Object.freeze(new Set([
+  "AG", "AI", "AW", "BB", "BL", "BM", "BQ", "BS", "BZ", "CA", "CR", "CU", "CW", "DM",
+  "DO", "GD", "GL", "GP", "GT", "HN", "HT", "JM", "KN", "KY", "LC", "MF", "MQ", "MS",
+  "MX", "NI", "PA", "PM", "PR", "SV", "SX", "TC", "TT", "US", "VC", "VG", "VI"
+]));
 const GLOBAL_HUB_PRIORITY = Object.freeze([
   "LAX", "JFK", "DFW", "MIA",
   "LHR", "CDG", "FRA", "AMS",
@@ -139,15 +148,71 @@ const FLAGSHIP_ROUTE_CONSTRAINTS = Object.freeze([
     originContinent: "AMERICAS",
     destinationContinent: "OCEANIA",
     originIata: "SCL",
-    hubIataChain: ["LAX"],
+    hubIataChain: ["NRT"],
     destinationIata: "SYD"
   },
   {
     originContinent: "OCEANIA",
     destinationContinent: "AMERICAS",
     originIata: "SYD",
-    hubIataChain: ["LAX"],
+    hubIataChain: ["NRT"],
     destinationIata: "SCL"
+  },
+  {
+    originContinent: "AMERICAS",
+    destinationContinent: "ASIA",
+    originIata: "LAX",
+    hubIataChain: ["AMS"],
+    destinationIata: "ICN"
+  },
+  {
+    originContinent: "ASIA",
+    destinationContinent: "AMERICAS",
+    originIata: "ICN",
+    hubIataChain: ["AMS"],
+    destinationIata: "LAX"
+  },
+  {
+    originContinent: "EUROPE",
+    destinationContinent: "OCEANIA",
+    originIata: "LHR",
+    hubIataChain: ["SIN"],
+    destinationIata: "SYD"
+  },
+  {
+    originContinent: "OCEANIA",
+    destinationContinent: "EUROPE",
+    originIata: "SYD",
+    hubIataChain: ["SIN"],
+    destinationIata: "LHR"
+  },
+  {
+    originContinent: "EUROPE",
+    destinationContinent: "AFRICA",
+    originIata: "CDG",
+    hubIataChain: ["DXB"],
+    destinationIata: "JNB"
+  },
+  {
+    originContinent: "AFRICA",
+    destinationContinent: "EUROPE",
+    originIata: "JNB",
+    hubIataChain: ["DXB"],
+    destinationIata: "CDG"
+  },
+  {
+    originContinent: "ASIA",
+    destinationContinent: "OCEANIA",
+    originIata: "ICN",
+    hubIataChain: ["LAX"],
+    destinationIata: "SYD"
+  },
+  {
+    originContinent: "OCEANIA",
+    destinationContinent: "ASIA",
+    originIata: "SYD",
+    hubIataChain: ["LAX"],
+    destinationIata: "ICN"
   }
 ]);
 
@@ -496,7 +561,7 @@ export function createRouteSimulationController({
     recommendedRoutesByPair: new Map()
   };
 
-  const routeDataService = createRouteDataService();
+  const routeDataService = createRouteDataService({ sourceMode: "remote" });
 
   const routeState = {
     path: null,
@@ -531,6 +596,8 @@ export function createRouteSimulationController({
   const tempTangent = new THREE.Vector3();
   const tempTarget = new THREE.Vector3();
   const tempUp = new THREE.Vector3();
+  const tempAircraftWorldPosition = new THREE.Vector3();
+  const tempAircraftWorldTangent = new THREE.Vector3();
   const tempUnit = new THREE.Vector3();
   const tempGreatCircleOrtho = new THREE.Vector3();
   const tempGreatCircleFallbackAxis = new THREE.Vector3();
@@ -984,9 +1051,7 @@ export function createRouteSimulationController({
       if (hasLayoverAfterLeg) {
         const layoverStart = normalizedCursor;
         const layoverShare = LAYOVER_DWELL_SECONDS / BASE_ROUTE_CYCLE_SECONDS;
-        const layoverEnd = legIndex === route.legs.length - 2
-          ? 1
-          : Math.min(1, layoverStart + layoverShare);
+        const layoverEnd = Math.min(1, layoverStart + layoverShare);
 
         timelineSegments.push({
           type: "layover",
@@ -1253,6 +1318,62 @@ export function createRouteSimulationController({
       || finalLegDistanceKm <= MIN_FINAL_LEG_DISTANCE_KM;
   }
 
+  function hasLayover(route) {
+    return (route?.totals?.layoverCount ?? 0) >= 1;
+  }
+
+  function isIntercontinentalLeg(leg) {
+    if (!leg) {
+      return false;
+    }
+
+    const originContinentCode = getAirportContinentCode(leg.origin);
+    const destinationContinentCode = getAirportContinentCode(leg.destination);
+    const originIntercontinentalBucket = getIntercontinentalBucket(leg.origin, originContinentCode);
+    const destinationIntercontinentalBucket = getIntercontinentalBucket(leg.destination, destinationContinentCode);
+    return Boolean(
+      originIntercontinentalBucket
+      && destinationIntercontinentalBucket
+      && originIntercontinentalBucket !== destinationIntercontinentalBucket
+    );
+  }
+
+  function getIntercontinentalBucket(airport, continentCode) {
+    if (continentCode !== "AMERICAS") {
+      return continentCode;
+    }
+
+    const countryCode = String(airport?.countryCode ?? "").trim().toUpperCase();
+    if (SOUTH_AMERICA_COUNTRY_CODES.has(countryCode)) {
+      return "AMERICAS_SOUTH";
+    }
+    if (NORTH_AMERICA_COUNTRY_CODES.has(countryCode)) {
+      return "AMERICAS_NORTH";
+    }
+
+    const latitude = Number(airport?.latitude);
+    if (Number.isFinite(latitude) && latitude < 0) {
+      return "AMERICAS_SOUTH";
+    }
+    return "AMERICAS_NORTH";
+  }
+
+  function hasOnlyIntercontinentalLegs(route) {
+    const legs = Array.isArray(route?.legs) ? route.legs : [];
+    if (legs.length === 0) {
+      return false;
+    }
+    return legs.every((leg) => isIntercontinentalLeg(leg));
+  }
+
+  function isStrictRecommendedCandidate(route) {
+    return (
+      hasLayover(route)
+      && hasOnlyIntercontinentalLegs(route)
+      && !isLayoverTooCloseToDestination(route)
+    );
+  }
+
   function buildRecommendedRoutesForPair(originContinentCode, destinationContinentCode) {
     if (!originContinentCode || !destinationContinentCode || originContinentCode === destinationContinentCode) {
       return [];
@@ -1264,190 +1385,20 @@ export function createRouteSimulationController({
       return cached;
     }
 
-    const originCandidates = getPreferredAirportsForContinent(originContinentCode, 4);
-    const destinationCandidates = getPreferredAirportsForContinent(destinationContinentCode, 4);
-
-    if (originCandidates.length === 0 || destinationCandidates.length === 0) {
-      routeLibrary.recommendedRoutesByPair.set(pairKey, []);
-      return [];
-    }
-
-    const oneStopHubs = uniqueByIcao([
-      ...getHubAirportsForContinent(originContinentCode, 8),
-      ...getHubAirportsForContinent(destinationContinentCode, 8),
-      ...GLOBAL_HUB_PRIORITY.map((iata) => routeLibrary.airportByIata.get(iata)).filter(Boolean)
-    ]).filter((airport) => !!airport);
-
-    const originHubs = getHubAirportsForContinent(originContinentCode, 4);
-    const destinationHubs = getHubAirportsForContinent(destinationContinentCode, 4);
-    const middleHubs = uniqueByIcao(
-      GLOBAL_HUB_PRIORITY
-        .map((iata) => routeLibrary.airportByIata.get(iata))
-        .filter(Boolean)
-    ).slice(0, 4);
-
-    const candidates = new Map();
-
-    function addCandidate(waypoints, scoreBias = 0) {
-      if (!Array.isArray(waypoints) || waypoints.length < 2) {
-        return;
-      }
-
-      const routeWaypoints = waypoints.filter(Boolean);
-      if (routeWaypoints.length < 2 || routeWaypoints.length - 2 > MAX_LAYOVERS) {
-        return;
-      }
-
-      for (let index = 1; index < routeWaypoints.length; index += 1) {
-        if (routeWaypoints[index - 1].icao === routeWaypoints[index].icao) {
-          return;
-        }
-      }
-
-      const signature = routeWaypoints.map((airport) => airport.iata).join("-");
-      const builtRoute = buildRouteFromWaypoints(routeWaypoints, {
-        idPrefix: `recommended-${originContinentCode.toLowerCase()}-${destinationContinentCode.toLowerCase()}`,
-        routeMode: ROUTE_MODE_RECOMMENDED
-      });
-      if (!builtRoute) {
-        return;
-      }
-
-      if (isLayoverTooCloseToDestination(builtRoute)) {
-        return;
-      }
-
-      const hubPenalty = computeHubPenalty(builtRoute, originContinentCode, destinationContinentCode);
-      const legStretchPenalty = builtRoute.legs.reduce(
-        (sum, leg) => sum + Math.max(0, leg.greatCircleDistanceKm - 12000) * 0.08,
-        0
-      );
-      const score = builtRoute.totals.greatCircleDistanceKm
-        + (builtRoute.totals.layoverCount * 900)
-        + hubPenalty
-        + legStretchPenalty
-        + scoreBias;
-
-      const previous = candidates.get(signature);
-      if (!previous || score < previous.score) {
-        candidates.set(signature, { route: builtRoute, score });
-      }
-    }
-
-    for (const constraint of FLAGSHIP_ROUTE_CONSTRAINTS) {
-      if (
-        constraint.originContinent !== originContinentCode
-        || constraint.destinationContinent !== destinationContinentCode
-      ) {
-        continue;
-      }
-
-      const airports = [
-        routeLibrary.airportByIata.get(constraint.originIata),
-        ...(constraint.hubIataChain ?? []).map((iata) => routeLibrary.airportByIata.get(iata)),
-        routeLibrary.airportByIata.get(constraint.destinationIata)
-      ];
-      if (airports.every(Boolean)) {
-        addCandidate(airports, -6000);
-      }
-    }
-
-    for (const originAirport of originCandidates.slice(0, 3)) {
-      for (const destinationAirport of destinationCandidates.slice(0, 3)) {
-        addCandidate([originAirport, destinationAirport], 2200);
-
-        for (const hubAirport of oneStopHubs.slice(0, 12)) {
-          addCandidate([originAirport, hubAirport, destinationAirport], 360);
-        }
-
-        for (const firstHub of originHubs.slice(0, 3)) {
-          for (const secondHub of destinationHubs.slice(0, 3)) {
-            if (firstHub.icao === secondHub.icao) {
-              continue;
-            }
-            addCandidate([originAirport, firstHub, secondHub, destinationAirport], 80);
-          }
-        }
-
-        for (const firstHub of originHubs.slice(0, 2)) {
-          for (const middleHub of middleHubs.slice(0, 3)) {
-            for (const secondHub of destinationHubs.slice(0, 2)) {
-              if (
-                firstHub.icao === middleHub.icao
-                || secondHub.icao === middleHub.icao
-                || firstHub.icao === secondHub.icao
-              ) {
-                continue;
-              }
-              addCandidate([originAirport, firstHub, middleHub, secondHub, destinationAirport], 120);
-            }
-          }
-        }
-      }
-    }
-
-    const recommendedRoutes = Array.from(candidates.values())
-      .sort((left, right) => (
-        left.score - right.score
-        || left.route.totals.layoverCount - right.route.totals.layoverCount
-        || left.route.totals.greatCircleDistanceKm - right.route.totals.greatCircleDistanceKm
-      ))
-      .slice(0, RECOMMENDED_ROUTE_LIMIT)
-      .map((entry, index) => ({
-        ...entry.route,
-        id: `recommended-${originContinentCode.toLowerCase()}-${destinationContinentCode.toLowerCase()}-${String(index + 1).padStart(2, "0")}-${entry.route.waypoints.map((airport) => airport.iata.toLowerCase()).join("-")}`,
-        recommendationScore: entry.score
-      }));
-
-    for (const constraint of FLAGSHIP_ROUTE_CONSTRAINTS) {
-      if (
-        constraint.originContinent !== originContinentCode
-        || constraint.destinationContinent !== destinationContinentCode
-      ) {
-        continue;
-      }
-
-      const flagshipIataChain = [
-        constraint.originIata,
-        ...(constraint.hubIataChain ?? []),
-        constraint.destinationIata
-      ];
-      const flagshipSignature = flagshipIataChain.map((iata) => iata.toLowerCase()).join("-");
-      const alreadyIncluded = recommendedRoutes.some((route) => (
-        route.waypoints.map((airport) => airport.iata.toLowerCase()).join("-") === flagshipSignature
-      ));
-      if (alreadyIncluded) {
-        continue;
-      }
-
-      const flagshipAirports = flagshipIataChain
-        .map((iata) => routeLibrary.airportByIata.get(iata))
-        .filter(Boolean);
-      if (flagshipAirports.length !== flagshipIataChain.length) {
-        continue;
-      }
-
-      const flagshipRoute = buildRouteFromWaypoints(flagshipAirports, {
-        idPrefix: `recommended-${originContinentCode.toLowerCase()}-${destinationContinentCode.toLowerCase()}-flagship`,
-        routeMode: ROUTE_MODE_RECOMMENDED
-      });
-      if (!flagshipRoute) {
-        continue;
-      }
-
-      if (isLayoverTooCloseToDestination(flagshipRoute)) {
-        continue;
-      }
-
-      recommendedRoutes.unshift({
-        ...flagshipRoute,
-        id: `recommended-${originContinentCode.toLowerCase()}-${destinationContinentCode.toLowerCase()}-00-${flagshipSignature}`,
-        recommendationScore: Number.NEGATIVE_INFINITY
-      });
-      if (recommendedRoutes.length > RECOMMENDED_ROUTE_LIMIT) {
-        recommendedRoutes.length = RECOMMENDED_ROUTE_LIMIT;
-      }
-    }
+    const recommendedRoutes = buildRecommendedRoutesForPairCore({
+      originContinentCode,
+      destinationContinentCode,
+      getPreferredAirportsForContinent,
+      getHubAirportsForContinent,
+      getAirportContinentCode,
+      airportByIata: routeLibrary.airportByIata,
+      resolveCountryName,
+      resolveCountryCentroid,
+      aircraftTypeByCode: routeLibrary.aircraftTypeByCode,
+      routeLimit: RECOMMENDED_ROUTE_LIMIT,
+      maxLayovers: MAX_LAYOVERS,
+      minFinalLegDistanceKm: MIN_FINAL_LEG_DISTANCE_KM
+    });
 
     routeLibrary.recommendedRoutesByPair.set(pairKey, recommendedRoutes);
     return recommendedRoutes;
@@ -1495,18 +1446,22 @@ export function createRouteSimulationController({
       routeState.selectedOriginContinentCode
     );
 
+    const destinationContinentOptions = routeLibrary.continentsWithAirports.length > 1
+      ? routeLibrary.continentsWithAirports.filter((continentCode) => (
+        continentCode !== routeState.selectedOriginContinentCode
+      ))
+      : routeLibrary.continentsWithAirports;
+
     const preferredDestinationContinent = (
       routeState.selectedDestinationContinentCode
-      && routeLibrary.continentsWithAirports.includes(routeState.selectedDestinationContinentCode)
+      && destinationContinentOptions.includes(routeState.selectedDestinationContinentCode)
     )
       ? routeState.selectedDestinationContinentCode
-      : (routeLibrary.continentsWithAirports.find((continentCode) => (
-        continentCode !== routeState.selectedOriginContinentCode
-      )) ?? routeState.selectedOriginContinentCode);
+      : (destinationContinentOptions[0] ?? routeState.selectedOriginContinentCode);
 
     routeState.selectedDestinationContinentCode = populateSelectOptions(
       ui.routeDestinationContinentEl,
-      routeLibrary.continentsWithAirports,
+      destinationContinentOptions,
       (continentCode) => continentCode,
       (continentCode) => i18n.t(getContinentLabelKey(continentCode)),
       preferredDestinationContinent
@@ -2164,7 +2119,7 @@ export function createRouteSimulationController({
     syncControlAvailability();
 
     try {
-      const initialLoad = await routeDataService.loadInitialDataset();
+      const initialLoad = await routeDataService.loadInitialDataset({ language: i18n.getLanguage() });
       routeState.loading = false;
 
       const applied = applyLibraryDataset(initialLoad.dataset, {
@@ -2235,6 +2190,33 @@ export function createRouteSimulationController({
     syncAircraftPose();
   }
 
+  function getAircraftTrackingPose(
+    positionTarget = tempAircraftWorldPosition,
+    tangentTarget = tempAircraftWorldTangent
+  ) {
+    if (!routeState.selectedRoute || !aircraft.visible) {
+      return null;
+    }
+
+    aircraft.getWorldPosition(positionTarget);
+    aircraft.getWorldDirection(tangentTarget);
+    if (tangentTarget.lengthSq() < 1e-8) {
+      tangentTarget.set(0, 0, 1);
+    } else {
+      tangentTarget.normalize();
+    }
+
+    return {
+      position: positionTarget,
+      tangent: tangentTarget
+    };
+  }
+
+  function getAircraftTrackingTarget(target = tempAircraftWorldPosition) {
+    const pose = getAircraftTrackingPose(target, tempAircraftWorldTangent);
+    return pose ? pose.position : null;
+  }
+
   function refreshLocalizedUi() {
     setDatasetStatus(routeState.datasetStatusKey, routeState.datasetStatusParams, routeState.datasetStatusError);
     if (routeState.libraryReady) {
@@ -2264,6 +2246,8 @@ export function createRouteSimulationController({
     setOriginCountry,
     setSpeedMultiplier,
     syncRouteUi,
+    getAircraftTrackingPose,
+    getAircraftTrackingTarget,
     togglePlayback,
     update
   };
