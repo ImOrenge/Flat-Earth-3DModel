@@ -1,5 +1,5 @@
 import * as THREE from "../../vendor/three.module.js";
-import { getGlobeBasisFromGeo } from "./geo-utils.js";
+import { createGlobeModelFrame, getGlobeBasisFromGeo } from "./geo-utils.js";
 
 const DEFAULT_FOG_COLOR = new THREE.Color(0x06101d);
 
@@ -197,6 +197,7 @@ function getOffsetGeoFromAzimuth(observerGeo, azimuthRadians, distanceDegrees) {
 export function createFirstPersonWorldController({
   scene,
   constants,
+  globeSurface,
   walkerState,
   renderState,
   drawSurfacePatch,
@@ -212,6 +213,11 @@ export function createFirstPersonWorldController({
   const root = new THREE.Group();
   root.visible = false;
   scene.add(root);
+  const globeFrame = createGlobeModelFrame(globeSurface, { space: "parent" });
+
+  function getGlobeFrame() {
+    return globeFrame;
+  }
 
   if (!keyLight.target.parent) {
     scene.add(keyLight.target);
@@ -919,7 +925,8 @@ export function createFirstPersonWorldController({
   function updateObserverFrame(observerGeo = getObserverGeo()) {
     const basis = getGlobeBasisFromGeo(
       observerGeo.latitudeDegrees,
-      observerGeo.longitudeDegrees
+      observerGeo.longitudeDegrees,
+      getGlobeFrame()
     );
     tempObserverEast.set(basis.east.x, basis.east.y, basis.east.z).normalize();
     tempObserverUp.set(basis.up.x, basis.up.y, basis.up.z).normalize();

@@ -32,7 +32,9 @@ export function setupInputHandlers(deps) {
     darkSunOcclusionState,
     controlTabButtons, cameraPresetButtons = [], cameraViewToggleEl = null, syncCameraViewToggleUi = () => {}, languageToggleEl, i18n, resetButton,
     exitFirstPersonMode, enterFirstPersonMode, walkerModeEl, resetWalkerButton,
-    routeSelectEl, routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl, celestialSpeedPresetButtons = [],
+    routeModeSelectEl, routeOriginContinentEl, routeDestinationContinentEl, routeRecommendedRouteEl,
+    routeOriginCountryEl, routeOriginAirportEl, routeDestinationCountryEl, routeDestinationAirportEl,
+    routeRefreshButton, routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl, celestialSpeedPresetButtons = [],
     celestialFullTrailEl, routePlaybackButton, routeResetButton, realitySyncEl,
     realityLiveEl, observationTimeEl, observationMinusHourButton, observationPlusHourButton,
     eclipseCatalogSourceEl, eclipseCatalogUploadEl, eclipseKindSelectEl, eclipseYearSelectEl,
@@ -591,18 +593,82 @@ export function setupInputHandlers(deps) {
     walkerApi.updateWalkerAvatar();
   
   });
-  
-  
-  
-  routeSelectEl.addEventListener("change", () => {
-  
-    routeSimulationApi.selectRoute(routeSelectEl.value);
-  
+
+
+
+  routeModeSelectEl?.addEventListener("change", () => {
+
+    routeSimulationApi.setRouteMode(routeModeSelectEl.value);
+
+  });
+
+
+
+  routeOriginContinentEl?.addEventListener("change", () => {
+
+    routeSimulationApi.setOriginContinent(routeOriginContinentEl.value);
+
+  });
+
+
+
+  routeDestinationContinentEl?.addEventListener("change", () => {
+
+    routeSimulationApi.setDestinationContinent(routeDestinationContinentEl.value);
+
+  });
+
+
+
+  routeRecommendedRouteEl?.addEventListener("change", () => {
+
+    routeSimulationApi.setRecommendedRoute(routeRecommendedRouteEl.value);
+
+  });
+
+
+
+  routeOriginCountryEl?.addEventListener("change", () => {
+
+    routeSimulationApi.setOriginCountry(routeOriginCountryEl.value);
+
+  });
+
+
+
+  routeOriginAirportEl?.addEventListener("change", () => {
+
+    routeSimulationApi.setOriginAirport(routeOriginAirportEl.value);
+
+  });
+
+
+
+  routeDestinationCountryEl?.addEventListener("change", () => {
+
+    routeSimulationApi.setDestinationCountry(routeDestinationCountryEl.value);
+
+  });
+
+
+
+  routeDestinationAirportEl?.addEventListener("change", () => {
+
+    routeSimulationApi.setDestinationAirport(routeDestinationAirportEl.value);
+
+  });
+
+
+
+  routeRefreshButton?.addEventListener("click", () => {
+
+    void routeSimulationApi.refreshDataset({ forceRemote: true });
+
   });
   
   
   
-  routeSpeedEl.addEventListener("input", () => {
+  routeSpeedEl?.addEventListener("input", () => {
   
     routeSimulationApi.setSpeedMultiplier(routeSpeedEl.value);
   
@@ -672,7 +738,7 @@ export function setupInputHandlers(deps) {
   
   
   
-  routePlaybackButton.addEventListener("click", () => {
+  routePlaybackButton?.addEventListener("click", () => {
   
     routeSimulationApi.togglePlayback();
   
@@ -680,7 +746,7 @@ export function setupInputHandlers(deps) {
   
   
   
-  routeResetButton.addEventListener("click", () => {
+  routeResetButton?.addEventListener("click", () => {
   
     routeSimulationApi.resetProgress();
   

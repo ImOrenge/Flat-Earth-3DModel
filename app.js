@@ -1,4 +1,4 @@
-import * as THREE from "./vendor/three.module.js";
+﻿import * as THREE from "./vendor/three.module.js";
 import {
   getGeoFromProjectedPosition,
   projectedRadiusFromLatitude
@@ -12,12 +12,13 @@ import {
   getSolarAltitudeFactor,
 } from "./modules/astronomy-utils.js?v=20260326-seasonal-ecliptic1";
 import { createAstronomyController } from "./modules/astronomy-controller.js?v=20260325-eclipse-selector1";
-import { createCameraController } from "./modules/camera-controller.js?v=20260328-mobiletouch1";
+import { createCameraController } from "./modules/camera-controller.js?v=20260406-globecam1";
 import { createCelestialTrackingCameraController } from "./modules/celestial-tracking-camera-controller.js?v=20260320-constellation-precession1";
 import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js?v=20260312-darksun-eclipse1";
 import { createI18n } from "./modules/i18n.js?v=20260327-mobilehud1";
 import { createMagneticFieldController } from "./modules/magnetic-field-controller.js?v=20260314-magnetic-pinecone3";
-import { createRouteSimulationController } from "./modules/route-simulation-controller.js";
+import { createModelComparisonController } from "./modules/model-comparison-controller.js?v=20260329-compare1";
+import { createRouteSimulationController } from "./modules/route-simulation-controller.js?v=20260406-mainremote5";
 import { createTextureManager } from "./modules/texture-manager.js?v=20260311-gpu-daynight";
 import { createWalkerController } from "./modules/walker-controller.js?v=20260324-moon-cycle28";
 
@@ -25,7 +26,7 @@ import * as constants from "./modules/constants.js";
 import { createEclipseController } from "./modules/eclipse-controller.js?v=20260320-reality-eclipse-sync2";
 import { createCelestialVisualsController } from "./modules/celestial-visuals-controller.js?v=20260321-sunset5";
 import { createConstellationTabController } from "./modules/constellation-tab-controller.js?v=20260320-constellation-precession1";
-import { setupInputHandlers } from "./modules/input-handler.js?v=20260328-mobileratio1";
+import { setupInputHandlers } from "./modules/input-handler.js?v=20260405-mainroutes1";
 import { createRocketController, SPACEPORTS } from "./modules/rocket-controller.js?v=20260319-parabola";
 const {
   DEFAULT_MAP_PATH,
@@ -436,17 +437,28 @@ const walkerCoordinatesEl = document.getElementById("walker-coordinates");
 const walkerLightEl = document.getElementById("walker-light");
 const resetWalkerButton = document.getElementById("reset-walker");
 const routeDatasetStatusEl = document.getElementById("route-dataset-status");
-const routeSelectEl = document.getElementById("route-select");
+const routeModeSelectEl = document.getElementById("route-mode-select");
+const routeRecommendedPanelEl = document.getElementById("route-recommended-panel");
+const routeAdvancedPanelEl = document.getElementById("route-advanced-panel");
+const routeOriginContinentEl = document.getElementById("route-origin-continent");
+const routeDestinationContinentEl = document.getElementById("route-destination-continent");
+const routeRecommendedRouteEl = document.getElementById("route-recommended-route");
+const routeOriginCountryEl = document.getElementById("route-origin-country");
+const routeOriginAirportEl = document.getElementById("route-origin-airport");
+const routeDestinationCountryEl = document.getElementById("route-destination-country");
+const routeDestinationAirportEl = document.getElementById("route-destination-airport");
 const routeSpeedEl = document.getElementById("route-speed");
 const routeSpeedValueEl = document.getElementById("route-speed-value");
 const routePlaybackButton = document.getElementById("route-playback");
 const routeResetButton = document.getElementById("route-reset");
+const routeTrackCameraButtonEl = document.getElementById("route-track-camera");
 const routeSummaryEl = document.getElementById("route-summary");
 const routeLegEl = document.getElementById("route-leg");
 const routeAircraftEl = document.getElementById("route-aircraft");
 const routeOriginEl = document.getElementById("route-origin");
 const routeDestinationEl = document.getElementById("route-destination");
 const routeCountriesEl = document.getElementById("route-countries");
+const routeLayoversEl = document.getElementById("route-layovers");
 const routeDurationEl = document.getElementById("route-duration");
 const routeProgressEl = document.getElementById("route-progress");
 const routeGeoSummaryEl = document.getElementById("route-geo-summary");
@@ -1287,6 +1299,7 @@ const {
   stage,
   scalableStage,
   globeStage,
+  globeSurface,
   topMaterial,
   sideMaterial,
   bottomMaterial,
@@ -1773,28 +1786,82 @@ const firstPersonWorldApi = createFirstPersonWorldController({
 });
 
 const routeSimulationApi = createRouteSimulationController({
+  cameraState,
   constants,
+  globeStage,
+  globeSurface,
   i18n,
   scalableStage,
   ui: {
     routeAircraftEl,
+    routeAdvancedPanelEl,
     routeCountriesEl,
     routeDatasetStatusEl,
+    routeDestinationAirportEl,
+    routeDestinationContinentEl,
+    routeDestinationCountryEl,
     routeDestinationEl,
     routeDurationEl,
     routeGeoSummaryEl,
     routeLegEl,
+    routeLayoversEl,
+    routeModeSelectEl,
     routeOriginEl,
+    routeOriginAirportEl,
+    routeOriginContinentEl,
+    routeOriginCountryEl,
     routePlaybackButton,
     routeProgressEl,
+    routeRecommendedPanelEl,
+    routeRecommendedRouteEl,
     routeResetButton,
-    routeSelectEl,
     routeSpeedEl,
     routeSpeedValueEl,
     routeSummaryEl
   }
 });
 
+const routeCameraTrackingState = {
+  enabled: false,
+  applied: false
+};
+const ROUTE_CAMERA_TRACKING_COPY = {
+  en: {
+    start: "Track Aircraft",
+    stop: "Stop Tracking",
+    summary: "Tracking the aircraft along the selected route."
+  },
+  ko: {
+    start: "항공기 추적",
+    stop: "추적 중지",
+    summary: "선택한 항로를 따라 항공기를 추적 중입니다."
+  }
+};
+const routeCameraTrackingTarget = new THREE.Vector3();
+const routeCameraTrackingTangent = new THREE.Vector3();
+const routeCameraTrackingLocalTangent = new THREE.Vector3();
+const routeCameraTrackingGlobeWorldQuaternion = new THREE.Quaternion();
+const routeCameraTrackingGlobeWorldQuaternionInverse = new THREE.Quaternion();
+const ROUTE_CAMERA_TRACKING_GLOBE_ROTATION_LERP = 0.2;
+const ROUTE_CAMERA_TRACKING_GLOBE_RESET_LERP = 0.12;
+
+function setEarthModelViewAndSyncRoutes(mode) {
+  const appliedMode = setEarthModelView(mode);
+  // Keep selected route projection/layer visibility in sync after model switches.
+  routeSimulationApi.update(0);
+  routeSimulationApi.syncRouteUi();
+  return appliedMode;
+}
+
+comparisonApi = createModelComparisonController({
+  i18n,
+  constants,
+  panelEl: comparisonPanelEl,
+  cameraState,
+  cameraApi,
+  setEarthModelView: setEarthModelViewAndSyncRoutes,
+});
+comparisonApi.initialize();
 let celestialTrackingCameraApi;
 
 function focusCameraOnConstellation(entry) {
@@ -1878,6 +1945,7 @@ constellationTabApi = createConstellationTabController({
 i18n.subscribe(() => {
   constellationTabApi.refreshLocalizedUi();
   syncHudSideCard();
+  syncRouteCameraTrackingUi();
 });
 
 constellationTabApi.initialize();
@@ -1937,21 +2005,21 @@ const ROCKET_CAMERA_COPY = {
     ended: "Tracking finished for the {launchpad} launch. Stage another rocket to preview a pad again."
   },
   ko: {
-    idle: "발사대를 선택하고 로켓을 스탠바이로 배치하면 발사장 카메라 미리보기가 시작됩니다.",
-    standby: "{launchpad}에 스탠바이 카메라를 고정했습니다. 준비되면 발사하세요.",
-    standbyButton: "스탠바이 배치",
+    idle: "諛쒖궗?瑜??좏깮?섍퀬 濡쒖폆???ㅽ깲諛붿씠濡?諛곗튂?섎㈃ 諛쒖궗??移대찓??誘몃━蹂닿린媛 ?쒖옉?⑸땲??",
+    standby: "{launchpad}???ㅽ깲諛붿씠 移대찓?쇰? 怨좎젙?덉뒿?덈떎. 以鍮꾨릺硫?諛쒖궗?섏꽭??",
+    standbyButton: "?ㅽ깲諛붿씠 諛곗튂",
     states: {
-      FALL: "낙하",
-      LAUNCH: "발사",
-      PITCHOVER: "자세 전환",
-      SCRAPE: "궁창 접촉",
-      SEPARATION: "단 분리",
-      STAGE1: "1단 연소",
-      STAGE2: "2단 연소",
-      STANDBY: "스탠바이"
+      FALL: "?숉븯",
+      LAUNCH: "諛쒖궗",
+      PITCHOVER: "?먯꽭 ?꾪솚",
+      SCRAPE: "沅곸갹 ?묒큺",
+      SEPARATION: "??遺꾨━",
+      STAGE1: "1???곗냼",
+      STAGE2: "2???곗냼",
+      STANDBY: "?ㅽ깲諛붿씠"
     },
-    tracking: "{launchpad} 발사를 {stage} 단계까지 추적 중입니다. 드래그와 줌은 계속 사용할 수 있습니다.",
-    ended: "{launchpad} 발사 추적이 종료되었습니다. 다음 발사를 미리 보려면 다시 스탠바이를 배치하세요."
+    tracking: "{launchpad} 諛쒖궗瑜?{stage} ?④퀎源뚯? 異붿쟻 以묒엯?덈떎. ?쒕옒洹몄? 以뚯? 怨꾩냽 ?ъ슜?????덉뒿?덈떎.",
+    ended: "{launchpad} 諛쒖궗 異붿쟻??醫낅즺?섏뿀?듬땲?? ?ㅼ쓬 諛쒖궗瑜?誘몃━ 蹂대젮硫??ㅼ떆 ?ㅽ깲諛붿씠瑜?諛곗튂?섏꽭??"
   }
 };
 
@@ -2174,6 +2242,172 @@ function syncRocketCameraAndUi() {
     : copy.idle;
 }
 
+function getRouteCameraTrackingCopy() {
+  return ROUTE_CAMERA_TRACKING_COPY[i18n.getLanguage()] ?? ROUTE_CAMERA_TRACKING_COPY.en;
+}
+
+function getRouteTrackingPose() {
+  const pose = routeSimulationApi.getAircraftTrackingPose?.(
+    routeCameraTrackingTarget,
+    routeCameraTrackingTangent
+  );
+  if (pose?.position) {
+    return pose;
+  }
+
+  const target = routeSimulationApi.getAircraftTrackingTarget?.(routeCameraTrackingTarget);
+  if (!target) {
+    return null;
+  }
+
+  return {
+    position: target,
+    tangent: null
+  };
+}
+
+function syncRouteTrackingGlobeRotation(pose = null, { resetOnly = false } = {}) {
+  if (!globeStage) {
+    return;
+  }
+
+  const spherical = cameraState.earthModelView === "spherical";
+  if (!spherical || resetOnly || !pose?.tangent) {
+    globeStage.rotation.y = lerpTrackingAngle(
+      globeStage.rotation.y,
+      0,
+      ROUTE_CAMERA_TRACKING_GLOBE_RESET_LERP
+    );
+    return;
+  }
+
+  routeCameraTrackingLocalTangent.copy(pose.tangent);
+  globeStage.getWorldQuaternion(routeCameraTrackingGlobeWorldQuaternion);
+  routeCameraTrackingGlobeWorldQuaternionInverse
+    .copy(routeCameraTrackingGlobeWorldQuaternion)
+    .invert();
+  routeCameraTrackingLocalTangent
+    .applyQuaternion(routeCameraTrackingGlobeWorldQuaternionInverse);
+  routeCameraTrackingLocalTangent.y = 0;
+
+  if (routeCameraTrackingLocalTangent.lengthSq() < 1e-8) {
+    return;
+  }
+
+  routeCameraTrackingLocalTangent.normalize();
+  const headingRadians = Math.atan2(
+    routeCameraTrackingLocalTangent.x,
+    routeCameraTrackingLocalTangent.z
+  );
+  const desiredRotation = wrapTrackingAngle(-headingRadians);
+  globeStage.rotation.y = lerpTrackingAngle(
+    globeStage.rotation.y,
+    desiredRotation,
+    ROUTE_CAMERA_TRACKING_GLOBE_ROTATION_LERP
+  );
+}
+
+function syncRouteCameraTrackingUi() {
+  if (!routeTrackCameraButtonEl) {
+    return;
+  }
+
+  const pose = getRouteTrackingPose();
+  const copy = getRouteCameraTrackingCopy();
+  const canTrack = Boolean(pose?.position);
+
+  if (!canTrack && routeCameraTrackingState.enabled) {
+    routeCameraTrackingState.enabled = false;
+  }
+
+  routeTrackCameraButtonEl.disabled = !canTrack;
+  routeTrackCameraButtonEl.textContent = routeCameraTrackingState.enabled ? copy.stop : copy.start;
+  routeTrackCameraButtonEl.classList.toggle("active", routeCameraTrackingState.enabled);
+}
+
+function setRouteCameraTrackingEnabled(enabled) {
+  const nextEnabled = Boolean(enabled);
+  if (routeCameraTrackingState.enabled === nextEnabled) {
+    syncRouteCameraTrackingUi();
+    return;
+  }
+
+  routeCameraTrackingState.enabled = nextEnabled;
+  if (!nextEnabled && routeCameraTrackingState.applied && !rocketCameraUiState.engaged) {
+    celestialTrackingCameraApi.clearCustomTracking({ immediate: false });
+    routeCameraTrackingState.applied = false;
+  }
+  if (!nextEnabled) {
+    syncRouteTrackingGlobeRotation(null, { resetOnly: true });
+  }
+
+  if (nextEnabled) {
+    cameraState.targetTrackingAzimuth = constants.CAMERA_TRACKING_DEFAULT_AZIMUTH;
+    cameraState.targetTrackingElevation = THREE.MathUtils.clamp(
+      constants.CAMERA_TRACKING_DEFAULT_ELEVATION * 0.9,
+      constants.CAMERA_TRACKING_MIN_ELEVATION,
+      constants.CAMERA_TRACKING_MAX_ELEVATION
+    );
+    cameraState.targetTrackingDistance = THREE.MathUtils.clamp(
+      constants.CAMERA_TRACKING_DEFAULT_DISTANCE * 0.92,
+      constants.CAMERA_TRACKING_MIN_DISTANCE,
+      constants.CAMERA_TRACKING_MAX_DISTANCE
+    );
+    cameraState.targetTrackingGroundLocked = false;
+    cameraState.targetTrackingPositionLocked = false;
+    cameraApi.clampCamera();
+  }
+
+  syncRouteCameraTrackingUi();
+}
+
+function syncRouteCameraTracking() {
+  if (!routeCameraTrackingState.enabled) {
+    if (routeCameraTrackingState.applied && !rocketCameraUiState.engaged) {
+      celestialTrackingCameraApi.clearCustomTracking({ immediate: false });
+      routeCameraTrackingState.applied = false;
+    }
+    syncRouteTrackingGlobeRotation(null, { resetOnly: true });
+    syncRouteCameraTrackingUi();
+    return;
+  }
+
+  const pose = getRouteTrackingPose();
+  if (!pose?.position) {
+    routeCameraTrackingState.enabled = false;
+    if (routeCameraTrackingState.applied && !rocketCameraUiState.engaged) {
+      celestialTrackingCameraApi.clearCustomTracking({ immediate: false });
+      routeCameraTrackingState.applied = false;
+    }
+    syncRouteTrackingGlobeRotation(null, { resetOnly: true });
+    syncRouteCameraTrackingUi();
+    return;
+  }
+
+  if (rocketCameraUiState.engaged) {
+    routeCameraTrackingState.applied = false;
+    syncRouteTrackingGlobeRotation(null, { resetOnly: true });
+    syncRouteCameraTrackingUi();
+    return;
+  }
+
+  syncRouteTrackingGlobeRotation(pose);
+  const copy = getRouteCameraTrackingCopy();
+  celestialTrackingCameraApi.setTrackedCustomTargetResolver(
+    () => getRouteTrackingPose()?.position ?? null,
+    copy.summary,
+    { immediate: !routeCameraTrackingState.applied }
+  );
+  routeCameraTrackingState.applied = true;
+  syncRouteCameraTrackingUi();
+}
+
+if (routeTrackCameraButtonEl) {
+  routeTrackCameraButtonEl.addEventListener("click", () => {
+    setRouteCameraTrackingEnabled(!routeCameraTrackingState.enabled);
+  });
+}
+
 
   const eclipseApi = createEclipseController({
     constants, i18n, ui, orbitSun, orbitDarkSun, observerSun, observerDarkSun, orbitSunBody,
@@ -2336,7 +2570,9 @@ function syncRocketCameraAndUi() {
     resetDarkSunOcclusionMotion: eclipseApi.resetDarkSunOcclusionMotion, darkSunOcclusionState,
     controlTabButtons, cameraPresetButtons, cameraViewToggleEl, syncCameraViewToggleUi, languageToggleEl, i18n, resetButton,
     exitFirstPersonMode, enterFirstPersonMode, walkerModeEl, resetWalkerButton,
-    routeSelectEl, routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl,
+    routeModeSelectEl, routeOriginContinentEl, routeDestinationContinentEl, routeRecommendedRouteEl,
+    routeOriginCountryEl, routeOriginAirportEl, routeDestinationCountryEl, routeDestinationAirportEl,
+    routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl,
     celestialSpeedPresetButtons,
     celestialFullTrailEl, routePlaybackButton, routeResetButton, realitySyncEl,
     realityLiveEl, observationTimeEl, observationMinusHourButton, observationPlusHourButton,
@@ -2670,6 +2906,7 @@ function animate() {
   walkerApi.updateWalkerPerspectiveGuides();
   walkerApi.updateFirstPersonOverlay();
   routeSimulationApi.update(deltaSeconds);
+  syncRouteCameraTracking();
   rocketApi.update(deltaSeconds);
   (function updateRocketTelemetry() {
     const panel = document.getElementById("rocket-telemetry-panel");
@@ -2903,7 +3140,7 @@ astronomyApi.enableRealityMode({ live: true, date: astronomyState.selectedDate }
 animate();
 runOnboarding();
 
-// ── 하단 패널 접기 ──────────────────────────
+// ?? ?섎떒 ?⑤꼸 ?묎린 ??????????????????????????
 (function initDetailPanelCollapse() {
   const btn = document.getElementById('detail-panel-collapse');
   const shell = btn && btn.closest('.detail-panel-shell');
@@ -2916,8 +3153,8 @@ runOnboarding();
   btn.addEventListener('click', () => {
     const isCollapsed = shell.classList.toggle('detail-panel-shell--collapsed');
     try { localStorage.setItem(STORAGE_KEY, isCollapsed ? '1' : '0'); } catch {}
-    btn.title = isCollapsed ? '패널 펼치기' : '패널 접기';
-    btn.setAttribute('aria-label', isCollapsed ? '패널 펼치기' : '패널 접기');
+    btn.title = isCollapsed ? "Expand details" : "Collapse details";
+    btn.setAttribute("aria-label", isCollapsed ? "Expand details" : "Collapse details");
   });
 })();
 

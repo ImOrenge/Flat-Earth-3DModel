@@ -1,4 +1,8 @@
 import * as THREE from "../../vendor/three.module.js";
+import {
+  createGlobeModelFrame,
+  getGlobePositionFromGeo
+} from "./geo-utils.js";
 import * as constants from "./constants.js?v=20260322-topview-zodiac4";
 
 const {
@@ -390,37 +394,49 @@ export function setupScene({ canvas }) {
 
   const globeGridGroup = new THREE.Group();
   globeGridGroup.position.copy(globeSurface.position);
+  globeGridGroup.quaternion.copy(globeSurface.quaternion);
+  globeGridGroup.scale.copy(globeSurface.scale);
   globeStage.add(globeGridGroup);
+  const globeGridFrame = createGlobeModelFrame(globeSurface, { space: "self" });
 
   function createLatitudeRing(latitudeDeg, color = 0x6ab7ff, opacity = 0.42) {
-    const latitudeRad = THREE.MathUtils.degToRad(latitudeDeg);
-    const radius = globeRadius * Math.cos(latitudeRad);
-    if (radius < 0.0001) {
+    const points = [];
+    for (let longitudeDeg = -180; longitudeDeg < 180; longitudeDeg += 3) {
+      const position = getGlobePositionFromGeo(
+        latitudeDeg,
+        longitudeDeg,
+        globeGridFrame.radius,
+        globeGridFrame
+      );
+      points.push(new THREE.Vector3(position.x, position.y, position.z));
+    }
+
+    if (points.length < 4) {
       return null;
     }
-    const y = globeRadius * Math.sin(latitudeRad);
-    const geometry = new THREE.TorusGeometry(radius, scaleDimension(0.006), 8, 92);
-    const material = new THREE.MeshBasicMaterial({
+
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    const material = new THREE.LineBasicMaterial({
       color,
       transparent: true,
       opacity,
       depthWrite: false,
+      depthTest: true
     });
-    const ring = new THREE.Mesh(geometry, material);
-    ring.rotation.x = Math.PI / 2;
-    ring.position.y = y;
-    return ring;
+
+    return new THREE.LineLoop(geometry, material);
   }
 
   function createMeridian(longitudeDeg, color = 0xa2d9ff, opacity = 0.35) {
     const points = [];
-    const lonRad = THREE.MathUtils.degToRad(longitudeDeg);
     for (let latDeg = -90; latDeg <= 90; latDeg += 3) {
-      const latRad = THREE.MathUtils.degToRad(latDeg);
-      const x = globeRadius * Math.cos(latRad) * Math.cos(lonRad);
-      const y = globeRadius * Math.sin(latRad);
-      const z = globeRadius * Math.cos(latRad) * Math.sin(lonRad);
-      points.push(new THREE.Vector3(x, y, z));
+      const position = getGlobePositionFromGeo(
+        latDeg,
+        longitudeDeg,
+        globeGridFrame.radius,
+        globeGridFrame
+      );
+      points.push(new THREE.Vector3(position.x, position.y, position.z));
     }
     const geometry = new THREE.BufferGeometry().setFromPoints(points);
     const material = new THREE.LineBasicMaterial({

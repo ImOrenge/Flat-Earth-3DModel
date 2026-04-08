@@ -1,0 +1,14 @@
+[
+  { "alpha2": "AE", "alpha3": "ARE", "numeric": "784", "name": "United Arab Emirates", "region": "Asia" },
+  { "alpha2": "AU", "alpha3": "AUS", "numeric": "036", "name": "Australia", "region": "Oceania" },
+  { "alpha2": "BR", "alpha3": "BRA", "numeric": "076", "name": "Brazil", "region": "Americas" },
+  { "alpha2": "CL", "alpha3": "CHL", "numeric": "152", "name": "Chile", "region": "Americas" },
+  { "alpha2": "DE", "alpha3": "DEU", "numeric": "276", "name": "Germany", "region": "Europe" },
+  { "alpha2": "FR", "alpha3": "FRA", "numeric": "250", "name": "France", "region": "Europe" },
+  { "alpha2": "GB", "alpha3": "GBR", "numeric": "826", "name": "United Kingdom", "region": "Europe" },
+  { "alpha2": "JP", "alpha3": "JPN", "numeric": "392", "name": "Japan", "region": "Asia" },
+  { "alpha2": "KR", "alpha3": "KOR", "numeric": "410", "name": "South Korea", "region": "Asia" },
+  { "alpha2": "SG", "alpha3": "SGP", "numeric": "702", "name": "Singapore", "region": "Asia" },
+  { "alpha2": "US", "alpha3": "USA", "numeric": "840", "name": "United States", "region": "Americas" },
+  { "alpha2": "ZA", "alpha3": "ZAF", "numeric": "710", "name": "South Africa", "region": "Africa" }
+]
