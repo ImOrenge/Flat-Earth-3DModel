@@ -423,6 +423,8 @@ export function createRouteSimulationController({
   const tempTangent = new THREE.Vector3();
   const tempTarget = new THREE.Vector3();
   const tempUp = new THREE.Vector3();
+  const tempAircraftWorldPosition = new THREE.Vector3();
+  const tempAircraftWorldTangent = new THREE.Vector3();
   const tempGlobeCenter = new THREE.Vector3();
   const tempGreatCircleSample = new THREE.Vector3();
   const tempGreatCircleOrtho = new THREE.Vector3();
@@ -1714,6 +1716,38 @@ export function createRouteSimulationController({
     syncAircraftPose();
   }
 
+  function getAircraftTrackingPose(
+    positionTarget = tempAircraftWorldPosition,
+    tangentTarget = tempAircraftWorldTangent
+  ) {
+    if (!routeState.selectedRoute) {
+      return null;
+    }
+
+    const activeLayer = isSphericalView() ? globeLayer : flatLayer;
+    if (!activeLayer.aircraft.visible) {
+      return null;
+    }
+
+    activeLayer.aircraft.getWorldPosition(positionTarget);
+    activeLayer.aircraft.getWorldDirection(tangentTarget);
+    if (tangentTarget.lengthSq() < 1e-8) {
+      tangentTarget.set(0, 0, 1);
+    } else {
+      tangentTarget.normalize();
+    }
+
+    return {
+      position: positionTarget,
+      tangent: tangentTarget
+    };
+  }
+
+  function getAircraftTrackingTarget(target = tempAircraftWorldPosition) {
+    const pose = getAircraftTrackingPose(target, tempAircraftWorldTangent);
+    return pose ? pose.position : null;
+  }
+
   function refreshLocalizedUi() {
     setDatasetStatus(routeState.datasetStatusKey, routeState.datasetStatusParams, routeState.datasetStatusError);
     if (routeState.libraryReady) {
@@ -1742,6 +1776,8 @@ export function createRouteSimulationController({
     setDestinationAirport,
     setSpeedMultiplier,
     syncRouteUi,
+    getAircraftTrackingPose,
+    getAircraftTrackingTarget,
     togglePlayback,
     update
   };
