@@ -1066,34 +1066,34 @@ Object.assign(TRANSLATIONS.en, {
 });
 
 Object.assign(TRANSLATIONS.ko, {
-  tabComparison: "ï¿½ï¿½ ï¿½ï¿½",
-  hudComparisonSectionRoutes: "ï¿½×°ï¿½ï¿½ï¿½ï¿½",
-  hudComparisonSectionEclipses: "ï¿½ï¿½",
-  hudComparisonSectionOrbit: "ï¿½ï¿½ï¿½ï¿½",
-  hudComparisonSectionRotation: "ï¿½ï¿½ï¿½ï¿½",
-  comparisonSceneModelLabel: "3D ï¿½ï¿½ ï¿½ï¿½",
-  comparisonSceneFlat: "ï¿½ï¿½ï¿½",
-  comparisonSceneSpherical: "ï¿½ï¿½ï¿½ï¿½",
-  comparisonModelFlat: "ï¿½ï¿½ï¿½",
-  comparisonModelSpherical: "ï¿½ï¿½ï¿½ï¿½",
-  comparisonLoading: "ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Í¸ï¿½ ï¿½Ò·ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ô´Ï´ï¿½...",
-  comparisonNoData: "ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Í°ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï´ï¿½.",
-  comparisonLoadFailed: "ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Îµï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ß½ï¿½ï¿½Ï´ï¿½.",
-  comparisonBadgeContradiction: "ï¿½ï¿½ï¿½",
-  comparisonBadgeConsistent: "ï¿½ï¿½ï¿½ï¿½ ï¿½Ì³ï¿½",
-  comparisonEvidenceTitle: "ï¿½Ù°ï¿½ Ç¥",
-  comparisonTableLabel: "ï¿½×¸ï¿½",
-  comparisonTableObserved: "ï¿½ï¿½ï¿½ï¿½",
-  comparisonTableFlat: "ï¿½ï¿½ï¿½",
-  comparisonTableSpherical: "ï¿½ï¿½ï¿½ï¿½",
-  comparisonTableUnit: "ï¿½ï¿½ï¿½ï¿½",
-  comparisonCategoryRoutes: "ï¿½×°ï¿½ï¿½ï¿½ï¿½",
-  comparisonCategoryEclipses: "ï¿½Ï½Ä¡ï¿½ï¿½ï¿½ï¿½ï¿½",
-  comparisonCategoryOrbit: "ï¿½ï¿½ï¿½ï¿½(ï¿½ï¿½ï¿½ï¿½/ï¿½ï¿½ï¿½ï¿½/ï¿½ï¿½ï¿½ï¿½)",
-  comparisonCategoryRotation: "ï¿½ï¿½ï¿½ï¿½ï¿½Óµï¿½",
-  onboardingComparison: "ï¿½ï¿½ï¿½/ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ù°Å¸ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ï¼ï¿½ï¿½ï¿½.",
-  helpComparisonTitle: "ï¿½ï¿½ ï¿½ï¿½",
-  helpComparisonCopy: "ï¿½×°ï¿½ï¿½ï¿½ï¿½, ï¿½ï¿½, ï¿½ï¿½ï¿½ï¿½, ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ç¥ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ó°è°ªï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Õ´Ï´ï¿½. ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ù°ï¿½ Ç¥ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Õ´Ï´ï¿½."
+  tabComparison: "\uBAA8\uB378 \uBE44\uAD50",
+  hudComparisonSectionRoutes: "\uD56D\uACF5 \uACBD\uB85C",
+  hudComparisonSectionEclipses: "\uC2DD\uD604\uC0C1",
+  hudComparisonSectionOrbit: "\uADA4\uB3C4",
+  hudComparisonSectionRotation: "\uC790\uC804",
+  comparisonSceneModelLabel: "3D \uC7A5\uBA74 \uBAA8\uB378",
+  comparisonSceneFlat: "\uD3C9\uBA74",
+  comparisonSceneSpherical: "\uAD6C\uD615",
+  comparisonModelFlat: "\uD3C9\uBA74",
+  comparisonModelSpherical: "\uAD6C\uD615",
+  comparisonLoading: "\uBE44\uAD50 \uB370\uC774\uD130\uB97C \uBD88\uB7EC\uC624\uB294 \uC911\uC785\uB2C8\uB2E4...",
+  comparisonNoData: "\uBE44\uAD50 \uB370\uC774\uD130\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.",
+  comparisonLoadFailed: "\uBE44\uAD50 \uB370\uC774\uD130 \uB85C\uB529\uC5D0 \uC2E4\uD328\uD588\uC2B5\uB2C8\uB2E4.",
+  comparisonBadgeContradiction: "\uBAA8\uC21C",
+  comparisonBadgeConsistent: "\uD5C8\uC6A9 \uC624\uCC28 \uC774\uB0B4",
+  comparisonEvidenceTitle: "\uADFC\uAC70 \uD45C",
+  comparisonTableLabel: "\uD56D\uBAA9",
+  comparisonTableObserved: "\uAD00\uCE21",
+  comparisonTableFlat: "\uD3C9\uBA74",
+  comparisonTableSpherical: "\uAD6C\uD615",
+  comparisonTableUnit: "\uB2E8\uC704",
+  comparisonCategoryRoutes: "\uD56D\uACF5 \uACBD\uB85C",
+  comparisonCategoryEclipses: "\uC77C\uC2DD/\uC6D4\uC2DD",
+  comparisonCategoryOrbit: "\uADA4\uB3C4(\uACC4\uC808/\uC801\uC704/\uC77C\uC7A5)",
+  comparisonCategoryRotation: "\uC790\uC804 \uC18D\uB3C4",
+  onboardingComparison: "\uD3C9\uBA74/\uAD6C\uD615 \uBAA8\uB378 \uC810\uC218\uB97C \uB098\uB780\uD788 \uBE44\uAD50\uD574 \uBCF4\uC138\uC694.",
+  helpComparisonTitle: "\uBAA8\uB378 \uBE44\uAD50",
+  helpComparisonCopy: "\uD56D\uACF5 \uACBD\uB85C, \uC2DD\uD604\uC0C1, \uADA4\uB3C4, \uC790\uC804 \uC9C0\uD45C\uB97C \uACE0\uC815 \uC784\uACC4\uAC12\uC73C\uB85C \uBE44\uAD50\uD569\uB2C8\uB2E4. \uD328\uB110\uC5D0\uB294 \uC810\uC218\uC640 \uADFC\uAC70 \uD45C\uB9CC \uD45C\uC2DC\uD569\uB2C8\uB2E4."
 });
 
 Object.assign(TRANSLATIONS.en, {
@@ -1117,23 +1117,23 @@ Object.assign(TRANSLATIONS.en, {
 });
 
 Object.assign(TRANSLATIONS.ko, {
-  hudAstronomySectionSystem: "½Ã½ºÅÛ",
-  hudAstronomySectionSun: "ÅÂ¾ç",
-  hudAstronomySectionMoon: "´Þ",
-  hudAstronomySectionObserver: "°üÃøÀÚ",
-  astronomySystemTitle: "½Ã½ºÅÛ »óÅÂ",
-  astronomySunTitle: "ÅÂ¾ç ±âÁØ",
-  astronomyMoonTitle: "´Þ ±âÁØ",
-  astronomyObserverTitle: "°üÃøÀÚ ¹®¸Æ",
-  helpAstronomyCopy: "Ãµ¹® ÆÐ³ÎÀº ±¸Çü Áö±¸ ±âÁØÀ¸·Î ½Ã½ºÅÛ ½Ã°£, ÅÂ¾ç, ´Þ, ½Ä, °üÃøÀÚ Á¤º¸¸¦ °¢°¢ ºÐ¸®ÇØ º¸¿©ÁÝ´Ï´Ù.",
-  routeSummaryActiveText: "{origin}¿¡¼­ {destination}±îÁö ´ë±Ç °æ·Î¸¦ µû¸¨´Ï´Ù. °èÈ¹ ºí·Ï {duration}, ¼øÇ× {cruise}, °Å¸® {greatCircle}.",
-  routeGeoPathValue: "{originGeo} -> {destinationGeo} | ¼øÇ× {cruise} | ´ë±Ç {greatCircle}",
-  trackCameraOff: "ÀÚÀ¯ Ä«¸Þ¶ó",
-  trackCameraSun: "ÅÂ¾ç ÃßÀû",
-  trackCameraMoon: "´Þ ÃßÀû",
-  trackCameraSummaryOff: "ÀÚÀ¯ Ä«¸Þ¶ó ¸ðµåÀÔ´Ï´Ù. ±¸Çü Áö±¸ ÁÖÀ§¸¦ µå·¡±×·Î È¸ÀüÇÏ°í ÈÙ·Î ÁÜÇÒ ¼ö ÀÖ½À´Ï´Ù.",
-  trackCameraSummarySun: "ÅÂ¾ç ÃßÀû ¸ðµåÀÔ´Ï´Ù. ±¸Çü Ä«¸Þ¶ó ¿òÁ÷ÀÓÀº À¯ÁöÇÏ¸é¼­ ÅÂ¾çÀ» °è¼Ó Áß½É¿¡ µÓ´Ï´Ù.",
-  trackCameraSummaryMoon: "´Þ ÃßÀû ¸ðµåÀÔ´Ï´Ù. ±¸Çü Ä«¸Þ¶ó ¿òÁ÷ÀÓÀº À¯ÁöÇÏ¸é¼­ ´ÞÀ» °è¼Ó Áß½É¿¡ µÓ´Ï´Ù."
+  hudAstronomySectionSystem: "\uC2DC\uC2A4\uD15C",
+  hudAstronomySectionSun: "\uD0DC\uC591",
+  hudAstronomySectionMoon: "\uB2EC",
+  hudAstronomySectionObserver: "\uAD00\uCE21\uC790",
+  astronomySystemTitle: "\uC2DC\uC2A4\uD15C \uC0C1\uD0DC",
+  astronomySunTitle: "\uD0DC\uC591 \uAE30\uC900",
+  astronomyMoonTitle: "\uB2EC \uAE30\uC900",
+  astronomyObserverTitle: "\uAD00\uCE21\uC790 \uB9E5\uB77D",
+  helpAstronomyCopy: "\uCC9C\uBB38 \uD328\uB110\uC740 \uAD6C\uD615 \uB7F0\uD0C0\uC784 \uAE30\uC900\uC73C\uB85C \uC2DC\uC2A4\uD15C \uC2DC\uAC04 \uC81C\uC5B4, \uD0DC\uC591 \uAE30\uC900, \uB2EC \uAE30\uC900, \uC2DD \uC810\uAC80, \uAD00\uCE21\uC790 \uB9E5\uB77D\uC744 \uBD84\uB9AC\uD574 \uC81C\uACF5\uD569\uB2C8\uB2E4.",
+  routeSummaryActiveText: "{origin}\uC5D0\uC11C {destination}\uAE4C\uC9C0 \uB300\uAD8C \uACBD\uB85C\uB85C \uBE44\uD589\uD569\uB2C8\uB2E4. \uACC4\uD68D \uBE14\uB85D {duration}, \uC21C\uD56D {cruise}, \uAC70\uB9AC {greatCircle}.",
+  routeGeoPathValue: "{originGeo} -> {destinationGeo} | \uC21C\uD56D {cruise} | \uB300\uAD8C {greatCircle}",
+  trackCameraOff: "\uC790\uC720 \uCE74\uBA54\uB77C",
+  trackCameraSun: "\uD0DC\uC591 \uCD94\uC801",
+  trackCameraMoon: "\uB2EC \uCD94\uC801",
+  trackCameraSummaryOff: "\uC790\uC720 \uCE74\uBA54\uB77C \uBAA8\uB4DC\uC785\uB2C8\uB2E4. \uAD6C\uCCB4 \uC8FC\uC704\uB97C \uB4DC\uB798\uADF8\uB85C \uD68C\uC804\uD558\uACE0 \uD720\uB85C \uB3C5\uB9BD\uC801\uC73C\uB85C \uC90C\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.",
+  trackCameraSummarySun: "\uCD94\uC801 \uBAA8\uB4DC\uC5D0\uC11C\uB294 \uAD6C\uCCB4 \uCE74\uBA54\uB77C \uADA4\uB3C4\uB97C \uC720\uC9C0\uD558\uBA74\uC11C \uD0DC\uC591\uC744 \uD654\uBA74 \uC911\uC559\uC5D0 \uACE0\uC815\uD569\uB2C8\uB2E4.",
+  trackCameraSummaryMoon: "\uCD94\uC801 \uBAA8\uB4DC\uC5D0\uC11C\uB294 \uAD6C\uCCB4 \uCE74\uBA54\uB77C \uADA4\uB3C4\uB97C \uC720\uC9C0\uD558\uBA74\uC11C \uB2EC\uC744 \uD654\uBA74 \uC911\uC559\uC5D0 \uACE0\uC815\uD569\uB2C8\uB2E4."
 });
 
 Object.assign(TRANSLATIONS.en, {
@@ -1141,5 +1141,5 @@ Object.assign(TRANSLATIONS.en, {
 });
 
 Object.assign(TRANSLATIONS.ko, {
-  sunReferenceSummary: "ÅÂ¾ç ÇÏÀ§Á¡ {geo}. ÀûÀ§ {declination}. °üÃøÀÚ {observerGeo} ±âÁØ ÅÂ¾çÀº °íµµ {altitude}, ¹æÀ§ {azimuth}¿¡ ÀÖ½À´Ï´Ù."
+  sunReferenceSummary: "\uD0DC\uC591 \uD558\uC810 {geo}. \uC801\uC704 {declination}. \uAD00\uCE21\uC790 {observerGeo} \uAE30\uC900 \uD0DC\uC591\uC740 \uACE0\uB3C4 {altitude}, \uBC29\uC704\uAC01 {azimuth}\uC785\uB2C8\uB2E4."
 });
