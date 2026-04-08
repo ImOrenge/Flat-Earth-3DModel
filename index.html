@@ -365,7 +365,6 @@
             <button class="panel-tab active" data-control-tab="astronomy" type="button" data-i18n="tabAstronomy">Astronomy</button>
             <button class="panel-tab" data-control-tab="routes" type="button" data-i18n="tabRoutes">Route Control</button>
             <button class="panel-tab" data-control-tab="constellations" type="button" data-i18n="tabConstellations">Constellations</button>
-            <button class="panel-tab" data-control-tab="comparison" type="button" data-i18n="tabComparison">Model Compare</button>
             <button class="panel-tab" data-control-tab="rockets" type="button" data-i18n="tabRockets">Rockets</button>
           </div>
         </div>
@@ -894,54 +893,6 @@
                 <strong class="coord-value" id="zodiac-observation-date">-</strong>
               </div>
             </div>
-          </section>
-        </div>
-
-        <div class="panel-tab-content" data-control-panel="comparison" hidden>
-          <section class="comparison-mode-panel">
-            <div class="sync-row">
-              <span class="sync-title" data-i18n="comparisonSceneModelLabel">3D Scene Model</span>
-              <div class="comparison-scene-toggle" role="group" aria-label="comparison scene model">
-                <button class="button secondary compact-button active" type="button" data-comparison-scene-model="flat" data-i18n="comparisonSceneFlat">Flat</button>
-                <button class="button secondary compact-button" type="button" data-comparison-scene-model="spherical" data-i18n="comparisonSceneSpherical">Spherical</button>
-              </div>
-            </div>
-            <div class="comparison-total-grid">
-              <div class="coord-card">
-                <span class="coord-label" data-i18n="comparisonModelFlat">Flat</span>
-                <strong class="coord-value" data-comparison-total="flat">-</strong>
-              </div>
-              <div class="coord-card">
-                <span class="coord-label" data-i18n="comparisonModelSpherical">Spherical</span>
-                <strong class="coord-value" data-comparison-total="spherical">-</strong>
-              </div>
-            </div>
-            <p class="sync-copy subtle" data-comparison-timestamp data-i18n="comparisonLoading">Loading comparison data...</p>
-            <p class="sync-copy subtle error" data-comparison-error hidden></p>
-          </section>
-
-          <div class="hud-subtabs" data-hud-panel-tabs="comparison">
-            <button class="hud-subtab active" data-hud-panel-tab="routes" type="button"><span class="subtab-icon" aria-hidden="true">R</span><span data-i18n="hudComparisonSectionRoutes">Routes</span></button>
-            <button class="hud-subtab" data-hud-panel-tab="eclipses" type="button"><span class="subtab-icon" aria-hidden="true">E</span><span data-i18n="hudComparisonSectionEclipses">Eclipses</span></button>
-            <button class="hud-subtab" data-hud-panel-tab="orbit" type="button"><span class="subtab-icon" aria-hidden="true">O</span><span data-i18n="hudComparisonSectionOrbit">Orbit</span></button>
-            <button class="hud-subtab" data-hud-panel-tab="rotation" type="button"><span class="subtab-icon" aria-hidden="true">W</span><span data-i18n="hudComparisonSectionRotation">Rotation</span></button>
-          </div>
-
-          <section class="comparison-panel hud-subpanel active" data-hud-panel-section="routes">
-            <p class="orbit-title" data-comparison-title="routes" data-i18n="comparisonCategoryRoutes">Flight Routes</p>
-            <div class="comparison-section-body" data-comparison-category="routes"></div>
-          </section>
-          <section class="comparison-panel hud-subpanel" data-hud-panel-section="eclipses">
-            <p class="orbit-title" data-comparison-title="eclipses" data-i18n="comparisonCategoryEclipses">Eclipses</p>
-            <div class="comparison-section-body" data-comparison-category="eclipses"></div>
-          </section>
-          <section class="comparison-panel hud-subpanel" data-hud-panel-section="orbit">
-            <p class="orbit-title" data-comparison-title="orbit" data-i18n="comparisonCategoryOrbit">Orbit (Seasons / Declination / Day Length)</p>
-            <div class="comparison-section-body" data-comparison-category="orbit"></div>
-          </section>
-          <section class="comparison-panel hud-subpanel" data-hud-panel-section="rotation">
-            <p class="orbit-title" data-comparison-title="rotation" data-i18n="comparisonCategoryRotation">Rotation Speed</p>
-            <div class="comparison-section-body" data-comparison-category="rotation"></div>
           </section>
         </div>
 
