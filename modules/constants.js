@@ -61,9 +61,17 @@ export const DOME_WATER_STOP_SPEED = scaleDimension(0.012);
 export const DOME_WATER_SPRAY_LIFETIME = 0.78;
 export const CELESTIAL_HEIGHT_DROP = scaleDimension(0.42);
 export const CELESTIAL_ALTITUDE_DROP_DEGREES = 6;
-// Temporary azimuth calibration to align model azimuth with external reference.
+const urlParams = new URLSearchParams(window?.location?.search || "");
+const DEFAULT_CELESTIAL_AZIMUTH_OFFSET_DEGREES = 31.646;
+const parsedAzimuthOffsetDegrees = Number(urlParams.get("azimuthOffsetDeg"));
+// Calibration source is explicit so validation reports can distinguish default vs tuned runs.
+export const CELESTIAL_AZIMUTH_OFFSET_SOURCE = Number.isFinite(parsedAzimuthOffsetDegrees)
+  ? "query"
+  : "baseline";
 // Positive values rotate azimuth clockwise (toward East) after conversion to degrees.
-export const CELESTIAL_AZIMUTH_OFFSET_DEGREES = 31.646;
+export const CELESTIAL_AZIMUTH_OFFSET_DEGREES = Number.isFinite(parsedAzimuthOffsetDegrees)
+  ? parsedAzimuthOffsetDegrees
+  : DEFAULT_CELESTIAL_AZIMUTH_OFFSET_DEGREES;
 export const CELESTIAL_ORBIT_Y_SPREAD_SCALE = 1.5;
 export const POLARIS_ALTITUDE_OFFSET = 0;
 export const POLARIS_CORE_RADIUS = scaleDimension(0.07);
@@ -151,7 +159,6 @@ export const SOLAR_ECLIPSE_PRESENTATION_COVERAGE_RATE = 0.08;
 export const SOLAR_ECLIPSE_COMPLETE_HOLD_FRAMES = 72;
 export const STAGE_PRE_ECLIPSE_SEARCH_MAX_FRAMES = 40000;
 export const STAGE_PRE_ECLIPSE_REFINEMENT_FRAMES = 2400;
-const urlParams = new URLSearchParams(window?.location?.search || "");
 export const DARK_SUN_STAGE_DURATION_SECONDS = urlParams.has("eclipseStageDuration") 
   ? Number(urlParams.get("eclipseStageDuration")) 
   : 32;

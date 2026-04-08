@@ -1,6 +1,17 @@
 const EARTH_RADIUS_KM = 6371;
 const DISTANCE_PROFILE_SHORT_KM = 3500;
 const DISTANCE_PROFILE_MEDIUM_KM = 9000;
+const DISTANCE_PROFILE_SHORT_BUFFER_HOURS = 0.35;
+const DISTANCE_PROFILE_MEDIUM_BUFFER_HOURS = 0.55;
+const DISTANCE_PROFILE_LONG_BUFFER_HOURS = 0.85;
+
+export const DEFAULT_DISTANCE_PROFILE_TUNING = Object.freeze({
+  shortDistanceKm: DISTANCE_PROFILE_SHORT_KM,
+  mediumDistanceKm: DISTANCE_PROFILE_MEDIUM_KM,
+  shortBufferHours: DISTANCE_PROFILE_SHORT_BUFFER_HOURS,
+  mediumBufferHours: DISTANCE_PROFILE_MEDIUM_BUFFER_HOURS,
+  longBufferHours: DISTANCE_PROFILE_LONG_BUFFER_HOURS
+});
 
 export const ROUTE_MODE_RECOMMENDED = "recommended";
 export const ROUTE_MODE_ADVANCED = "advanced";
@@ -123,6 +134,11 @@ function toRadians(value) {
   return (Number(value) || 0) * (Math.PI / 180);
 }
 
+function resolvePositiveNumber(value, fallback) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : fallback;
+}
+
 export function compareText(a, b) {
   return String(a ?? "").localeCompare(String(b ?? ""), undefined, { sensitivity: "base" });
 }
@@ -176,22 +192,30 @@ export function computeGreatCircleDistanceKm(originAirport, destinationAirport) 
   return EARTH_RADIUS_KM * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
-export function resolveDistanceProfile(greatCircleDistanceKm) {
-  if (greatCircleDistanceKm <= DISTANCE_PROFILE_SHORT_KM) {
+export function resolveDistanceProfile(greatCircleDistanceKm, distanceProfileTuning = {}) {
+  const tuning = {
+    shortDistanceKm: resolvePositiveNumber(distanceProfileTuning?.shortDistanceKm, DISTANCE_PROFILE_SHORT_KM),
+    mediumDistanceKm: resolvePositiveNumber(distanceProfileTuning?.mediumDistanceKm, DISTANCE_PROFILE_MEDIUM_KM),
+    shortBufferHours: resolvePositiveNumber(distanceProfileTuning?.shortBufferHours, DISTANCE_PROFILE_SHORT_BUFFER_HOURS),
+    mediumBufferHours: resolvePositiveNumber(distanceProfileTuning?.mediumBufferHours, DISTANCE_PROFILE_MEDIUM_BUFFER_HOURS),
+    longBufferHours: resolvePositiveNumber(distanceProfileTuning?.longBufferHours, DISTANCE_PROFILE_LONG_BUFFER_HOURS)
+  };
+
+  if (greatCircleDistanceKm <= tuning.shortDistanceKm) {
     return {
       aircraftTypeCode: "A21N",
       cruiseSpeedKts: 450,
       cruiseAltitudeFt: 36000,
-      blockBufferHours: 0.35
+      blockBufferHours: tuning.shortBufferHours
     };
   }
 
-  if (greatCircleDistanceKm <= DISTANCE_PROFILE_MEDIUM_KM) {
+  if (greatCircleDistanceKm <= tuning.mediumDistanceKm) {
     return {
       aircraftTypeCode: "B789",
       cruiseSpeedKts: 485,
       cruiseAltitudeFt: 38000,
-      blockBufferHours: 0.55
+      blockBufferHours: tuning.mediumBufferHours
     };
   }
 
@@ -199,13 +223,13 @@ export function resolveDistanceProfile(greatCircleDistanceKm) {
     aircraftTypeCode: "B77W",
     cruiseSpeedKts: 490,
     cruiseAltitudeFt: 39000,
-    blockBufferHours: 0.85
+    blockBufferHours: tuning.longBufferHours
   };
 }
 
-export function createLeg(originAirport, destinationAirport, index, { aircraftTypeByCode } = {}) {
+export function createLeg(originAirport, destinationAirport, index, { aircraftTypeByCode, distanceProfileTuning } = {}) {
   const greatCircleDistanceKm = computeGreatCircleDistanceKm(originAirport, destinationAirport);
-  const distanceProfile = resolveDistanceProfile(greatCircleDistanceKm);
+  const distanceProfile = resolveDistanceProfile(greatCircleDistanceKm, distanceProfileTuning);
   const durationHours = (
     greatCircleDistanceKm / (distanceProfile.cruiseSpeedKts * 1.852)
   ) + distanceProfile.blockBufferHours;
@@ -230,6 +254,7 @@ export function buildRouteFromWaypoints(
     idPrefix = "route",
     routeMode = ROUTE_MODE_ADVANCED,
     aircraftTypeByCode = new Map(),
+    distanceProfileTuning = DEFAULT_DISTANCE_PROFILE_TUNING,
     resolveCountryName = (countryCode) => countryCode,
     resolveCountryCentroid = () => null
   } = {}
@@ -244,7 +269,10 @@ export function buildRouteFromWaypoints(
   let totalFlightHours = 0;
 
   for (let index = 0; index < resolvedWaypoints.length - 1; index += 1) {
-    const leg = createLeg(resolvedWaypoints[index], resolvedWaypoints[index + 1], index, { aircraftTypeByCode });
+    const leg = createLeg(resolvedWaypoints[index], resolvedWaypoints[index + 1], index, {
+      aircraftTypeByCode,
+      distanceProfileTuning
+    });
     legs.push(leg);
     totalDistanceKm += leg.greatCircleDistanceKm;
     totalFlightHours += leg.durationHours;
@@ -420,6 +448,7 @@ export function buildRecommendedRoutesForPair({
   resolveCountryName,
   resolveCountryCentroid,
   aircraftTypeByCode,
+  distanceProfileTuning = DEFAULT_DISTANCE_PROFILE_TUNING,
   routeLimit = RECOMMENDED_ROUTE_LIMIT,
   maxLayovers = MAX_LAYOVERS,
   minFinalLegDistanceKm = MIN_FINAL_LEG_DISTANCE_KM
@@ -468,6 +497,7 @@ export function buildRecommendedRoutesForPair({
       idPrefix: `recommended-${originContinentCode.toLowerCase()}-${destinationContinentCode.toLowerCase()}`,
       routeMode: ROUTE_MODE_RECOMMENDED,
       aircraftTypeByCode,
+      distanceProfileTuning,
       resolveCountryName,
       resolveCountryCentroid
     });
@@ -589,6 +619,7 @@ export function buildRecommendedRoutesForPair({
       idPrefix: `recommended-${originContinentCode.toLowerCase()}-${destinationContinentCode.toLowerCase()}-flagship`,
       routeMode: ROUTE_MODE_RECOMMENDED,
       aircraftTypeByCode,
+      distanceProfileTuning,
       resolveCountryName,
       resolveCountryCentroid
     });

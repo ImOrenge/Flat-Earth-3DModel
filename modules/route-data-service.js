@@ -5,11 +5,23 @@ const DATASET_FILENAMES = Object.freeze({
   aircraftTypes: ["aircraft-types.json"]
 });
 
-const REMOTE_AIRPORTS_URL = "https://raw.githubusercontent.com/mwgg/Airports/master/airports.json";
-const REMOTE_COUNTRIES_URL = "https://raw.githubusercontent.com/mledoze/countries/master/countries.json";
+const DATA_SOURCE_POLICY_VERSION = "2026-04-08";
+const REMOTE_DATASET_SOURCES = Object.freeze({
+  airports: Object.freeze({
+    url: "https://raw.githubusercontent.com/mwgg/Airports/72834e4bdcc2866a1422fe7e986211173e933da1/airports.json",
+    ref: "mwgg/Airports@72834e4bdcc2866a1422fe7e986211173e933da1",
+  }),
+  countries: Object.freeze({
+    url: "https://raw.githubusercontent.com/mledoze/countries/eb8ea804b1d2a08821126ce7c552a1435265ef77/countries.json",
+    ref: "mledoze/countries@eb8ea804b1d2a08821126ce7c552a1435265ef77",
+  }),
+});
 
-const CACHE_KEY = "routes.dataset.v1";
-const CACHE_VERSION = 1;
+const DATA_SOURCE_BUNDLED = "bundled";
+const DATA_SOURCE_CACHED = "cached";
+const DATA_SOURCE_LIVE_API = "live_api";
+const CACHE_KEY = "routes.dataset.v2";
+const CACHE_VERSION = 2;
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const AIRPORTS_PER_COUNTRY_CAP = 15;
 const PINNED_AIRPORT_IATA = Object.freeze([
@@ -81,6 +93,19 @@ async function fetchJson(url, fetchImpl) {
     throw new Error(`Request failed for ${url} [${response.status}]`);
   }
   return response.json();
+}
+
+function buildDataPolicy(source, fetchedAt = null) {
+  return {
+    policyVersion: DATA_SOURCE_POLICY_VERSION,
+    source: String(source ?? DATA_SOURCE_BUNDLED),
+    fetchedAt: Number.isFinite(fetchedAt) ? fetchedAt : null,
+    cacheTtlMs: CACHE_TTL_MS,
+    remoteRefs: {
+      airports: REMOTE_DATASET_SOURCES.airports.ref,
+      countries: REMOTE_DATASET_SOURCES.countries.ref
+    }
+  };
 }
 
 function normalizeBundledCountries(rawCountries) {
@@ -329,10 +354,11 @@ function loadCachedDataset(storage) {
     return {
       status: "valid",
       payload: {
-        source: String(parsed.source ?? "cached"),
+        source: String(parsed.source ?? DATA_SOURCE_CACHED),
         fetchedAt: parsed.fetchedAt,
         countries: parsed.countries,
-        airports: parsed.airports
+        airports: parsed.airports,
+        dataPolicy: parsed.dataPolicy ?? buildDataPolicy(parsed.source ?? DATA_SOURCE_CACHED, parsed.fetchedAt)
       }
     };
   } catch {
@@ -354,7 +380,8 @@ function saveCachedDataset(storage, payload) {
       fetchedAt: payload.fetchedAt,
       source: payload.source,
       countries: payload.countries,
-      airports: payload.airports
+      airports: payload.airports,
+      dataPolicy: payload.dataPolicy ?? buildDataPolicy(payload.source, payload.fetchedAt)
     };
     storage.setItem(CACHE_KEY, JSON.stringify(cachePayload));
   } catch {}
@@ -386,8 +413,8 @@ export function createRouteDataService({
 
   async function refreshRemote() {
     const [airportsRaw, countriesRaw, bundledAircraftTypes] = await Promise.all([
-      fetchJson(REMOTE_AIRPORTS_URL, fetchImpl),
-      fetchJson(REMOTE_COUNTRIES_URL, fetchImpl),
+      fetchJson(REMOTE_DATASET_SOURCES.airports.url, fetchImpl),
+      fetchJson(REMOTE_DATASET_SOURCES.countries.url, fetchImpl),
       loadJson(buildDatasetPathCandidates(DATASET_FILENAMES.aircraftTypes), "aircraftTypes", fetchImpl)
     ]);
 
@@ -400,18 +427,21 @@ export function createRouteDataService({
     const countries = normalizeRemoteCountries(countriesRaw, countryCodes);
     const aircraftTypes = normalizeBundledAircraftTypes(bundledAircraftTypes);
     const fetchedAt = Date.now();
+    const dataPolicy = buildDataPolicy(DATA_SOURCE_LIVE_API, fetchedAt);
 
     saveCachedDataset(safeStorage, {
       fetchedAt,
-      source: "live_api",
+      source: DATA_SOURCE_LIVE_API,
       countries,
-      airports
+      airports,
+      dataPolicy
     });
 
     return {
-      source: "live_api",
+      source: DATA_SOURCE_LIVE_API,
       fetchedAt,
       warnings: [],
+      dataPolicy,
       dataset: {
         countries,
         airports,
@@ -424,10 +454,11 @@ export function createRouteDataService({
     const bundled = await loadBundledDataset();
     if (bundledOnly) {
       return {
-        source: "bundled",
+        source: DATA_SOURCE_BUNDLED,
         fetchedAt: null,
         shouldAutoRefresh: false,
         warnings: [],
+        dataPolicy: buildDataPolicy(DATA_SOURCE_BUNDLED, null),
         dataset: bundled
       };
     }
@@ -438,19 +469,21 @@ export function createRouteDataService({
       try {
         const remote = await refreshRemote();
         return {
-          source: remote.source ?? "live_api",
+          source: remote.source ?? DATA_SOURCE_LIVE_API,
           fetchedAt: remote.fetchedAt ?? Date.now(),
           shouldAutoRefresh: false,
           warnings: remote.warnings ?? [],
+          dataPolicy: remote.dataPolicy ?? buildDataPolicy(remote.source ?? DATA_SOURCE_LIVE_API, remote.fetchedAt),
           dataset: remote.dataset
         };
       } catch {
         if (cacheEntry.status === "valid" && cacheEntry.payload) {
           return {
-            source: "cached",
+            source: DATA_SOURCE_CACHED,
             fetchedAt: cacheEntry.payload.fetchedAt,
             shouldAutoRefresh: true,
             warnings: ["remote_unavailable"],
+            dataPolicy: cacheEntry.payload.dataPolicy ?? buildDataPolicy(DATA_SOURCE_CACHED, cacheEntry.payload.fetchedAt),
             dataset: {
               countries: normalizeBundledCountries(cacheEntry.payload.countries),
               airports: normalizeBundledAirports(cacheEntry.payload.airports),
@@ -460,10 +493,11 @@ export function createRouteDataService({
         }
 
         return {
-          source: "bundled",
+          source: DATA_SOURCE_BUNDLED,
           fetchedAt: null,
           shouldAutoRefresh: true,
           warnings: ["remote_unavailable"],
+          dataPolicy: buildDataPolicy(DATA_SOURCE_BUNDLED, null),
           dataset: bundled
         };
       }
@@ -471,10 +505,11 @@ export function createRouteDataService({
 
     if (cacheEntry.status === "valid" && cacheEntry.payload) {
       return {
-        source: "cached",
+        source: DATA_SOURCE_CACHED,
         fetchedAt: cacheEntry.payload.fetchedAt,
         shouldAutoRefresh: false,
         warnings: [],
+        dataPolicy: cacheEntry.payload.dataPolicy ?? buildDataPolicy(DATA_SOURCE_CACHED, cacheEntry.payload.fetchedAt),
         dataset: {
           countries: normalizeBundledCountries(cacheEntry.payload.countries),
           airports: normalizeBundledAirports(cacheEntry.payload.airports),
@@ -484,10 +519,11 @@ export function createRouteDataService({
     }
 
     return {
-      source: "bundled",
+      source: DATA_SOURCE_BUNDLED,
       fetchedAt: null,
       shouldAutoRefresh: true,
       warnings: [],
+      dataPolicy: buildDataPolicy(DATA_SOURCE_BUNDLED, null),
       dataset: bundled
     };
   }
