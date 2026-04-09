@@ -17,7 +17,6 @@ import { createCelestialTrackingCameraController } from "./modules/celestial-tra
 import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js?v=20260312-darksun-eclipse1";
 import { createI18n } from "./modules/i18n.js?v=20260327-mobilehud1";
 import { createMagneticFieldController } from "./modules/magnetic-field-controller.js?v=20260314-magnetic-pinecone3";
-import { createModelComparisonController } from "./modules/model-comparison-controller.js?v=20260329-compare1";
 import { createRouteSimulationController } from "./modules/route-simulation-controller.js?v=20260406-mainremote5";
 import { createTextureManager } from "./modules/texture-manager.js?v=20260311-gpu-daynight";
 import { createWalkerController } from "./modules/walker-controller.js?v=20260324-moon-cycle28";
@@ -1845,23 +1844,6 @@ const routeCameraTrackingGlobeWorldQuaternionInverse = new THREE.Quaternion();
 const ROUTE_CAMERA_TRACKING_GLOBE_ROTATION_LERP = 0.2;
 const ROUTE_CAMERA_TRACKING_GLOBE_RESET_LERP = 0.12;
 
-function setEarthModelViewAndSyncRoutes(mode) {
-  const appliedMode = setEarthModelView(mode);
-  // Keep selected route projection/layer visibility in sync after model switches.
-  routeSimulationApi.update(0);
-  routeSimulationApi.syncRouteUi();
-  return appliedMode;
-}
-
-comparisonApi = createModelComparisonController({
-  i18n,
-  constants,
-  panelEl: comparisonPanelEl,
-  cameraState,
-  cameraApi,
-  setEarthModelView: setEarthModelViewAndSyncRoutes,
-});
-comparisonApi.initialize();
 let celestialTrackingCameraApi;
 
 function focusCameraOnConstellation(entry) {
