@@ -353,8 +353,8 @@
       </aside>
 
       <div class="detail-panel-shell">
-        <button class="detail-panel-collapse-btn" id="detail-panel-collapse" type="button" aria-label="?占쎈꼸 ?占쎄린" title="?占쎈꼸 ?占쎄린">
-          <span class="detail-panel-collapse-icon" aria-hidden="true">??/span>
+        <button class="detail-panel-collapse-btn" id="detail-panel-collapse" type="button" aria-label="패널 접기" title="패널 접기">
+          <span class="detail-panel-collapse-icon" aria-hidden="true">▼</span>
         </button>
       <aside class="control-panel detail-panel">
         <p class="eyebrow" data-i18n="detailEyebrow">DETAIL CONTROLS</p>
@@ -738,8 +738,8 @@
 
         <div class="panel-tab-content" data-control-panel="routes" hidden>
           <div class="hud-subtabs" data-hud-panel-tabs="routes">
-            <button class="hud-subtab active" data-hud-panel-tab="playback" type="button"><span class="subtab-icon" aria-hidden="true">??/span><span data-i18n="hudRoutesSectionPlayback">Playback</span></button>
-            <button class="hud-subtab" data-hud-panel-tab="summary" type="button"><span class="subtab-icon" aria-hidden="true">??/span><span data-i18n="hudRoutesSectionSummary">Summary</span></button>
+            <button class="hud-subtab active" data-hud-panel-tab="playback" type="button"><span class="subtab-icon" aria-hidden="true">▷</span><span data-i18n="hudRoutesSectionPlayback">Playback</span></button>
+            <button class="hud-subtab" data-hud-panel-tab="summary" type="button"><span class="subtab-icon" aria-hidden="true">≡</span><span data-i18n="hudRoutesSectionSummary">Summary</span></button>
           </div>
           <section class="route-panel hud-subpanel active" data-hud-panel-section="playback">
             <p class="orbit-title" data-i18n="offlineRouteLibraryTitle">Globe Route Builder</p>
@@ -859,8 +859,8 @@
 
         <div class="panel-tab-content" data-control-panel="constellations" hidden>
           <div class="hud-subtabs" data-hud-panel-tabs="constellations">
-            <button class="hud-subtab active" data-hud-panel-tab="controls" type="button"><span class="subtab-icon" aria-hidden="true">??/span><span data-i18n="hudConstellationsSectionControls">Controls</span></button>
-            <button class="hud-subtab" data-hud-panel-tab="info" type="button"><span class="subtab-icon" aria-hidden="true">??/span><span data-i18n="hudConstellationsSectionInfo">Info</span></button>
+            <button class="hud-subtab active" data-hud-panel-tab="controls" type="button"><span class="subtab-icon" aria-hidden="true">⋆</span><span data-i18n="hudConstellationsSectionControls">Controls</span></button>
+            <button class="hud-subtab" data-hud-panel-tab="info" type="button"><span class="subtab-icon" aria-hidden="true">ℹ</span><span data-i18n="hudConstellationsSectionInfo">Info</span></button>
             <button class="hud-subtab" data-hud-panel-tab="zodiac" type="button"><span class="subtab-icon" aria-hidden="true">*</span><span data-i18n="hudConstellationsSectionZodiac">Zodiac Age</span></button>
           </div>
           <section class="constellation-panel hud-subpanel active" data-hud-panel-section="controls">
@@ -962,8 +962,8 @@
         </div>
         <div class="panel-tab-content" data-control-panel="rockets" hidden>
           <div class="hud-subtabs" data-hud-panel-tabs="rockets">
-            <button class="hud-subtab active" data-hud-panel-tab="launch" type="button"><span class="subtab-icon" aria-hidden="true">??/span><span data-i18n="hudRocketsSectionLaunch">Launch</span></button>
-            <button class="hud-subtab" data-hud-panel-tab="telemetry" type="button"><span class="subtab-icon" aria-hidden="true">??/span><span data-i18n="hudRocketsSectionTelemetry">Telemetry</span></button>
+            <button class="hud-subtab active" data-hud-panel-tab="launch" type="button"><span class="subtab-icon" aria-hidden="true">↑</span><span data-i18n="hudRocketsSectionLaunch">Launch</span></button>
+            <button class="hud-subtab" data-hud-panel-tab="telemetry" type="button"><span class="subtab-icon" aria-hidden="true">⊟</span><span data-i18n="hudRocketsSectionTelemetry">Telemetry</span></button>
           </div>
           <section class="route-panel hud-subpanel active" data-hud-panel-section="launch">
             <p class="orbit-title" data-i18n="rocketSimulationTitle">Rocket Simulation</p>
@@ -985,31 +985,31 @@
           </section>
 
           <section class="route-panel route-summary-panel hud-subpanel" data-hud-panel-section="telemetry" id="rocket-telemetry-panel" style="display:none;">
-            <p class="orbit-title">??占쏙옙 ?占쎌씠??/p>
+            <p class="orbit-title">항법 데이터</p>
             <div class="coord-grid">
               <div class="coord-card">
-                <span class="coord-label">?占쏀깭</span>
-                <strong class="coord-value" id="tel-state">??/strong>
+                <span class="coord-label">상태</span>
+                <strong class="coord-value" id="tel-state">—</strong>
               </div>
               <div class="coord-card">
-                <span class="coord-label">怨좊룄</span>
-                <strong class="coord-value" id="tel-alt">??/strong>
+                <span class="coord-label">고도</span>
+                <strong class="coord-value" id="tel-alt">—</strong>
               </div>
               <div class="coord-card">
-                <span class="coord-label">?占쎈룄</span>
-                <strong class="coord-value" id="tel-speed">??/strong>
+                <span class="coord-label">속도</span>
+                <strong class="coord-value" id="tel-speed">—</strong>
               </div>
               <div class="coord-card">
-                <span class="coord-label">?占쎄퀎 寃쎄낵</span>
-                <strong class="coord-value" id="tel-stage-t">??/strong>
+                <span class="coord-label">단계 경과</span>
+                <strong class="coord-value" id="tel-stage-t">—</strong>
               </div>
               <div class="coord-card">
-                <span class="coord-label">沅곸갹 ?占쎌큺</span>
-                <strong class="coord-value" id="tel-scrape-t">??/strong>
+                <span class="coord-label">궁창 접촉</span>
+                <strong class="coord-value" id="tel-scrape-t">—</strong>
               </div>
               <div class="coord-card">
-                <span class="coord-label">?占쏀빐</span>
-                <strong class="coord-value" id="tel-debris">??/strong>
+                <span class="coord-label">잔해</span>
+                <strong class="coord-value" id="tel-debris">—</strong>
               </div>
             </div>
           </section>
