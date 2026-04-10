@@ -948,6 +948,13 @@
               <span class="field-label" data-i18n="rocketLaunchpadLabel">Launchpad</span>
               <select class="select-input" id="rocket-spaceport-select"></select>
             </label>
+            <label class="field" for="rocket-mission-profile-select">
+              <span class="field-label">Mission Profile</span>
+              <select class="select-input" id="rocket-mission-profile-select">
+                <option value="default" selected>Default Launch</option>
+                <option value="artemis-ii">Artemis II</option>
+              </select>
+            </label>
             <label class="field" for="rocket-type-select">
               <span class="field-label" data-i18n="rocketTypeLabel">Rocket Type</span>
               <select class="select-input" id="rocket-type-select">
@@ -968,8 +975,16 @@
             <p class="orbit-title">??쾿 ?곗씠??/p>
             <div class="coord-grid">
               <div class="coord-card">
-                <span class="coord-label">?곹깭</span>
-                <strong class="coord-value" id="tel-state">??/strong>
+                <span class="coord-label">Mission</span>
+                <strong class="coord-value" id="tel-mission">-</strong>
+              </div>
+              <div class="coord-card">
+                <span class="coord-label">Vehicle</span>
+                <strong class="coord-value" id="tel-vehicle">-</strong>
+              </div>
+              <div class="coord-card">
+                <span class="coord-label">상태</span>
+                <strong class="coord-value" id="tel-state">—</strong>
               </div>
               <div class="coord-card">
                 <span class="coord-label">怨좊룄</span>

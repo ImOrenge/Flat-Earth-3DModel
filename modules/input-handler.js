@@ -48,7 +48,13 @@ export function setupInputHandlers(deps) {
     seasonalEventButtons
   } = deps;
 
-  const { rocketSpaceportSelect, rocketTypeSelect, rocketLaunchBtn, rocketStandbyBtn } = ui;
+  const {
+    rocketMissionProfileSelect,
+    rocketSpaceportSelect,
+    rocketTypeSelect,
+    rocketLaunchBtn,
+    rocketStandbyBtn
+  } = ui;
 
   const {
     WALKER_PITCH_MIN,
@@ -85,6 +91,100 @@ export function setupInputHandlers(deps) {
   let touchStartX = 0;
   let touchStartY = 0;
   let touchStartTime = 0;
+  const ARTEMIS_MISSION_PROFILE_ID = "artemis-ii";
+  const ARTEMIS_LOCKED_SPACEPORT_VALUE = "__artemis_lc39b__";
+  const ARTEMIS_LOCKED_ROCKET_TYPE_VALUE = "sls";
+  const rocketSelectionMemory = {
+    spaceportValue: rocketSpaceportSelect?.value ?? "",
+    rocketTypeValue: rocketTypeSelect?.value ?? "two-stage"
+  };
+
+  function getRocketUiText(key) {
+    if (i18n?.getLanguage?.() === "ko") {
+      if (key === "artemisLaunchpad") {
+        return "LC-39B / \uCF00\uB124\uB514 \uC6B0\uC8FC\uC13C\uD130";
+      }
+      if (key === "slsVehicle") {
+        return "SLS / Orion";
+      }
+    }
+
+    if (key === "artemisLaunchpad") {
+      return "LC-39B / Kennedy Space Center";
+    }
+    if (key === "slsVehicle") {
+      return "SLS / Orion";
+    }
+    return "";
+  }
+
+  function ensureSelectOption(selectEl, value, label) {
+    if (!selectEl) {
+      return;
+    }
+
+    let option = Array.from(selectEl.options).find((entry) => entry.value === value);
+    if (!option) {
+      option = document.createElement("option");
+      option.value = value;
+      selectEl.append(option);
+    }
+    option.textContent = label;
+  }
+
+  function removeSelectOption(selectEl, value) {
+    if (!selectEl) {
+      return;
+    }
+
+    const option = Array.from(selectEl.options).find((entry) => entry.value === value);
+    option?.remove?.();
+  }
+
+  function syncRocketMissionProfileControls() {
+    const missionProfile = rocketMissionProfileSelect?.value ?? "default";
+    const isArtemis = missionProfile === ARTEMIS_MISSION_PROFILE_ID;
+
+    if (rocketSpaceportSelect) {
+      if (isArtemis) {
+        if (rocketSpaceportSelect.value && rocketSpaceportSelect.value !== ARTEMIS_LOCKED_SPACEPORT_VALUE) {
+          rocketSelectionMemory.spaceportValue = rocketSpaceportSelect.value;
+        }
+        ensureSelectOption(
+          rocketSpaceportSelect,
+          ARTEMIS_LOCKED_SPACEPORT_VALUE,
+          getRocketUiText("artemisLaunchpad")
+        );
+        rocketSpaceportSelect.value = ARTEMIS_LOCKED_SPACEPORT_VALUE;
+        rocketSpaceportSelect.disabled = true;
+      } else {
+        removeSelectOption(rocketSpaceportSelect, ARTEMIS_LOCKED_SPACEPORT_VALUE);
+        rocketSpaceportSelect.disabled = false;
+        if (rocketSelectionMemory.spaceportValue) {
+          rocketSpaceportSelect.value = rocketSelectionMemory.spaceportValue;
+        }
+      }
+    }
+
+    if (rocketTypeSelect) {
+      if (isArtemis) {
+        if (rocketTypeSelect.value && rocketTypeSelect.value !== ARTEMIS_LOCKED_ROCKET_TYPE_VALUE) {
+          rocketSelectionMemory.rocketTypeValue = rocketTypeSelect.value;
+        }
+        ensureSelectOption(
+          rocketTypeSelect,
+          ARTEMIS_LOCKED_ROCKET_TYPE_VALUE,
+          getRocketUiText("slsVehicle")
+        );
+        rocketTypeSelect.value = ARTEMIS_LOCKED_ROCKET_TYPE_VALUE;
+        rocketTypeSelect.disabled = true;
+      } else {
+        removeSelectOption(rocketTypeSelect, ARTEMIS_LOCKED_ROCKET_TYPE_VALUE);
+        rocketTypeSelect.disabled = false;
+        rocketTypeSelect.value = rocketSelectionMemory.rocketTypeValue || "two-stage";
+      }
+    }
+  }
 
   function getResponsivePresetValues(preset = "top") {
     const viewportWidth = Math.max(canvas?.clientWidth || window.innerWidth || 0, 1);
@@ -136,6 +236,15 @@ export function setupInputHandlers(deps) {
       return null;
     }
 
+    const missionProfile = rocketMissionProfileSelect?.value ?? "default";
+    if (missionProfile === ARTEMIS_MISSION_PROFILE_ID) {
+      return {
+        index: -1,
+        missionProfile,
+        rocketType: ARTEMIS_LOCKED_ROCKET_TYPE_VALUE
+      };
+    }
+
     const index = Number.parseInt(rocketSpaceportSelect.value, 10);
     if (Number.isNaN(index)) {
       return null;
@@ -143,6 +252,7 @@ export function setupInputHandlers(deps) {
 
     return {
       index,
+      missionProfile,
       rocketType: rocketTypeSelect ? rocketTypeSelect.value : "two-stage"
     };
   }
@@ -152,7 +262,7 @@ export function setupInputHandlers(deps) {
     if (!config) {
       return null;
     }
-    return rocketApi.enterStandby(config.index, config.rocketType);
+    return rocketApi.enterStandby(config.index, config.rocketType, config.missionProfile);
   }
   
   
@@ -1236,6 +1346,7 @@ export function setupInputHandlers(deps) {
 
   if (rocketSpaceportSelect) {
     rocketSpaceportSelect.addEventListener("change", () => {
+      rocketSelectionMemory.spaceportValue = rocketSpaceportSelect.value;
       if (rocketApi.getStandbySnapshot() && !rocketApi.getActiveRocketSnapshot()) {
         stageSelectedRocket();
       }
@@ -1244,6 +1355,16 @@ export function setupInputHandlers(deps) {
 
   if (rocketTypeSelect) {
     rocketTypeSelect.addEventListener("change", () => {
+      rocketSelectionMemory.rocketTypeValue = rocketTypeSelect.value;
+      if (rocketApi.getStandbySnapshot() && !rocketApi.getActiveRocketSnapshot()) {
+        stageSelectedRocket();
+      }
+    });
+  }
+
+  if (rocketMissionProfileSelect) {
+    rocketMissionProfileSelect.addEventListener("change", () => {
+      syncRocketMissionProfileControls();
       if (rocketApi.getStandbySnapshot() && !rocketApi.getActiveRocketSnapshot()) {
         stageSelectedRocket();
       }
@@ -1256,9 +1377,11 @@ export function setupInputHandlers(deps) {
       if (!config) {
         return;
       }
-      rocketApi.launchRocket(config.index, config.rocketType);
+      rocketApi.launchRocket(config.index, config.rocketType, config.missionProfile);
     });
   }
+
+  syncRocketMissionProfileControls();
 
   return {
     applyCameraPreset,

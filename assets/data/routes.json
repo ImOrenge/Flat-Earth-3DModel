@@ -9,5 +9,40 @@
   { "id": "gru-jfk", "originIcao": "SBGR", "destinationIcao": "KJFK", "aircraftTypeCode": "B789", "callsign": "OFF008", "durationHours": 9.8, "cruiseSpeedKts": 484, "cruiseAltitudeFt": 38000 },
   { "id": "lax-syd", "originIcao": "KLAX", "destinationIcao": "YSSY", "aircraftTypeCode": "B789", "callsign": "OFF009", "durationHours": 14.4, "cruiseSpeedKts": 488, "cruiseAltitudeFt": 40000 },
   { "id": "sin-cdg", "originIcao": "WSSS", "destinationIcao": "LFPG", "aircraftTypeCode": "A359", "callsign": "OFF010", "durationHours": 13.4, "cruiseSpeedKts": 485, "cruiseAltitudeFt": 39000 },
-  { "id": "syd-scl", "originIcao": "YSSY", "destinationIcao": "SCEL", "aircraftTypeCode": "B789", "callsign": "OFF011", "durationHours": 12.5, "cruiseSpeedKts": 486, "cruiseAltitudeFt": 40000 }
+  { "id": "syd-scl", "originIcao": "YSSY", "destinationIcao": "SCEL", "aircraftTypeCode": "B789", "callsign": "OFF011", "durationHours": 12.5, "cruiseSpeedKts": 486, "cruiseAltitudeFt": 40000 },
+  {
+    "id": "artemis-ii-lunar-flyby",
+    "routeType": "space",
+    "optionLabel": "Artemis II | Lunar Flyby",
+    "vehicleLabel": "Orion / SLS Block 1",
+    "callsign": "ART002",
+    "durationHours": 240,
+    "origin": {
+      "code": "LC39B",
+      "iata": "AII",
+      "icao": "LC39",
+      "name": "Launch Complex 39B",
+      "city": "Kennedy Space Center",
+      "countryCode": "US",
+      "latitude": 28.608,
+      "longitude": -80.604
+    },
+    "destination": {
+      "code": "PAC",
+      "iata": "PAC",
+      "icao": "XPAC",
+      "name": "Pacific Recovery Zone",
+      "city": "Pacific Ocean",
+      "countryCode": "US",
+      "latitude": 13.5,
+      "longitude": -137.8
+    },
+    "waypoints": [
+      { "latitude": 28.9, "longitude": -58.0, "altitude": 0.34 },
+      { "latitude": 31.5, "longitude": -12.0, "altitude": 0.92 },
+      { "latitude": 12.0, "longitude": 166.0, "altitude": 1.72 },
+      { "latitude": 16.5, "longitude": -163.0, "altitude": 1.08 },
+      { "latitude": 14.4, "longitude": -149.0, "altitude": 0.46 }
+    ]
+  }
 ]

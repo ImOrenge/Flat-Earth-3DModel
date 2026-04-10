@@ -270,6 +270,55 @@ const {
 export function setupScene({ canvas }) {
   const DOME_WATER_IMPACT_SLOT_COUNT = Math.max(1, Math.floor(DOME_WATER_MAX_IMPACTS));
   const DOME_WATER_TRAIL_SLOT_COUNT = Math.max(1, Math.floor(DOME_WATER_MAX_TRAILS));
+  const DOME_WATER_TRAIL_TIP_SHARPNESS = THREE.MathUtils.clamp(
+    constants.DOME_WATER_TRAIL_TIP_SHARPNESS ?? 1.85,
+    1.1,
+    3.5
+  );
+  const DOME_WATER_TRAIL_BODY_PEAK_OFFSET = THREE.MathUtils.clamp(
+    constants.DOME_WATER_TRAIL_BODY_PEAK_OFFSET ?? 0.2,
+    0.08,
+    0.4
+  );
+  const DOME_WATER_TRAIL_BODY_PEAK_WIDTH = THREE.MathUtils.clamp(
+    constants.DOME_WATER_TRAIL_BODY_PEAK_WIDTH ?? 0.34,
+    0.18,
+    0.62
+  );
+  const DOME_WATER_TRAIL_TAIL_TAPER = THREE.MathUtils.clamp(
+    constants.DOME_WATER_TRAIL_TAIL_TAPER ?? 0.72,
+    0.35,
+    0.95
+  );
+  const DOME_WATER_TRAIL_TURBULENCE_START = THREE.MathUtils.clamp(
+    constants.DOME_WATER_TRAIL_TURBULENCE_START ?? 0.44,
+    0.12,
+    0.8
+  );
+  const DOME_WATER_TRAIL_TURBULENCE_STRENGTH = THREE.MathUtils.clamp(
+    constants.DOME_WATER_TRAIL_TURBULENCE_STRENGTH ?? 0.38,
+    0.05,
+    0.9
+  );
+  const DOME_WATER_TRAIL_TURBULENCE_FREQ = Math.max(
+    1.5,
+    constants.DOME_WATER_TRAIL_TURBULENCE_FREQ ?? 11.5
+  );
+  const DOME_WATER_TRAIL_RECOVERY_START = THREE.MathUtils.clamp(
+    constants.DOME_WATER_TRAIL_RECOVERY_START ?? 0.58,
+    0.2,
+    0.92
+  );
+  const DOME_WATER_TRAIL_RECOVERY_FEATHER = THREE.MathUtils.clamp(
+    constants.DOME_WATER_TRAIL_RECOVERY_FEATHER ?? 0.14,
+    0.04,
+    0.42
+  );
+  const DOME_WATER_TRAIL_HEAD_PERSISTENCE = THREE.MathUtils.clamp(
+    constants.DOME_WATER_TRAIL_HEAD_PERSISTENCE ?? 0.32,
+    0.04,
+    0.72
+  );
 
   function getResponsivePixelRatio() {
     const maxRatio = window.innerWidth <= 1080 ? 1.5 : 2;
@@ -874,18 +923,93 @@ export function setupScene({ canvas }) {
       float sideDistance = length(perpendicularVector);
       float width = max(0.003, trailShape.x + (trailAge * 0.0075));
       float trailLength = max(width * 4.0, trailShape.y + (trailAge * 0.0035));
+      float headScale = max(1.0, trailShape.w);
       float behindDistance = max(0.0, -along);
       float trailHeadDistance = max(0.0, along);
-      float bodyMask = exp(-pow(sideDistance / width, 2.0));
-      float spreadMask = exp(-pow(sideDistance / max(width * 1.95, 0.004), 2.0));
+      float normalizedBehind = clamp(behindDistance / max(trailLength, 0.0001), 0.0, 1.0);
       float tailFade = 1.0 - smoothstep(0.0, trailLength, behindDistance);
-      float headCut = 1.0 - smoothstep(0.0, width * 1.4, trailHeadDistance);
-      float ribbonBody = bodyMask * max(tailFade, headCut * 0.82);
-      float edgeSpread = max(0.0, spreadMask - (bodyMask * 0.58)) * max(tailFade, headCut * 0.55);
-      float noseFlash = exp(-pow(length(domeSurfaceDirection - trailCenterDirection) / max(width * 2.2, 0.004), 2.0));
-      float ageFade = 1.0 - smoothstep(waterTrailLifetime * 0.74, waterTrailLifetime, trailAge);
+      float presenceFade = 1.0 - smoothstep(waterTrailLifetime * 0.9, waterTrailLifetime, trailAge);
+      float recoveryProgress = smoothstep(
+        waterTrailLifetime * ${DOME_WATER_TRAIL_RECOVERY_START.toFixed(3)},
+        waterTrailLifetime,
+        trailAge
+      );
+      float recoveryFront = trailLength * (1.0 - recoveryProgress);
+      float recoveryFeather = max(trailLength * ${DOME_WATER_TRAIL_RECOVERY_FEATHER.toFixed(3)}, width * 1.15);
+      float tailRecovery = 1.0 - smoothstep(
+        max(0.0, recoveryFront - recoveryFeather),
+        recoveryFront + recoveryFeather,
+        behindDistance
+      );
+      float headPersistence = mix(
+        1.0,
+        1.0 - (recoveryProgress * (1.0 - ${DOME_WATER_TRAIL_HEAD_PERSISTENCE.toFixed(3)})),
+        smoothstep(0.0, width * 1.1, behindDistance)
+      );
+      float ribbonVisibility = tailFade * tailRecovery;
+      float tipWidth = max(width * (0.16 + (0.03 * headScale)), 0.0012);
+      float noseFrontFade = 1.0 - smoothstep(0.0, width * (0.86 + (0.18 * headScale)), trailHeadDistance);
+      float noseRearFade = 1.0 - smoothstep(width * 0.08, width * 0.92, behindDistance);
+      float noseWidth = mix(tipWidth, width * 0.44, 1.0 - noseFrontFade);
+      float noseTip = exp(-pow(sideDistance / max(noseWidth, 0.0012), 2.0))
+        * pow(max(noseFrontFade, 0.0), ${DOME_WATER_TRAIL_TIP_SHARPNESS.toFixed(3)})
+        * max(noseRearFade, 0.0);
+      float bodyPeakCenter = trailLength * mix(
+        ${DOME_WATER_TRAIL_BODY_PEAK_OFFSET.toFixed(3)},
+        ${Math.max(0.08, 0.2 * 0.72).toFixed(3)},
+        min(1.0, (headScale - 1.0) * 0.9)
+      );
+      float bodyPeakWidth = max(trailLength * ${DOME_WATER_TRAIL_BODY_PEAK_WIDTH.toFixed(3)}, width * 2.8);
+      float bodyEnvelope = exp(-pow((behindDistance - bodyPeakCenter) / bodyPeakWidth, 2.0));
+      float pressureLead = 1.0 - smoothstep(0.0, width * (0.92 + (0.22 * headScale)), trailHeadDistance);
+      float pressureWidth = max(
+        width * (0.42 + ((0.94 + (0.2 * headScale)) * bodyEnvelope)),
+        tipWidth * 1.4
+      );
+      float pressureBody = exp(-pow(sideDistance / pressureWidth, 2.0))
+        * ribbonVisibility
+        * max(bodyEnvelope, pressureLead * 0.55);
+      float tailWidth = max(
+        width * mix(1.0, 0.16, normalizedBehind * ${DOME_WATER_TRAIL_TAIL_TAPER.toFixed(3)}),
+        tipWidth
+      );
+      float wakeWidth = max(mix(pressureWidth, tailWidth, normalizedBehind), tipWidth);
+      float wakeNoise = domeFlowNoise(vec2(
+        (behindDistance * ${DOME_WATER_TRAIL_TURBULENCE_FREQ.toFixed(3)}) + (trailAge * 2.4),
+        ((sideDistance / max(width, 0.0016)) * ${(DOME_WATER_TRAIL_TURBULENCE_FREQ * 0.58).toFixed(3)}) + (trailCenterDirection.x * 3.1)
+      ));
+      float wakeNoiseSecondary = domeFlowNoise(vec2(
+        (behindDistance * ${(DOME_WATER_TRAIL_TURBULENCE_FREQ * 0.63).toFixed(3)}) - (trailAge * 1.7),
+        ((sideDistance / max(width, 0.0016)) * ${Math.max(1.5, DOME_WATER_TRAIL_TURBULENCE_FREQ * 0.37).toFixed(3)}) - (trailCenterDirection.z * 2.6)
+      ));
+      float turbulenceNoise = clamp(0.5 + (0.5 * ((wakeNoise * 0.6) + (wakeNoiseSecondary * 0.4))), 0.0, 1.0);
+      float turbulenceStart = smoothstep(
+        trailLength * ${DOME_WATER_TRAIL_TURBULENCE_START.toFixed(3)},
+        trailLength,
+        behindDistance
+      );
+      float turbulenceMask = mix(
+        1.0,
+        smoothstep(0.22, 0.84, turbulenceNoise),
+        turbulenceStart * ${DOME_WATER_TRAIL_TURBULENCE_STRENGTH.toFixed(3)}
+      );
+      float wakeTail = exp(-pow(sideDistance / wakeWidth, 2.0))
+        * ribbonVisibility
+        * smoothstep(width * 0.12, width * 0.96, behindDistance)
+        * turbulenceMask;
+      float silhouette = max(pressureBody, wakeTail);
+      float rimOuter = exp(-pow(sideDistance / max(wakeWidth * 1.1, 0.0018), 2.0));
+      float rimInner = exp(-pow(sideDistance / max(wakeWidth * 0.74, 0.0016), 2.0));
+      float rimMask = max(0.0, rimOuter - rimInner)
+        * silhouette
+        * (0.42 + (0.58 * max(bodyEnvelope, 1.0 - normalizedBehind)));
       float directional = 0.45 + (0.55 * max(dot(cameraDirection, flattenedTailDirection), 0.0));
-      trailField += ((ribbonBody * 1.45) + (edgeSpread * 1.22) + (noseFlash * 0.48)) * directional * trailCenter.w * ageFade;
+      trailField += (
+        (noseTip * 1.32 * headPersistence)
+        + (pressureBody * 1.18)
+        + (wakeTail * 0.96)
+        + (rimMask * 0.72)
+      ) * directional * trailCenter.w * presenceFade;
     }
   }
 
@@ -918,7 +1042,7 @@ export function setupScene({ canvas }) {
   #include <opaque_fragment>`
         );
     };
-    material.customProgramCacheKey = () => "dome-water-atmosphere-v3";
+    material.customProgramCacheKey = () => "dome-water-atmosphere-v8";
   }
   
   function enhanceMoonMaterialWithPhase(material) {
@@ -1290,7 +1414,15 @@ export function setupScene({ canvas }) {
         });
       }
     },
-    registerTrail({ position, direction, strength = 1, speed = 0, width = null, length = null }) {
+    registerTrail({
+      position,
+      direction,
+      strength = 1,
+      speed = 0,
+      width = null,
+      length = null,
+      headScale = 1
+    }) {
       const slot = getOldestWaveSlot(domeWaterState.trailAges);
       convertStagePositionToDomeLocal(position, domeWaterLocalPosition);
       convertStageDirectionToDomeLocal(direction, domeWaterLocalDirection);
@@ -1306,7 +1438,7 @@ export function setupScene({ canvas }) {
         domeWaterLocalPosition.x,
         domeWaterLocalPosition.y,
         domeWaterLocalPosition.z,
-        THREE.MathUtils.clamp(strength, 0.08, 1.0)
+        THREE.MathUtils.clamp(strength, 0.08, 1.28)
       );
       domeWaterState.trailDirections[slot].set(
         domeWaterLocalDirection.x,
@@ -1318,7 +1450,7 @@ export function setupScene({ canvas }) {
         resolvedWidth,
         resolvedLength,
         speed,
-        1
+        Math.max(1, headScale)
       );
       domeWaterState.trailAges[slot] = 0;
     },
