@@ -341,6 +341,7 @@ const hudSideCardEl = document.getElementById("hud-side-card");
 const hudSideCardTitleEl = document.getElementById("hud-side-card-title");
 const hudSideCardSlotEl = document.getElementById("hud-side-card-slot");
 const rocketSpaceportSelect = document.getElementById("rocket-spaceport-select");
+const rocketMissionProfileSelect = document.getElementById("rocket-mission-profile-select");
 const rocketTypeSelect      = document.getElementById("rocket-type-select");
 const rocketStandbyBtn      = document.getElementById("rocket-standby-btn");
 const rocketLaunchBtn       = document.getElementById("rocket-launch-btn");
@@ -1661,6 +1662,7 @@ const ui = {
   walkerModeEl,
   walkerSummaryEl,
   rocketSpaceportSelect,
+  rocketMissionProfileSelect,
   rocketTypeSelect,
   rocketStandbyBtn,
   rocketCameraSummaryEl,
@@ -1975,6 +1977,7 @@ const ROCKET_CAMERA_COPY = {
     standbyButton: "Stage Standby",
     states: {
       FALL: "Fall",
+      IGNITION: "Engine Ignition",
       LAUNCH: "Launch",
       PITCHOVER: "Pitchover",
       SCRAPE: "Dome Scrape",
@@ -1991,14 +1994,15 @@ const ROCKET_CAMERA_COPY = {
     standby: "{launchpad}???ㅽ깲諛붿씠 移대찓?쇰? 怨좎젙?덉뒿?덈떎. 以鍮꾨릺硫?諛쒖궗?섏꽭??",
     standbyButton: "?ㅽ깲諛붿씠 諛곗튂",
     states: {
-      FALL: "?숉븯",
-      LAUNCH: "諛쒖궗",
-      PITCHOVER: "?먯꽭 ?꾪솚",
-      SCRAPE: "沅곸갹 ?묒큺",
-      SEPARATION: "??遺꾨━",
-      STAGE1: "1???곗냼",
-      STAGE2: "2???곗냼",
-      STANDBY: "?ㅽ깲諛붿씠"
+      FALL: "낙하",
+      IGNITION: "\uc810\ud654 \uc608\uc5f4",
+      LAUNCH: "발사",
+      PITCHOVER: "자세 전환",
+      SCRAPE: "궁창 접촉",
+      SEPARATION: "단 분리",
+      STAGE1: "1단 연소",
+      STAGE2: "2단 연소",
+      STANDBY: "스탠바이"
     },
     tracking: "{launchpad} 諛쒖궗瑜?{stage} ?④퀎源뚯? 異붿쟻 以묒엯?덈떎. ?쒕옒洹몄? 以뚯? 怨꾩냽 ?ъ슜?????덉뒿?덈떎.",
     ended: "{launchpad} 諛쒖궗 異붿쟻??醫낅즺?섏뿀?듬땲?? ?ㅼ쓬 諛쒖궗瑜?誘몃━ 蹂대젮硫??ㅼ떆 ?ㅽ깲諛붿씠瑜?諛곗튂?섏꽭??"
@@ -2073,12 +2077,16 @@ function getRocketTrackingSummary(snapshot) {
     return copy.idle;
   }
 
+  const launchLabel = snapshot.missionLabel
+    ? `${snapshot.missionLabel} · ${snapshot.launchpadName ?? ""}`
+    : (snapshot.launchpadName ?? "");
+
   if (snapshot.state === "STANDBY") {
-    return copy.standby.replace("{launchpad}", snapshot.launchpadName ?? "");
+    return copy.standby.replace("{launchpad}", launchLabel);
   }
 
   return copy.tracking
-    .replace("{launchpad}", snapshot.launchpadName ?? "")
+    .replace("{launchpad}", launchLabel)
     .replace("{stage}", getRocketStateLabel(snapshot.state));
 }
 
@@ -2091,6 +2099,12 @@ function getRocketTrackingProfile(snapshot) {
         elevation: 0.16
       };
     }
+    case "IGNITION":
+      return {
+        azimuth: getRocketFrontViewAzimuth(snapshot),
+        distance: constants.CAMERA_TRACKING_MIN_DISTANCE * 1.04,
+        elevation: 0.14
+      };
     case "STAGE1":
     case "LAUNCH": {
       const frontProfile = {
@@ -2155,11 +2169,16 @@ function syncRocketCameraAndUi() {
 
   if (rocketStandbyBtn) {
     rocketStandbyBtn.textContent = copy.standbyButton;
+    rocketStandbyBtn.disabled = activeSnapshot?.state === "IGNITION";
+  }
+
+  if (rocketLaunchBtn) {
+    rocketLaunchBtn.disabled = activeSnapshot?.state === "IGNITION";
   }
 
   if (snapshot) {
     const summaryText = getRocketTrackingSummary(snapshot);
-    const profileKey = `${snapshot.state}:${snapshot.spaceportIndex ?? "none"}:${snapshot.rocketType ?? "default"}`;
+    const profileKey = `${snapshot.state}:${snapshot.spaceportIndex ?? "none"}:${snapshot.rocketType ?? "default"}:${snapshot.missionProfile ?? "default"}`;
     celestialTrackingCameraApi.setTrackedCustomTargetResolver(
       () => {
         const latestActive = rocketApi.getActiveRocketSnapshot();
@@ -2896,6 +2915,8 @@ function animate() {
     const tel = rocketApi.getTelemetry();
     if (!tel) { panel.style.display = "none"; return; }
     panel.style.display = "";
+    document.getElementById("tel-mission").textContent = tel.missionLabel ?? "-";
+    document.getElementById("tel-vehicle").textContent = tel.vehicleLabel ?? "-";
     document.getElementById("tel-state").textContent = getRocketStateLabel(tel.state);
     document.getElementById("tel-alt").textContent = `${tel.altitude}%`;
     document.getElementById("tel-speed").textContent = `${tel.speed} u/s`;
