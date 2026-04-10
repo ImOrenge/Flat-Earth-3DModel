@@ -27,8 +27,7 @@ const rapierReadyPromise = (async () => {
 
 export function createRocketController({
   scalableStage,
-  constants,
-  domeWaterApi = null
+  constants
 }) {
   const rockets  = [];
   const debris   = [];   // falling stage-1 bodies after separation
@@ -150,21 +149,6 @@ export function createRocketController({
   const DOME_FLUID_DRAG   = 4.0;          // 궁창 유체 저항 계수 (이차)
   const DOME_VISCOUS_DRAG = 0.8;          // 궁창 점성 저항 계수 (선형)
   const LAUNCH_DRAG_FACTOR = 0.12;
-  const DOME_WATER_ENTRY_DRAG = constants.DOME_WATER_ENTRY_DRAG ?? 0.58;
-  const DOME_WATER_PLANING_DURATION = constants.DOME_WATER_PLANING_DURATION ?? 1.5;
-  const DOME_WATER_PLANING_DRAG_MULTIPLIER = constants.DOME_WATER_PLANING_DRAG_MULTIPLIER ?? 0.42;
-  const DOME_WATER_PLANING_VISCOUS_MULTIPLIER = constants.DOME_WATER_PLANING_VISCOUS_MULTIPLIER ?? 0.58;
-  const DOME_WATER_PLANING_MIN_SPEED = constants.DOME_WATER_PLANING_MIN_SPEED ?? S(0.44);
-  const DOME_WATER_STOP_SPEED = constants.DOME_WATER_STOP_SPEED ?? S(0.012);
-  const DOME_WATER_SPRAY_LIFETIME = constants.DOME_WATER_SPRAY_LIFETIME ?? 0.78;
-  const DOME_WATER_RIPPLE_BURST_DURATION = constants.DOME_WATER_RIPPLE_BURST_DURATION ?? 0.72;
-  const DOME_WATER_TRAIL_EMIT_INTERVAL = (constants.DOME_WATER_TRAIL_EMIT_INTERVAL ?? 0.05) * 1.1;
-  const DOME_WATER_TRAIL_WIDTH = constants.DOME_WATER_TRAIL_WIDTH ?? 0.048;
-  const DOME_WATER_TRAIL_LENGTH = constants.DOME_WATER_TRAIL_LENGTH ?? 0.3;
-  const DOME_WATER_TRAIL_WIDTH_SPEED_FACTOR = constants.DOME_WATER_TRAIL_WIDTH_SPEED_FACTOR ?? 0.05;
-  const DOME_WATER_TRAIL_LENGTH_SPEED_FACTOR = constants.DOME_WATER_TRAIL_LENGTH_SPEED_FACTOR ?? 0.18;
-  const DOME_WATER_TRAIL_END_FADE_DURATION = constants.DOME_WATER_TRAIL_END_FADE_DURATION ?? 0.52;
-  const DOME_WATER_TRAIL_END_FADE_SPEED = constants.DOME_WATER_TRAIL_END_FADE_SPEED ?? S(0.11);
   // 2-stage maneuvering
   const STAGE2_SPEED      = S(1.8);   // 2단 추력 속도 (setLinvel)
   const STAGE1_DURATION   = 5.0;      // 1단 연소 최대 시간 (안전 fallback)
@@ -184,10 +168,6 @@ export function createRocketController({
   const sharedSmokeGeo = new THREE.IcosahedronGeometry(S(0.015), 0);
   const sharedSmokeMat = new THREE.MeshBasicMaterial({
     color: 0xaaaaaa, transparent: true, opacity: 0.6, depthWrite: false
-  });
-  const sharedSprayMat = new THREE.MeshBasicMaterial({
-    color: 0xbfeeff, transparent: true, opacity: 0.82,
-    depthWrite: false, blending: THREE.AdditiveBlending
   });
   const sharedSepGeo = new THREE.IcosahedronGeometry(S(0.009), 0);
   const sharedSepMat = new THREE.MeshBasicMaterial({
@@ -235,23 +215,11 @@ export function createRocketController({
     const { vertices, indices } = buildDomeMesh();
     // 돔 트라이메시 콜라이더 제거: 돔 접촉은 domeYAt() 위치 검사로 코드 제어.
     // 물리 충돌 반응(튕김) 방지.
-    let groundColliderDesc = null;
-    if (typeof RAPIER.ColliderDesc?.halfSpace === "function") {
-      groundColliderDesc = RAPIER.ColliderDesc.halfSpace(new RAPIER.Vector3(0, 1, 0))
-        .setTranslation(0, constants.SURFACE_Y, 0);
-    } else if (typeof RAPIER.ColliderDesc?.halfspace === "function") {
-      groundColliderDesc = RAPIER.ColliderDesc.halfspace(new RAPIER.Vector3(0, 1, 0))
-        .setTranslation(0, constants.SURFACE_Y, 0);
-    } else {
-      const fallbackHalfThickness = 0.5;
-      groundColliderDesc = RAPIER.ColliderDesc
-        .cuboid(constants.DISC_RADIUS * 2, fallbackHalfThickness, constants.DISC_RADIUS * 2)
-        .setTranslation(0, constants.SURFACE_Y - fallbackHalfThickness, 0);
-    }
     world.createCollider(
-      groundColliderDesc
-        .setRestitution(0.0)
-        .setFriction(1.0)
+      RAPIER.ColliderDesc
+        .halfSpace(new RAPIER.Vector3(0, 1, 0))
+        .setTranslation(0, constants.SURFACE_Y, 0)
+        .setRestitution(0.0).setFriction(1.0)
     );
     physics = { world };
   }
@@ -957,11 +925,6 @@ export function createRocketController({
       thrustDir: new THREE.Vector3(0, 1, 0),
       trackingEligible: false,
       velocity: new THREE.Vector3(),
-      waterEntryTimer: 0,
-      lastImpactStrength: 0,
-      lastRippleEmitAt: 0,
-      lastTrailSpeed: 0,
-      lastTrailEmitAt: 0,
       wakeTimer: 0
     };
   }
@@ -985,11 +948,6 @@ export function createRocketController({
       thrustDir: record.thrustDir?.clone?.() ?? new THREE.Vector3(0, 1, 0),
       trackingEligible: true,
       velocity: new THREE.Vector3(0, 0, 0),
-      waterEntryTimer: 0,
-      lastImpactStrength: 0,
-      lastRippleEmitAt: 0,
-      lastTrailSpeed: 0,
-      lastTrailEmitAt: 0,
       wakeTimer: 0
     };
 
@@ -1056,7 +1014,7 @@ export function createRocketController({
 
   // ─── Particles ───
   function spawnWake(position, moveDir) {
-    const mesh = new THREE.Mesh(sharedWakeGeo, sharedWakeMat.clone());
+    const mesh = new THREE.Mesh(sharedWakeGeo, sharedWakeMat);
     mesh.position.copy(position);
     mesh.position.x += (Math.random() - 0.5) * S(0.015);
     mesh.position.y += (Math.random() - 0.5) * S(0.015);
@@ -1071,48 +1029,13 @@ export function createRocketController({
   }
 
   function spawnSmoke(position) {
-    const mesh = new THREE.Mesh(sharedSmokeGeo, sharedSmokeMat.clone());
+    const mesh = new THREE.Mesh(sharedSmokeGeo, sharedSmokeMat);
     mesh.position.copy(position);
     mesh.position.x += (Math.random() - 0.5) * S(0.01);
     mesh.position.y += (Math.random() - 0.5) * S(0.01);
     mesh.position.z += (Math.random() - 0.5) * S(0.01);
     scalableStage.add(mesh);
-    smokes.push({ mesh, age: 0, driftY: S(0.028), maxAge: SMOKE_DURATION, scaleGrowth: 4.0 });
-  }
-
-  function spawnSpray(position, direction, strength = 1) {
-    const mesh = new THREE.Mesh(sharedSmokeGeo, sharedSprayMat.clone());
-    mesh.position.copy(position);
-    mesh.position.x += (Math.random() - 0.5) * S(0.014);
-    mesh.position.y += (Math.random() - 0.5) * S(0.014);
-    mesh.position.z += (Math.random() - 0.5) * S(0.014);
-    scalableStage.add(mesh);
-    const velocity = direction.clone();
-    if (velocity.lengthSq() < 0.0001) {
-      velocity.set(0, 1, 0);
-    } else {
-      velocity.normalize();
-    }
-    velocity.multiplyScalar(S(0.12 + (Math.random() * 0.1) + (strength * 0.05)));
-    velocity.y += S(0.08 + (strength * 0.03));
-    smokes.push({
-      mesh,
-      age: 0,
-      velocity,
-      maxAge: DOME_WATER_SPRAY_LIFETIME * THREE.MathUtils.lerp(0.85, 1.25, Math.random()),
-      scaleGrowth: 3.4 + (strength * 1.8)
-    });
-  }
-
-  function spawnSprayBurst(position, direction, strength = 1) {
-    const burstCount = Math.max(3, Math.round(2 + (strength * 4)));
-    for (let index = 0; index < burstCount; index += 1) {
-      tempHorizontalDir.copy(direction);
-      tempHorizontalDir.x += (Math.random() - 0.5) * 0.85;
-      tempHorizontalDir.y += Math.random() * 0.85;
-      tempHorizontalDir.z += (Math.random() - 0.5) * 0.85;
-      spawnSpray(position, tempHorizontalDir, strength);
-    }
+    smokes.push({ mesh, age: 0 });
   }
 
   function spawnSepParticle(position) {
@@ -1182,7 +1105,6 @@ export function createRocketController({
       const maxAge = w.maxAge ?? WAKE_DURATION;
       w.age += deltaSeconds;
       if (w.age > maxAge) {
-        w.mesh.material?.dispose?.();
         scalableStage.remove(w.mesh);
         wakes.splice(i, 1);
       } else {
@@ -1199,24 +1121,12 @@ export function createRocketController({
     for (let i = smokes.length - 1; i >= 0; i--) {
       const s = smokes[i];
       s.age += deltaSeconds;
-      const maxAge = s.maxAge ?? SMOKE_DURATION;
-      if (s.age > maxAge) {
-        s.mesh.material?.dispose?.();
+      if (s.age > SMOKE_DURATION) {
         scalableStage.remove(s.mesh);
         smokes.splice(i, 1);
       } else {
-        if (s.velocity) {
-          s.velocity.y -= GRAVITY * 0.08 * deltaSeconds;
-          s.velocity.multiplyScalar(Math.max(0.92, 1.0 - (deltaSeconds * 0.9)));
-          s.mesh.position.addScaledVector(s.velocity, deltaSeconds);
-        } else if (s.driftY) {
-          s.mesh.position.y += s.driftY * deltaSeconds;
-        }
-        const scale = 1.0 + (s.age / maxAge) * (s.scaleGrowth ?? 4.0);
+        const scale = 1.0 + (s.age / SMOKE_DURATION) * 4.0;
         s.mesh.scale.set(scale, scale, scale);
-        if (s.mesh.material?.opacity !== undefined) {
-          s.mesh.material.opacity = Math.max(0, 1.0 - (s.age / maxAge));
-        }
       }
     }
   }
@@ -1225,160 +1135,6 @@ export function createRocketController({
   //  Rapier 물리 경로
   // ─────────────────────────────────────────────────────
   const _UP = new THREE.Vector3(0, 1, 0);
-
-  function getWaterDragCoefficients(timer) {
-    const dragBlend = THREE.MathUtils.clamp(
-      timer / Math.max(DOME_WATER_PLANING_DURATION, 0.0001),
-      0,
-      1
-    );
-    return {
-      fluid: THREE.MathUtils.lerp(
-        DOME_FLUID_DRAG * DOME_WATER_PLANING_DRAG_MULTIPLIER,
-        DOME_FLUID_DRAG,
-        dragBlend
-      ),
-      viscous: THREE.MathUtils.lerp(
-        DOME_VISCOUS_DRAG * DOME_WATER_PLANING_VISCOUS_MULTIPLIER,
-        DOME_VISCOUS_DRAG * 1.18,
-        dragBlend
-      )
-    };
-  }
-
-  function computeImpactStrength(speed, surfaceAlignment) {
-    const normalizedSpeed = THREE.MathUtils.clamp(speed / Math.max(STAGE2_SPEED, 0.0001), 0.15, 1.35);
-    return THREE.MathUtils.clamp(normalizedSpeed * THREE.MathUtils.lerp(1.05, 1.7, surfaceAlignment), 0.5, 2.2);
-  }
-
-  function enterWaterScrapeState(r, incomingVelocity, fallbackDirection, body = null) {
-    const surfaceY = domeYAt(r.position.x, r.position.z);
-    r.position.y = surfaceY;
-    if (body) {
-      body.setTranslation({ x: r.position.x, y: surfaceY, z: r.position.z }, true);
-    }
-
-    tempImpactVelocity.set(
-      incomingVelocity?.x ?? 0,
-      incomingVelocity?.y ?? 0,
-      incomingVelocity?.z ?? 0
-    );
-    const incomingSpeed = tempImpactVelocity.length();
-    const surfaceNormal = getDomeSurfaceNormalAt(r.position.x, r.position.z);
-    const normalSpeed = Math.abs(tempImpactVelocity.dot(surfaceNormal));
-    tempDesiredFlightDir
-      .copy(tempImpactVelocity)
-      .addScaledVector(surfaceNormal, -tempImpactVelocity.dot(surfaceNormal));
-
-    if (tempDesiredFlightDir.lengthSq() < 0.000001) {
-      tempDesiredFlightDir.copy(
-        getScrapeDirectionAt(r.position.x, r.position.z, tempImpactVelocity, fallbackDirection)
-      );
-    } else {
-      tempDesiredFlightDir.normalize();
-    }
-
-    const entryAlignment = incomingSpeed > 0.0001
-      ? THREE.MathUtils.clamp(normalSpeed / incomingSpeed, 0, 1)
-      : 0.5;
-    const tangentialSpeed = Math.max(0, Math.sqrt(Math.max(0, (incomingSpeed * incomingSpeed) - (normalSpeed * normalSpeed))));
-    const retention = THREE.MathUtils.clamp(
-      1 - (DOME_WATER_ENTRY_DRAG * THREE.MathUtils.lerp(0.62, 1.04, entryAlignment)),
-      0.18,
-      0.76
-    );
-    const planingSpeed = Math.max(
-      DOME_WATER_PLANING_MIN_SPEED,
-      tangentialSpeed * retention,
-      SCRAPE_SPEED * 0.38
-    );
-    const impactStrength = computeImpactStrength(incomingSpeed, entryAlignment);
-
-    r.state = "SCRAPE";
-    r.scrapeTimer = 0;
-    r.waterEntryTimer = 0;
-    r.lastTrailEmitAt = 0;
-    r.lastRippleEmitAt = 0;
-    r.lastImpactStrength = impactStrength;
-    r.lastTrailSpeed = planingSpeed;
-    r.scrapeDir.copy(tempDesiredFlightDir);
-    r.velocity.set(r.scrapeDir.x * planingSpeed, 0, r.scrapeDir.z * planingSpeed);
-
-    if (r.membraneMesh) {
-      r.membraneMesh.visible = true;
-    }
-
-    domeWaterApi?.registerImpact({
-      position: r.position,
-      velocity: tempImpactVelocity,
-      strength: impactStrength
-    });
-    spawnSprayBurst(r.position, surfaceNormal, impactStrength);
-
-    if (body) {
-      body.setLinvel({
-        x: r.velocity.x,
-        y: 0,
-        z: r.velocity.z
-      }, true);
-    }
-  }
-
-  function emitScrapeWaterEffects(r, moveDir, deltaSeconds) {
-    const horizontalSpeed = Math.hypot(
-      moveDir.lengthSq() > 0.0001 ? moveDir.x : r.velocity.x,
-      moveDir.lengthSq() > 0.0001 ? moveDir.z : r.velocity.z
-    );
-    r.lastTrailSpeed = horizontalSpeed;
-    r.lastRippleEmitAt += deltaSeconds;
-    r.lastTrailEmitAt += deltaSeconds;
-    if (r.waterEntryTimer <= DOME_WATER_RIPPLE_BURST_DURATION && r.lastRippleEmitAt >= 0.34) {
-      domeWaterApi?.registerImpact({
-        position: r.position,
-        velocity: moveDir.lengthSq() > 0.0001 ? moveDir : r.scrapeDir,
-        strength: THREE.MathUtils.clamp(0.24 + (r.lastImpactStrength * 0.18), 0.24, 0.6)
-      });
-      r.lastRippleEmitAt = 0;
-    }
-    if (r.lastTrailEmitAt >= DOME_WATER_TRAIL_EMIT_INTERVAL) {
-      const remainingScrapeTime = Math.max(0, SCRAPE_FUEL_DURATION - r.scrapeTimer);
-      const timeFade = THREE.MathUtils.clamp(
-        remainingScrapeTime / Math.max(DOME_WATER_TRAIL_END_FADE_DURATION, 0.0001),
-        0,
-        1
-      );
-      const speedFade = THREE.MathUtils.clamp(
-        (horizontalSpeed - DOME_WATER_STOP_SPEED) / Math.max(DOME_WATER_TRAIL_END_FADE_SPEED, 0.0001),
-        0,
-        1
-      );
-      const trailVisibility = Math.min(timeFade, speedFade);
-      if (trailVisibility <= 0.16) {
-        r.lastTrailEmitAt = 0;
-        return;
-      }
-      const speedFactor = THREE.MathUtils.clamp(horizontalSpeed / Math.max(STAGE2_SPEED, 0.0001), 0, 1.25);
-      const width = THREE.MathUtils.lerp(
-        DOME_WATER_TRAIL_WIDTH * 0.96,
-        DOME_WATER_TRAIL_WIDTH * 0.52,
-        speedFactor
-      ) * THREE.MathUtils.lerp(0.85, 1.0, trailVisibility);
-      const length = THREE.MathUtils.lerp(
-        DOME_WATER_TRAIL_LENGTH * 1.15,
-        DOME_WATER_TRAIL_LENGTH * 2.85,
-        speedFactor
-      ) * THREE.MathUtils.lerp(0.55, 1.0, trailVisibility);
-      domeWaterApi?.registerTrail({
-        position: r.position,
-        direction: moveDir.lengthSq() > 0.0001 ? moveDir : r.scrapeDir,
-        strength: THREE.MathUtils.clamp((0.34 + (r.lastImpactStrength * 0.4)) * trailVisibility, 0.18, 1.05),
-        speed: horizontalSpeed,
-        width,
-        length
-      });
-      r.lastTrailEmitAt = 0;
-    }
-  }
 
   function updateRocketPhysics(r, deltaSeconds, arrayIndex) {
     const body = r.rigidBody;
@@ -1525,9 +1281,23 @@ export function createRocketController({
       // 궁창 접촉(Y 클램프) 또는 연소 시간 초과 → SCRAPE
       if (r.position.y >= domeY2 || r.stageTimer >= STAGE2_DURATION) {
         // 관통 방지: Y를 돔 면에 고정
+        r.position.y = Math.min(r.position.y, domeY2);
+        body.setTranslation({ x: r.position.x, y: r.position.y, z: r.position.z }, true);
+        r.state = "SCRAPE";
+        r.scrapeTimer = 0;
+        if (r.membraneMesh) r.membraneMesh.visible = true;
         const curVel = body.linvel();
         captureFlightDirectionFromVelocity(r, curVel, r.thrustDir);
-        enterWaterScrapeState(r, curVel, r.targetFlightDir, body);
+        tempImpactVelocity.set(curVel.x, curVel.y, curVel.z);
+        const scrapeDir = getScrapeDirectionAt(r.position.x, r.position.z, tempImpactVelocity, r.targetFlightDir);
+        r.scrapeDir.copy(scrapeDir);
+        const scrapeEntrySpd = Math.max(tempImpactVelocity.length(), SCRAPE_SPEED * 0.4);
+        r.velocity.set(r.scrapeDir.x * scrapeEntrySpd, 0, r.scrapeDir.z * scrapeEntrySpd);
+        body.setLinvel({
+          x: r.scrapeDir.x * scrapeEntrySpd,
+          y: 0,
+          z: r.scrapeDir.z * scrapeEntrySpd
+        }, true);
       }
 
     // ── LAUNCH: 단일 단계 수직 상승 ──────────────────────
@@ -1561,16 +1331,27 @@ export function createRocketController({
 
       const domeY = domeYAt(r.position.x, r.position.z);
       if (r.position.y >= domeY - S(0.04)) {
+        r.state = "SCRAPE";
+        r.scrapeTimer = 0;
+        if (r.membraneMesh) r.membraneMesh.visible = true;
         const launchVel = body.linvel();
         captureFlightDirectionFromVelocity(r, launchVel, steeredDir);
-        enterWaterScrapeState(r, launchVel, steeredDir, body);
+        tempImpactVelocity.set(launchVel.x, launchVel.y, launchVel.z);
+        r.scrapeDir.copy(
+          getScrapeDirectionAt(r.position.x, r.position.z, tempImpactVelocity, r.targetFlightDir)
+        );
+        r.velocity.set(r.scrapeDir.x * SCRAPE_SPEED, 0, r.scrapeDir.z * SCRAPE_SPEED);
+        body.setLinvel({
+          x: r.scrapeDir.x * SCRAPE_SPEED,
+          y: 0,
+          z: r.scrapeDir.z * SCRAPE_SPEED
+        }, true);
       }
 
     // ── SCRAPE: 돔 표면 슬라이딩 (잔여추진력 + 유체저항) ──
     } else if (r.state === "SCRAPE") {
       // 잔여 추진력: 2단 연료 소진 전까지 헤딩 방향으로 계속 밀기
       const fuelLeft = Math.max(0, 1.0 - r.scrapeTimer / SCRAPE_FUEL_DURATION);
-      r.waterEntryTimer += deltaSeconds;
       body.applyForce({
         x: r.scrapeDir.x * SCRAPE_RESIDUAL_THRUST * fuelLeft,
         y: 0,
@@ -1581,9 +1362,8 @@ export function createRocketController({
       const velPre = body.linvel();
       const hSpeed = Math.hypot(velPre.x, velPre.z);
       if (hSpeed > 0.0001) {
-        const { fluid, viscous } = getWaterDragCoefficients(r.waterEntryTimer);
-        const fluidForce = fluid * hSpeed * hSpeed
-                         + viscous * hSpeed;
+        const fluidForce = DOME_FLUID_DRAG * hSpeed * hSpeed
+                         + DOME_VISCOUS_DRAG * hSpeed;
         body.applyForce({
           x: -(velPre.x / hSpeed) * fluidForce,
           y: 0,
@@ -1615,7 +1395,17 @@ export function createRocketController({
         );
       }
 
-      emitScrapeWaterEffects(r, moveDir.lengthSq() > 0 ? moveDir : r.scrapeDir, deltaSeconds);
+      r.wakeTimer += deltaSeconds;
+      if (r.wakeTimer > 0.01) {
+        spawnWake(r.position, moveDir.lengthSq() > 0 ? moveDir : r.scrapeDir);
+        r.wakeTimer = 0;
+      }
+      r.smokeTimer += deltaSeconds;
+      if (r.smokeTimer > 0.05) {
+        const tailDir = moveDir.clone().negate().normalize();
+        spawnSmoke(r.position.clone().addScaledVector(tailDir, S(0.04)));
+        r.smokeTimer = 0;
+      }
 
       r.scrapeTimer += deltaSeconds;
 
@@ -1626,7 +1416,7 @@ export function createRocketController({
       // 유체저항으로 감속 → 정지 또는 돔 이탈 → 낙하
       const finalVel = body.linvel();
       const finalHSpeed = Math.hypot(finalVel.x, finalVel.z);
-      const stoppedByFluid = finalHSpeed < DOME_WATER_STOP_SPEED;
+      const stoppedByFluid = finalHSpeed < S(0.01);
       if (stoppedByFluid || r.scrapeTimer >= SCRAPE_FUEL_DURATION || outsideDome) {
         r.state = "FALL";
         if (r.membraneMesh) r.membraneMesh.visible = false;
@@ -1790,8 +1580,18 @@ export function createRocketController({
 
       if (r.position.y >= fbDomeH2 || r.stageTimer >= STAGE2_DURATION) {
         r.position.y = Math.min(r.position.y, fbDomeH2);
+        r.state = "SCRAPE";
+        r.scrapeTimer = 0;
+        if (r.membraneMesh) r.membraneMesh.visible = true;
         captureFlightDirectionFromVelocity(r, r.velocity, r.thrustDir);
-        enterWaterScrapeState(r, r.velocity, r.targetFlightDir);
+        r.scrapeDir.copy(
+          getScrapeDirectionAt(r.position.x, r.position.z, r.velocity, r.targetFlightDir)
+        );
+        const fbScrapeEntrySpd = Math.max(r.velocity.length(), SCRAPE_SPEED * 0.4);
+        r.velocity.set(
+          r.scrapeDir.x * fbScrapeEntrySpd, 0,
+          r.scrapeDir.z * fbScrapeEntrySpd
+        );
       }
 
     // ── LAUNCH 폴백 ──────────────────────────────────────
@@ -1822,8 +1622,18 @@ export function createRocketController({
 
       if (r.position.y >= fbDomeH) {
         r.position.y = fbDomeH;
+        r.state = "SCRAPE";
+        r.scrapeTimer = 0;
         captureFlightDirectionFromVelocity(r, r.velocity, steeredDir);
-        enterWaterScrapeState(r, r.velocity, steeredDir);
+        r.scrapeDir.copy(
+          getScrapeDirectionAt(r.position.x, r.position.z, r.velocity, r.targetFlightDir)
+        );
+        r.velocity.set(
+          r.scrapeDir.x * SCRAPE_SPEED,
+          0,
+          r.scrapeDir.z * SCRAPE_SPEED
+        );
+        if (r.membraneMesh) r.membraneMesh.visible = true;
       } else if (r.position.y < constants.SURFACE_Y) {
         return handleRocketRemoval(r, arrayIndex);
       }
@@ -1832,16 +1642,14 @@ export function createRocketController({
     } else if (r.state === "SCRAPE") {
       // 잔여 추진력
       const fbFuelLeft = Math.max(0, 1.0 - r.scrapeTimer / SCRAPE_FUEL_DURATION);
-      r.waterEntryTimer += deltaSeconds;
       r.velocity.x += r.scrapeDir.x * SCRAPE_RESIDUAL_THRUST * fbFuelLeft * deltaSeconds;
       r.velocity.z += r.scrapeDir.z * SCRAPE_RESIDUAL_THRUST * fbFuelLeft * deltaSeconds;
 
       // 유체저항으로 감속
       const fbHSpd = Math.hypot(r.velocity.x, r.velocity.z);
       if (fbHSpd > 0.0001) {
-        const { fluid, viscous } = getWaterDragCoefficients(r.waterEntryTimer);
-        const fbForce = fluid * fbHSpd * fbHSpd
-                      + viscous * fbHSpd;
+        const fbForce = DOME_FLUID_DRAG * fbHSpd * fbHSpd
+                      + DOME_VISCOUS_DRAG * fbHSpd;
         const fbDecel = fbForce * deltaSeconds; // a*dt 방식
         const fbClamp = Math.min(fbDecel, fbHSpd * 0.95);
         r.velocity.x -= (r.velocity.x / fbHSpd) * fbClamp;
@@ -1868,7 +1676,13 @@ export function createRocketController({
         );
       }
 
-      emitScrapeWaterEffects(r, moveDir, deltaSeconds);
+      r.wakeTimer += deltaSeconds;
+      if (r.wakeTimer > 0.01) { spawnWake(r.position, moveDir); r.wakeTimer = 0; }
+      r.smokeTimer += deltaSeconds;
+      if (r.smokeTimer > 0.05) {
+        spawnSmoke(r.position.clone().addScaledVector(moveDir.clone().negate(), S(0.04)));
+        r.smokeTimer = 0;
+      }
 
       r.scrapeTimer += deltaSeconds;
 
@@ -1876,7 +1690,7 @@ export function createRocketController({
         >= domeRadius * domeRadius * 0.97;
 
       const fbFinalHSpd = Math.hypot(r.velocity.x, r.velocity.z);
-      const fbStopped = fbFinalHSpd < DOME_WATER_STOP_SPEED;
+      const fbStopped = fbFinalHSpd < S(0.01);
       if (fbStopped || r.scrapeTimer >= SCRAPE_FUEL_DURATION || fbOutsideDome) {
         r.state = "FALL";
         if (r.membraneMesh) r.membraneMesh.visible = false;
