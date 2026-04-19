@@ -1,5 +1,19 @@
-﻿import * as THREE from "../../vendor/three.module.js";
+import * as THREE from "../../vendor/three.module.js";
 import { getProjectedPositionFromGeo } from "./geo-utils.js";
+
+const DEFAULT_MISSION_PROFILE_ID = "default";
+const ARTEMIS_II_MISSION_PROFILE_ID = "artemis-ii";
+const ARTEMIS_II_SPACEPORT = {
+  name: "LC-39B / Kennedy Space Center",
+  lat: 28.608,
+  lon: -80.604,
+  heading: 90
+};
+
+export const ROCKET_MISSION_PROFILES = [
+  { id: DEFAULT_MISSION_PROFILE_ID, label: "Default Launch" },
+  { id: ARTEMIS_II_MISSION_PROFILE_ID, label: "Artemis II" }
+];
 
 export const SPACEPORTS = [
   { name: "Cape Canaveral, USA (East)", lat: 28.39, lon: -80.60, heading: 90 },
@@ -9,11 +23,11 @@ export const SPACEPORTS = [
   { name: "Plesetsk, Russia (Polar/North)", lat: 62.92, lon: 40.57, heading: 0 },
   { name: "Baikonur, Russia (North-East)", lat: 45.96, lon: 63.30, heading: 60 },
   { name: "Kourou, Guiana (East)", lat: 5.23, lon: -52.76, heading: 90 },
-  { name: "And첩ya, Norway (Polar/North)", lat: 69.29, lon: 16.02, heading: 0 }
+  { name: "Andøya, Norway (Polar/North)", lat: 69.29, lon: 16.02, heading: 0 }
 ];
 
 // ??? Rapier async load ???
-let RAPIER = null;
+  let RAPIER = null;
 const rapierReadyPromise = (async () => {
   try {
     const mod = await import("../../vendor/rapier-physics.js");
@@ -27,18 +41,148 @@ const rapierReadyPromise = (async () => {
 
 export function createRocketController({
   scalableStage,
-  constants
+  constants,
+  domeWaterApi = null
 }) {
   const rockets  = [];
   const debris   = [];   // falling stage-1 bodies after separation
   const wakes    = [];
   const smokes   = [];
+  let standbyRocket = null;
+  let lastCompletedLaunchpadName = "";
 
   const S = v => constants.scaleDimension(v);
+  function getRocketLaunchDisplayName(record) {
+    if (!record) {
+      return "";
+    }
+
+    return record.missionLabel
+      ? `${record.missionLabel} · ${record.launchpadName ?? ""}`
+      : (record.launchpadName ?? "");
+  }
+
+  function getRocketVelocity(r) {
+    if (r.rigidBody) {
+      const velocity = r.rigidBody.linvel();
+      tempSnapshotVelocity.set(velocity.x, velocity.y, velocity.z);
+      return tempSnapshotVelocity;
+    }
+
+    tempSnapshotVelocity.copy(r.velocity ?? tempSnapshotVelocity.set(0, 0, 0));
+    return tempSnapshotVelocity;
+  }
+
+  function buildRocketSnapshot(record, stateOverride = null) {
+    if (!record) {
+      return null;
+    }
+
+    const snapshotState = stateOverride ?? record.state;
+    const velocity = getRocketVelocity(record);
+    const speed = velocity.length();
+    tempSnapshotUp.copy(_UP).applyQuaternion(record.mesh.quaternion).normalize();
+    if (speed > 0.0001) {
+      tempSnapshotForward.copy(velocity).normalize();
+    } else if (snapshotState === "STANDBY") {
+      tempHeadingUp.set(record.targetFlightDir.x, 0.12, record.targetFlightDir.z).normalize();
+      tempSnapshotForward.copy(tempHeadingUp);
+    } else if (record.thrustDir?.lengthSq?.() > 0) {
+      tempSnapshotForward.copy(record.thrustDir).normalize();
+    } else {
+      tempSnapshotForward.copy(tempSnapshotUp);
+    }
+
+    tempSnapshotLookTarget.copy(getRocketDisplayPosition(record, snapshotState));
+    if (snapshotState === "STANDBY") {
+      tempSnapshotLookTarget.addScaledVector(tempSnapshotUp, S(0.07));
+    } else if (snapshotState === "SCRAPE" || snapshotState === "FALL") {
+      tempSnapshotLookTarget.addScaledVector(_UP, S(0.055));
+      tempSnapshotLookTarget.addScaledVector(tempSnapshotForward, S(0.02));
+    } else {
+      tempSnapshotLookTarget.addScaledVector(_UP, S(0.03));
+      tempSnapshotLookTarget.addScaledVector(tempSnapshotForward, S(0.045));
+    }
+
+    return {
+      forward: tempSnapshotForward.clone(),
+      headingDirection: record.targetFlightDir.clone(),
+      ignitionProgress: THREE.MathUtils.clamp(
+        (record.ignitionTimer ?? 0) / Math.max(record.ignitionDuration ?? 1, 0.0001),
+        0,
+        1
+      ),
+      launchpadName: record.launchpadName,
+      lookTarget: tempSnapshotLookTarget.clone(),
+      missionLabel: record.missionLabel ?? "",
+      missionProfile: record.missionProfile ?? DEFAULT_MISSION_PROFILE_ID,
+      engineHeat: record.engineHeat ?? 0,
+      position: tempRocketAnchor.clone(),
+      rocketType: record.rocketType,
+      scrapeTimer: record.scrapeTimer ?? 0,
+      spaceportIndex: record.spaceportIndex,
+      stageTimer: record.stageTimer ?? 0,
+      state: snapshotState,
+      trackingEligible: Boolean(record.trackingEligible),
+      up: tempSnapshotUp.clone(),
+      vehicleLabel: record.vehicleLabel ?? "",
+      velocity: velocity.clone()
+    };
+  }
+
+  function getStandbySnapshot() {
+    return buildRocketSnapshot(standbyRocket, "STANDBY");
+  }
+
+  function getActiveRocketSnapshot() {
+    if (rockets.length === 0) {
+      return null;
+    }
+    return buildRocketSnapshot(rockets[rockets.length - 1]);
+  }
+
+  function handleRocketRemoval(r, arrayIndex, body = null) {
+    if (body && physics) {
+      physics.world.removeRigidBody(body);
+    }
+    removeLaunchTower(r);
+    scalableStage.remove(r.mesh);
+    rockets.splice(arrayIndex, 1);
+    if (rockets.length === 0 && !standbyRocket) {
+      lastCompletedLaunchpadName = getRocketLaunchDisplayName(r);
+    }
+    return true;
+  }
+  const tempHeadingUp = new THREE.Vector3();
+  const tempHorizontalDir = new THREE.Vector3();
+  const tempImpactVelocity = new THREE.Vector3();
+  const tempProjectedScrapeDir = new THREE.Vector3();
+  const tempSnapshotUp = new THREE.Vector3();
+  const tempSnapshotForward = new THREE.Vector3();
+  const tempSnapshotVelocity = new THREE.Vector3();
+  const tempSnapshotLookTarget = new THREE.Vector3();
+  const tempSurfaceNormal = new THREE.Vector3();
+  const tempDesiredFlightDir = new THREE.Vector3();
+  const tempFlightBlendDir = new THREE.Vector3();
+  const tempVelocityDirection = new THREE.Vector3();
+  const tempStageEntryDirection = new THREE.Vector3();
+  const tempScrapeTrailDirection = new THREE.Vector3();
+  const tempScrapeTrailAnchor = new THREE.Vector3();
+  const tempMembraneWorldPosition = new THREE.Vector3();
+  const tempScrapeFallbackAnchor = new THREE.Vector3();
+  const STAGE1_TURN_RATE = 2.8;
+  const STAGE2_TURN_RATE = 1.9;
+  const LAUNCH_TURN_RATE = 2.4;
+  const LAUNCH_TOWER_RELEASE_DURATION = 0.9;
 
   // ?? Physics constants ??
   const WAKE_DURATION     = 1.0;
   const SMOKE_DURATION    = 1.2;
+  const IGNITION_STEAM_INTERVAL_SCALE = 0.68;
+  const IGNITION_EXHAUST_INTERVAL_SCALE = 0.5;
+  const ASCENT_EXHAUST_INTERVAL_SCALE = 0.55;
+  const FALL_SMOKE_INTERVAL_SCALE = 0.7;
+  const ASCENT_EXHAUST_BURST_MULTIPLIER = 2.8;
   const GRAVITY           = S(4.5);
   const AIR_DRAG          = 3.5;
   // Legacy (single-stage / SCRAPE / FALL)
@@ -48,17 +192,43 @@ export function createRocketController({
   const DOME_FLUID_DRAG   = 4.0;          // 沅곸갹 ?좎껜 ???怨꾩닔 (?댁감)
   const DOME_VISCOUS_DRAG = 0.8;          // 沅곸갹 ?먯꽦 ???怨꾩닔 (?좏삎)
   const LAUNCH_DRAG_FACTOR = 0.12;
+  const DOME_WATER_ENTRY_DRAG = constants.DOME_WATER_ENTRY_DRAG ?? 0.58;
+  const DOME_WATER_PLANING_DURATION = constants.DOME_WATER_PLANING_DURATION ?? 1.5;
+  const DOME_WATER_PLANING_DRAG_MULTIPLIER = constants.DOME_WATER_PLANING_DRAG_MULTIPLIER ?? 0.42;
+  const DOME_WATER_PLANING_VISCOUS_MULTIPLIER = constants.DOME_WATER_PLANING_VISCOUS_MULTIPLIER ?? 0.58;
+  const DOME_WATER_PLANING_MIN_SPEED = constants.DOME_WATER_PLANING_MIN_SPEED ?? S(0.44);
+  const DOME_WATER_STOP_SPEED = constants.DOME_WATER_STOP_SPEED ?? S(0.012);
+  const DOME_WATER_SPRAY_LIFETIME = constants.DOME_WATER_SPRAY_LIFETIME ?? 0.78;
+  const DOME_WATER_RIPPLE_BURST_DURATION = constants.DOME_WATER_RIPPLE_BURST_DURATION ?? 0.72;
+  const DOME_WATER_TRAIL_EMIT_INTERVAL = (constants.DOME_WATER_TRAIL_EMIT_INTERVAL ?? 0.05)
+    * (constants.DOME_WATER_TRAIL_EMIT_SCALE ?? 1.35)
+    * 1.1;
+  const DOME_WATER_TRAIL_WIDTH = constants.DOME_WATER_TRAIL_WIDTH ?? 0.048;
+  const DOME_WATER_TRAIL_LENGTH = constants.DOME_WATER_TRAIL_LENGTH ?? 0.3;
+  const DOME_WATER_TRAIL_WIDTH_SPEED_FACTOR = constants.DOME_WATER_TRAIL_WIDTH_SPEED_FACTOR ?? 0.05;
+  const DOME_WATER_TRAIL_LENGTH_SPEED_FACTOR = constants.DOME_WATER_TRAIL_LENGTH_SPEED_FACTOR ?? 0.18;
+  const DOME_WATER_TRAIL_END_FADE_DURATION = constants.DOME_WATER_TRAIL_END_FADE_DURATION ?? 0.52;
+  const DOME_WATER_TRAIL_END_FADE_SPEED = constants.DOME_WATER_TRAIL_END_FADE_SPEED ?? S(0.11);
+  const ROCKET_SCRAPE_TRAIL_NOSE_OFFSET = constants.ROCKET_SCRAPE_TRAIL_NOSE_OFFSET ?? S(0.07);
+  const ROCKET_SCRAPE_TRAIL_LENGTH_MIN_SCALE = constants.ROCKET_SCRAPE_TRAIL_LENGTH_MIN_SCALE ?? 1.45;
+  const ROCKET_SCRAPE_TRAIL_LENGTH_VISIBILITY_FLOOR = constants.ROCKET_SCRAPE_TRAIL_LENGTH_VISIBILITY_FLOOR ?? 0.82;
+  const ROCKET_SCRAPE_TRAIL_HEAD_EXPANSION_BIAS = constants.ROCKET_SCRAPE_TRAIL_HEAD_EXPANSION_BIAS ?? 1.22;
+  const ROCKET_SCRAPE_TRAIL_HEAD_GROWTH_MAX = constants.ROCKET_SCRAPE_TRAIL_HEAD_GROWTH_MAX ?? 1.42;
+  const ROCKET_SCRAPE_TRAIL_TAIL_GROWTH_MAX = constants.ROCKET_SCRAPE_TRAIL_TAIL_GROWTH_MAX ?? 2.35;
+  const ROCKET_SCRAPE_TRAIL_GROWTH_EASE = constants.ROCKET_SCRAPE_TRAIL_GROWTH_EASE ?? 1.22;
   // 2-stage maneuvering
-  const STAGE1_THRUST     = S(5.0);
   const STAGE2_SPEED      = S(1.8);   // 2??異붾젰 ?띾룄 (setLinvel)
   const STAGE1_DURATION   = 5.0;      // 1???곗냼 理쒕? ?쒓컙 (?덉쟾 fallback)
   const SEP_DURATION      = 0.35;     // 遺꾨━ ?곗텧 ?쒓컙 (吏㏐쾶 ???띾룄 ?좎?濡??먯뿰?ㅻ읇寃?
   const STAGE2_DURATION   = 3.5;      // 2???곗냼 理쒕? ?쒓컙 (?덉쟾?μ튂)
   const SCRAPE_FUEL_DURATION = 6.0;   // 沅곸갹 湲곴린 吏???쒓컙(珥?
-  const PITCHOVER_DURATION  = 0.8;               // ?먯꽭 ?쒖뼱 吏???쒓컙 (30째源뚯? 鍮좊Ⅴ寃?
+  const IGNITION_DURATION_DEFAULT = 4.0;
+  const IGNITION_DURATION_SINGLE_STAGE = 3.2;
+  const IGNITION_DURATION_SLS = 4.8;
+  const STANDBY_VISUAL_LIFT_FADE_DURATION = 0.38;
   const PITCHOVER_ANGLE     = Math.PI / 2 * 0.80; // 理쒕? 湲곗슱湲? 72째 (?섏쭅?먯꽌)
   const PITCHOVER_SEP_ANGLE = Math.PI / 6;        // 遺꾨━ 媛곷룄: 30째
-  const STAGE1_ALT_TRIGGER  = 0.80;               // ?쇱튂?ㅻ쾭 ?쒖옉 怨좊룄 鍮꾩쑉 (80%)
+  const STAGE1_ALT_TRIGGER  = 0.80;               // 1??遺꾨━ 怨좊룄 鍮꾩쑉 (80%)
 
   // ?? Shared particle materials ??
   const sharedWakeGeo = new THREE.IcosahedronGeometry(S(0.012), 0);
@@ -69,6 +239,16 @@ export function createRocketController({
   const sharedSmokeGeo = new THREE.IcosahedronGeometry(S(0.015), 0);
   const sharedSmokeMat = new THREE.MeshBasicMaterial({
     color: 0xaaaaaa, transparent: true, opacity: 0.6, depthWrite: false
+  });
+  const sharedSteamMat = new THREE.MeshBasicMaterial({
+    color: 0xf8fbff, transparent: true, opacity: 0.78, depthWrite: false
+  });
+  const sharedExhaustSmokeMat = new THREE.MeshBasicMaterial({
+    color: 0xd8ddd8, transparent: true, opacity: 0.68, depthWrite: false
+  });
+  const sharedSprayMat = new THREE.MeshBasicMaterial({
+    color: 0xbfeeff, transparent: true, opacity: 0.82,
+    depthWrite: false, blending: THREE.AdditiveBlending
   });
   const sharedSepGeo = new THREE.IcosahedronGeometry(S(0.009), 0);
   const sharedSepMat = new THREE.MeshBasicMaterial({
@@ -116,25 +296,12 @@ export function createRocketController({
     const { vertices, indices } = buildDomeMesh();
     // ???몃씪?대찓??肄쒕씪?대뜑 ?쒓굅: ???묒큺? domeYAt() ?꾩튂 寃?щ줈 肄붾뱶 ?쒖뼱.
     // 臾쇰━ 異⑸룎 諛섏쓳(?뺢?) 諛⑹?.
-    const halfSpaceFactory =
-      (typeof RAPIER.ColliderDesc.halfSpace === "function")
-        ? RAPIER.ColliderDesc.halfSpace
-        : RAPIER.ColliderDesc.halfspace;
-    if (typeof halfSpaceFactory === "function") {
-      world.createCollider(
-        halfSpaceFactory(new RAPIER.Vector3(0, 1, 0))
-          .setTranslation(0, constants.SURFACE_Y, 0)
-          .setRestitution(0.0)
-          .setFriction(1.0)
-      );
-    } else {
-      world.createCollider(
-        RAPIER.ColliderDesc.cuboid(constants.DISC_RADIUS * 2, 0.01, constants.DISC_RADIUS * 2)
-          .setTranslation(0, constants.SURFACE_Y - 0.01, 0)
-          .setRestitution(0.0)
-          .setFriction(1.0)
-      );
-    }
+    world.createCollider(
+      RAPIER.ColliderDesc
+        .halfSpace(new RAPIER.Vector3(0, 1, 0))
+        .setTranslation(0, constants.SURFACE_Y, 0)
+        .setRestitution(0.0).setFriction(1.0)
+    );
     physics = { world };
   }
 
@@ -147,10 +314,479 @@ export function createRocketController({
     return constants.DOME_BASE_Y + constants.DOME_VERTICAL_SCALE * Math.sqrt(Math.max(0, R * R - rSq));
   }
 
+  function getDomeSurfaceNormalAt(x, z, target = tempSurfaceNormal) {
+    const y = domeYAt(x, z);
+    const R  = constants.DOME_RADIUS;
+    const b  = constants.DOME_VERTICAL_SCALE;
+    // ??먯껜 implicit form: (x짼+z짼)/R짼 + (y-base)짼/b짼 = 1 ??湲곗슱湲???(x/R짼, (y-base)/b짼, z/R짼)
+    target.set(
+      x / (R * R),
+      (y - constants.DOME_BASE_Y) / (b * b),
+      z / (R * R)
+    );
+    if (target.lengthSq() < 0.000001) {
+      target.set(0, 1, 0);
+    } else {
+      target.normalize();
+    }
+    return target;
+  }
+
+  function getScrapeDirectionAt(x, z, incomingVelocity, fallbackDirection, target = tempProjectedScrapeDir) {
+    target.copy(incomingVelocity ?? _UP);
+    const surfaceNormal = getDomeSurfaceNormalAt(x, z);
+    target.addScaledVector(surfaceNormal, -target.dot(surfaceNormal));
+
+    tempHorizontalDir.set(target.x, 0, target.z);
+    if (tempHorizontalDir.lengthSq() < 0.000001) {
+      tempHorizontalDir.set(
+        fallbackDirection?.x ?? 0,
+        0,
+        fallbackDirection?.z ?? 1
+      );
+    }
+
+    if (tempHorizontalDir.lengthSq() < 0.000001) {
+      tempHorizontalDir.set(0, 0, 1);
+    } else {
+      tempHorizontalDir.normalize();
+    }
+
+    target.set(tempHorizontalDir.x, 0, tempHorizontalDir.z);
+    return target;
+  }
+
+  function computePitchProgramDirection(horizontalDir, pitchAngle, target = tempDesiredFlightDir) {
+    target.set(
+      horizontalDir.x * Math.sin(pitchAngle),
+      Math.cos(pitchAngle),
+      horizontalDir.z * Math.sin(pitchAngle)
+    );
+
+    if (target.lengthSq() < 0.000001) {
+      target.copy(_UP);
+    } else {
+      target.normalize();
+    }
+
+    return target;
+  }
+
+  function initializeFlightDirection(record, fallbackDirection = _UP) {
+    const currentVelocity = getRocketVelocity(record);
+    if (currentVelocity.lengthSq() > 0.000001) {
+      record.flightDir.copy(currentVelocity).normalize();
+    } else if (record.flightDir.lengthSq() > 0.000001) {
+      record.flightDir.normalize();
+    } else if (fallbackDirection.lengthSq() > 0.000001) {
+      record.flightDir.copy(fallbackDirection).normalize();
+    } else {
+      record.flightDir.copy(_UP);
+    }
+
+    return record.flightDir;
+  }
+
+  function steerFlightDirection(record, desiredDirection, deltaSeconds, turnRate) {
+    record.desiredFlightDir.copy(desiredDirection);
+    initializeFlightDirection(record, desiredDirection);
+
+    const blend = 1 - Math.exp(-Math.max(0, turnRate) * deltaSeconds);
+    tempFlightBlendDir.copy(record.flightDir).lerp(record.desiredFlightDir, blend);
+    if (tempFlightBlendDir.lengthSq() < 0.000001) {
+      tempFlightBlendDir.copy(record.desiredFlightDir);
+    }
+
+    record.flightDir.copy(tempFlightBlendDir.normalize());
+    return record.flightDir;
+  }
+
+  function applyFlightVelocity(record, direction, speed, body = null) {
+    record.velocity.copy(direction).multiplyScalar(speed);
+    if (body) {
+      body.setLinvel({
+        x: record.velocity.x,
+        y: record.velocity.y,
+        z: record.velocity.z
+      }, true);
+    }
+
+    return record.velocity;
+  }
+
+  function getRocketFlightProfile(record) {
+    return record?.flightProfile ?? {};
+  }
+
+  function getRocketStage1AltTrigger(record) {
+    return getRocketFlightProfile(record).stage1AltTrigger ?? STAGE1_ALT_TRIGGER;
+  }
+
+  function getRocketPitchoverSeparationAngle(record) {
+    return getRocketFlightProfile(record).pitchoverSeparationAngle ?? PITCHOVER_SEP_ANGLE;
+  }
+
+  function getRocketMaxPitchAngle(record) {
+    return getRocketFlightProfile(record).maxPitchAngle ?? PITCHOVER_ANGLE;
+  }
+
+  function getRocketStage1TurnRate(record) {
+    return getRocketFlightProfile(record).stage1TurnRate ?? STAGE1_TURN_RATE;
+  }
+
+  function getRocketStage2TurnRate(record) {
+    return getRocketFlightProfile(record).stage2TurnRate ?? STAGE2_TURN_RATE;
+  }
+
+  function getRocketStage1Speed(record) {
+    return ROCKET_SPEED * (getRocketFlightProfile(record).stage1SpeedMultiplier ?? 1);
+  }
+
+  function getRocketStage2Speed(record) {
+    return STAGE2_SPEED * (getRocketFlightProfile(record).stage2SpeedMultiplier ?? 1);
+  }
+
+  function createIgnitionOffsets(offsets) {
+    return offsets.map(([x, y, z]) => new THREE.Vector3(S(x), S(y), S(z)));
+  }
+
+  function computeStandbyVisualLift(group, ignoredMeshes = []) {
+    const ignoredSet = new Set(ignoredMeshes.filter(Boolean));
+    const localBounds = new THREE.Box3();
+    const meshBounds = new THREE.Box3();
+    const hasBounds = { value: false };
+    const anchorY = group.position.y;
+
+    group.updateMatrixWorld(true);
+    group.traverse((child) => {
+      if (!child.isMesh || ignoredSet.has(child) || !child.geometry) {
+        return;
+      }
+
+      if (!child.geometry.boundingBox) {
+        child.geometry.computeBoundingBox();
+      }
+      if (!child.geometry.boundingBox) {
+        return;
+      }
+
+      meshBounds.copy(child.geometry.boundingBox).applyMatrix4(child.matrixWorld);
+      if (!hasBounds.value) {
+        localBounds.copy(meshBounds);
+        hasBounds.value = true;
+      } else {
+        localBounds.union(meshBounds);
+      }
+    });
+
+    if (!hasBounds.value || localBounds.min.y >= anchorY) {
+      return 0;
+    }
+    return (anchorY - localBounds.min.y) + S(0.003);
+  }
+
+  function getRocketVisualLift(record, stateOverride = null) {
+    const state = stateOverride ?? record?.state;
+    const baseLift = record?.standbyVisualLift ?? 0;
+    if (baseLift <= 0) {
+      return 0;
+    }
+    if (state === "STANDBY" || state === "IGNITION") {
+      return baseLift;
+    }
+    if ((state === "STAGE1" || state === "LAUNCH") && (record?.stageTimer ?? 0) < STANDBY_VISUAL_LIFT_FADE_DURATION) {
+      const fade = 1 - THREE.MathUtils.smootherstep(
+        record.stageTimer ?? 0,
+        0,
+        STANDBY_VISUAL_LIFT_FADE_DURATION
+      );
+      return baseLift * fade;
+    }
+    return 0;
+  }
+
+  function getRocketDisplayPosition(record, stateOverride = null) {
+    tempRocketAnchor.copy(record.position);
+    const lift = getRocketVisualLift(record, stateOverride);
+    if (lift > 0) {
+      tempRocketAnchor.y += lift;
+    }
+    return tempRocketAnchor;
+  }
+
+  function syncRocketVisualPosition(record) {
+    record.mesh.position.copy(getRocketDisplayPosition(record));
+  }
+
+  function getRocketExhaustWorldPosition(record, flame = null) {
+    syncRocketVisualPosition(record);
+    scalableStage.updateMatrixWorld(true);
+    record.mesh.updateMatrixWorld(true);
+    if (flame) {
+      flame.getWorldPosition(tempRocketExhaustPosition);
+      scalableStage.worldToLocal(tempRocketExhaustPosition);
+      return tempRocketExhaustPosition;
+    }
+    return getRocketDisplayPosition(record);
+  }
+
+  function getRocketIgnitionProfile(rocketType = "two-stage") {
+    if (rocketType === "sls") {
+      return {
+        duration: IGNITION_DURATION_SLS,
+        exhaustInterval: 0.045,
+        exhaustOffsets: createIgnitionOffsets([
+          [0, -0.11, 0],
+          [-0.018, -0.09, 0],
+          [0.018, -0.09, 0]
+        ]),
+        flameScale: 1.22,
+        steamInterval: 0.065,
+        steamOffsets: createIgnitionOffsets([
+          [0, -0.11, 0],
+          [-0.024, -0.085, 0],
+          [0.024, -0.085, 0],
+          [-0.012, -0.1, 0.018],
+          [0.012, -0.1, -0.018]
+        ]),
+        steamSpread: 1.15,
+        steamVelocity: S(0.19),
+        towerReleaseProgress: 0.74
+      };
+    }
+
+    if (rocketType === "single") {
+      return {
+        duration: IGNITION_DURATION_SINGLE_STAGE,
+        exhaustInterval: 0.05,
+        exhaustOffsets: createIgnitionOffsets([[0, -0.065, 0]]),
+        flameScale: 0.92,
+        steamInterval: 0.075,
+        steamOffsets: createIgnitionOffsets([
+          [0, -0.065, 0],
+          [0.012, -0.06, 0],
+          [-0.012, -0.06, 0]
+        ]),
+        steamSpread: 0.82,
+        steamVelocity: S(0.13),
+        towerReleaseProgress: 0.68
+      };
+    }
+
+    return {
+      duration: IGNITION_DURATION_DEFAULT,
+      exhaustInterval: 0.048,
+      exhaustOffsets: createIgnitionOffsets([
+        [0, -0.11, 0],
+        [0.012, -0.102, 0],
+        [-0.012, -0.102, 0]
+      ]),
+      flameScale: 1.04,
+      steamInterval: 0.07,
+      steamOffsets: createIgnitionOffsets([
+        [0, -0.11, 0],
+        [0.02, -0.095, 0],
+        [-0.02, -0.095, 0]
+      ]),
+      steamSpread: 0.96,
+      steamVelocity: S(0.16),
+      towerReleaseProgress: 0.7
+    };
+  }
+
+  function setFlameHeat(flame, heat = 0, lengthScale = 1) {
+    if (!flame?.material) {
+      return;
+    }
+
+    const clampedHeat = THREE.MathUtils.clamp(heat, 0, 1);
+    flame.visible = clampedHeat > 0.015;
+    flame.material.transparent = true;
+    flame.material.opacity = THREE.MathUtils.lerp(0.12, 0.98, clampedHeat);
+    tempIgnitionColor.lerpColors(ignitionFlameCoolColor, ignitionFlameHotColor, clampedHeat);
+    flame.material.color.copy(tempIgnitionColor);
+    flame.scale.set(
+      THREE.MathUtils.lerp(0.42, 1.0, clampedHeat),
+      THREE.MathUtils.lerp(0.3, lengthScale, clampedHeat),
+      THREE.MathUtils.lerp(0.42, 1.0, clampedHeat)
+    );
+  }
+
+  function emitLocalSmoke(record, localOffset, localDirection, options = {}) {
+    tempIgnitionWorldPosition.copy(localOffset);
+    syncRocketVisualPosition(record);
+    scalableStage.updateMatrixWorld(true);
+    record.mesh.updateMatrixWorld(true);
+    record.mesh.localToWorld(tempIgnitionWorldPosition);
+    scalableStage.worldToLocal(tempIgnitionWorldPosition);
+    tempIgnitionWorldDirection.copy(localDirection).applyQuaternion(record.mesh.quaternion);
+    spawnSmoke(tempIgnitionWorldPosition, {
+      ...options,
+      velocity: tempIgnitionWorldDirection.multiplyScalar(options.speed ?? 1)
+    });
+  }
+
+  function updateIgnitionVisuals(record, ignitionProgress) {
+    const heat = THREE.MathUtils.smootherstep(ignitionProgress, 0.02, 0.92);
+    record.engineHeat = heat;
+    setFlameHeat(
+      record.flame1,
+      THREE.MathUtils.clamp((heat - 0.12) / 0.88, 0, 1),
+      (record.ignitionProfile?.flameScale ?? 1) * THREE.MathUtils.lerp(0.38, 1.0, heat)
+    );
+    setFlameHeat(record.flame2, 0);
+    if (record.membraneMesh) {
+      record.membraneMesh.visible = false;
+    }
+  }
+
+  function emitIgnitionEffects(record, deltaSeconds) {
+    const profile = record.ignitionProfile ?? getRocketIgnitionProfile(record.rocketType);
+    const progress = THREE.MathUtils.clamp(
+      record.ignitionTimer / Math.max(record.ignitionDuration, 0.0001),
+      0,
+      1
+    );
+    const heat = THREE.MathUtils.smootherstep(progress, 0.02, 0.92);
+    const steamWeight = 1.0 - THREE.MathUtils.smoothstep(progress, 0.58, 1.0);
+    const exhaustWeight = THREE.MathUtils.smootherstep(progress, 0.08, 0.94);
+
+    record.prelaunchSteamTimer += deltaSeconds;
+    const steamInterval = THREE.MathUtils.lerp(
+      profile.steamInterval * 1.24,
+      profile.steamInterval * 0.82,
+      heat
+    ) * IGNITION_STEAM_INTERVAL_SCALE;
+    while (record.prelaunchSteamTimer >= steamInterval) {
+      record.prelaunchSteamTimer -= steamInterval;
+      const steamSpeed = profile.steamVelocity * THREE.MathUtils.lerp(0.72, 1.22, heat);
+      for (const offset of profile.steamOffsets) {
+        const sideBias = Math.sign(offset.x);
+        const steamBurstCount = Math.max(2, Math.round(2 + (steamWeight * 2.2)));
+        for (let burstIndex = 0; burstIndex < steamBurstCount; burstIndex += 1) {
+          tempIgnitionLocalOffset.copy(offset);
+          emitLocalSmoke(
+            record,
+            tempIgnitionLocalOffset,
+            new THREE.Vector3(
+              sideBias * (0.45 + (Math.random() * 0.38 * profile.steamSpread)),
+              -0.92 + (Math.random() * 0.24),
+              (Math.random() - 0.5) * 0.42 * profile.steamSpread
+            ).normalize(),
+            {
+              jitter: S(0.018),
+              material: "steam",
+              maxAge: THREE.MathUtils.lerp(2.2, 1.35, heat),
+              scaleGrowth: THREE.MathUtils.lerp(8.4, 5.6, heat),
+              speed: steamSpeed * THREE.MathUtils.lerp(0.92, 1.16, Math.random()),
+              velocityDamping: 0.72,
+              velocityGravity: 0.16,
+              opacityFactor: THREE.MathUtils.lerp(1.08, 0.72, heat),
+              initialScale: THREE.MathUtils.lerp(1.36, 0.96, heat) * (0.9 + (steamWeight * 0.52))
+            }
+          );
+        }
+      }
+    }
+
+    record.prelaunchPulseTimer += deltaSeconds;
+    const exhaustInterval = THREE.MathUtils.lerp(
+      profile.exhaustInterval * 1.4,
+      profile.exhaustInterval,
+      exhaustWeight
+    ) * IGNITION_EXHAUST_INTERVAL_SCALE;
+    while (record.prelaunchPulseTimer >= exhaustInterval) {
+      record.prelaunchPulseTimer -= exhaustInterval;
+      for (const offset of profile.exhaustOffsets) {
+        const exhaustBurstCount = Math.max(2, Math.round(2 + (exhaustWeight * 3.2)));
+        for (let burstIndex = 0; burstIndex < exhaustBurstCount; burstIndex += 1) {
+          emitLocalSmoke(
+            record,
+            offset,
+            new THREE.Vector3(
+              (Math.random() - 0.5) * 0.18,
+              -1,
+              (Math.random() - 0.5) * 0.18
+            ).normalize(),
+            {
+              jitter: S(0.012),
+              material: "exhaust",
+              maxAge: THREE.MathUtils.lerp(1.08, 1.35, exhaustWeight),
+              scaleGrowth: THREE.MathUtils.lerp(3.8, 5.6, exhaustWeight),
+              speed: S(0.14 + (0.24 * exhaustWeight)) * THREE.MathUtils.lerp(0.92, 1.18, Math.random()),
+              velocityDamping: 0.8,
+              velocityGravity: 0.1,
+              opacityFactor: THREE.MathUtils.lerp(0.56, 0.9, exhaustWeight),
+              initialScale: THREE.MathUtils.lerp(0.84, 1.18, exhaustWeight)
+            }
+          );
+        }
+      }
+    }
+  }
+
+  function updateIgnitionState(record, deltaSeconds, body = null) {
+    record.ignitionTimer = Math.min(record.ignitionTimer + deltaSeconds, record.ignitionDuration);
+    record.position.copy(record.startPos);
+    record.velocity.set(0, 0, 0);
+    record.stageTimer = 0;
+    orientRocketForStandby(record.mesh, record.headingRad);
+    if (body) {
+      body.setTranslation({
+        x: record.startPos.x,
+        y: record.startPos.y,
+        z: record.startPos.z
+      }, true);
+      body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    }
+
+    const ignitionProgress = THREE.MathUtils.clamp(
+      record.ignitionTimer / Math.max(record.ignitionDuration, 0.0001),
+      0,
+      1
+    );
+    updateIgnitionVisuals(record, ignitionProgress);
+    syncRocketVisualPosition(record);
+    emitIgnitionEffects(record, deltaSeconds);
+
+    if (ignitionProgress >= (record.ignitionProfile?.towerReleaseProgress ?? 0.7)) {
+      startLaunchTowerRelease(record);
+    }
+
+    if (ignitionProgress >= 1) {
+      record.engineHeat = 1;
+      record.state = record.liftoffState ?? (record.isTwoStage ? "STAGE1" : "LAUNCH");
+      record.stageTimer = 0;
+      record.smokeTimer = 0;
+      setRocketLaunchVisuals(record);
+    }
+    return false;
+  }
+
+  function captureFlightDirectionFromVelocity(record, velocityLike, fallbackDirection = record.targetFlightDir) {
+    tempVelocityDirection.set(
+      velocityLike?.x ?? 0,
+      velocityLike?.y ?? 0,
+      velocityLike?.z ?? 0
+    );
+
+    if (tempVelocityDirection.lengthSq() > 0.000001) {
+      tempVelocityDirection.normalize();
+    } else if (fallbackDirection?.lengthSq?.() > 0.000001) {
+      tempVelocityDirection.copy(fallbackDirection).normalize();
+    } else {
+      tempVelocityDirection.copy(_UP);
+    }
+
+    record.flightDir.copy(tempVelocityDirection);
+    record.thrustDir.copy(tempVelocityDirection);
+    return tempVelocityDirection;
+  }
+
   function createRapierRocketBody(pos) {
     const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
       .setTranslation(pos.x, pos.y, pos.z)
-      .setLinearDamping(0.05)
+      .setLinearDamping(0.0)
       .setAngularDamping(10.0)
       .lockRotations();
     const body = physics.world.createRigidBody(bodyDesc);
@@ -178,9 +814,281 @@ export function createRocketController({
     return body;
   }
 
+  function getMissionProfileConfig(missionProfile = DEFAULT_MISSION_PROFILE_ID) {
+    if (missionProfile === ARTEMIS_II_MISSION_PROFILE_ID) {
+      return {
+        id: ARTEMIS_II_MISSION_PROFILE_ID,
+        launchpadName: ARTEMIS_II_SPACEPORT.name,
+        maxFlightDistance: S(2.25),
+        maxPitchAngle: Math.PI / 2 * 0.9,
+        missionLabel: "Artemis II",
+        pitchoverSeparationAngle: Math.PI / 180 * 24,
+        rocketType: "sls",
+        spaceport: ARTEMIS_II_SPACEPORT,
+        stage1AltTrigger: 0.9,
+        stage1SpeedMultiplier: 0.96,
+        stage1TurnRate: 2.1,
+        stage2SpeedMultiplier: 1.12,
+        stage2TurnRate: 1.55,
+        vehicleLabel: "SLS / Orion"
+      };
+    }
+
+    return {
+      id: DEFAULT_MISSION_PROFILE_ID,
+      launchpadName: null,
+      maxFlightDistance: S(1.5),
+      maxPitchAngle: PITCHOVER_ANGLE,
+      missionLabel: "",
+      pitchoverSeparationAngle: PITCHOVER_SEP_ANGLE,
+      rocketType: null,
+      spaceport: null,
+      stage1AltTrigger: STAGE1_ALT_TRIGGER,
+      stage1SpeedMultiplier: 1,
+      stage1TurnRate: STAGE1_TURN_RATE,
+      stage2SpeedMultiplier: 1,
+      stage2TurnRate: STAGE2_TURN_RATE,
+      vehicleLabel: ""
+    };
+  }
+
+  function getLaunchProfile(spaceportIndex, rocketType = "two-stage", missionProfile = DEFAULT_MISSION_PROFILE_ID) {
+    const mission = getMissionProfileConfig(missionProfile);
+    const missionSpaceport = mission.spaceport;
+    if (!missionSpaceport && (spaceportIndex < 0 || spaceportIndex >= SPACEPORTS.length)) {
+      return null;
+    }
+
+    const spaceport = missionSpaceport ?? SPACEPORTS[spaceportIndex];
+    const startPosGeo = getProjectedPositionFromGeo(
+      spaceport.lat,
+      spaceport.lon,
+      constants.DISC_RADIUS,
+      constants.SURFACE_Y
+    );
+    const startPos = new THREE.Vector3(startPosGeo.x, startPosGeo.y, startPosGeo.z);
+    const localNorthDir = new THREE.Vector3(-startPos.x, 0, -startPos.z).normalize();
+    const localEastDir = new THREE.Vector3(startPos.z, 0, -startPos.x).normalize();
+    const headingRad = THREE.MathUtils.degToRad(spaceport.heading);
+    const targetFlightDir = new THREE.Vector3()
+      .addScaledVector(localNorthDir, Math.cos(headingRad))
+      .addScaledVector(localEastDir, Math.sin(headingRad))
+      .normalize();
+    const maxFlightDistance = mission.maxFlightDistance;
+    const targetDropOffProjected = startPos.clone().addScaledVector(targetFlightDir, maxFlightDistance);
+
+    return {
+      effectiveRocketType: mission.rocketType ?? rocketType,
+      flightProfile: {
+        maxPitchAngle: mission.maxPitchAngle,
+        pitchoverSeparationAngle: mission.pitchoverSeparationAngle,
+        stage1AltTrigger: mission.stage1AltTrigger,
+        stage1SpeedMultiplier: mission.stage1SpeedMultiplier,
+        stage1TurnRate: mission.stage1TurnRate,
+        stage2SpeedMultiplier: mission.stage2SpeedMultiplier,
+        stage2TurnRate: mission.stage2TurnRate
+      },
+      headingRad,
+      maxFlightDistance,
+      missionLabel: mission.missionLabel,
+      missionProfile: mission.id,
+      spaceport,
+      spaceportIndex,
+      startPos,
+      targetDropOffProjected,
+      targetFlightDir,
+      vehicleLabel: mission.vehicleLabel || (rocketType === "single" ? "Single Stage" : "2-Stage Rocket")
+    };
+  }
+
+  function orientRocketForStandby(mesh, headingRad) {
+    mesh.quaternion.setFromAxisAngle(_UP, headingRad);
+  }
+
   // ??? Mesh builders ???
   // All meshes are oriented along +Y (nose at +Y, exhaust at -Y).
   // Orientation is done via quaternion.setFromUnitVectors(UP, dir) where UP=(0,1,0).
+
+  function getLaunchTowerDimensions(rocketType) {
+    if (rocketType === "two-stage" || rocketType === "sls") {
+      return {
+        armHeight: S(-0.01),
+        armLength: S(0.034),
+        armThickness: S(0.006),
+        armTravel: S(0.026),
+        baseHeight: S(0.012),
+        columnRadius: S(0.05),
+        columnSize: S(0.008),
+        padRadius: S(0.06),
+        padTopY: S(-0.096),
+        towerTopY: S(0.115)
+      };
+    }
+
+    return {
+      armHeight: S(0.0),
+      armLength: S(0.024),
+      armThickness: S(0.005),
+      armTravel: S(0.02),
+      baseHeight: S(0.01),
+      columnRadius: S(0.038),
+      columnSize: S(0.007),
+      padRadius: S(0.046),
+      padTopY: S(-0.048),
+      towerTopY: S(0.09)
+    };
+  }
+
+  function buildLaunchTower(profile, rocketType) {
+    const dims = getLaunchTowerDimensions(rocketType);
+    const tower = new THREE.Group();
+    tower.name = "rocket-launch-tower";
+    const movingArms = [];
+    const metallicMat = new THREE.MeshBasicMaterial({ color: 0x8794a1 });
+    const frameMat = new THREE.MeshBasicMaterial({ color: 0x5d6978 });
+    const accentMat = new THREE.MeshBasicMaterial({ color: 0xff8a3d });
+    const padCenterY = dims.padTopY - dims.baseHeight * 0.5;
+
+    tower.position.copy(profile.startPos);
+    orientRocketForStandby(tower, profile.headingRad);
+
+    const pad = new THREE.Mesh(
+      new THREE.CylinderGeometry(dims.padRadius, dims.padRadius * 1.08, dims.baseHeight, 12),
+      frameMat
+    );
+    pad.position.y = padCenterY;
+    tower.add(pad);
+
+    const serviceDeck = new THREE.Mesh(
+      new THREE.CylinderGeometry(dims.padRadius * 0.72, dims.padRadius * 0.76, S(0.006), 12),
+      metallicMat
+    );
+    serviceDeck.position.y = dims.padTopY + S(0.004);
+    tower.add(serviceDeck);
+
+    const columnHeight = dims.towerTopY - dims.padTopY;
+    const columnCenterY = dims.padTopY + columnHeight * 0.5;
+    for (let i = 0; i < 4; i++) {
+      const angle = (i / 4) * Math.PI * 2 + Math.PI / 4;
+      const column = new THREE.Mesh(
+        new THREE.BoxGeometry(dims.columnSize, columnHeight, dims.columnSize),
+        metallicMat
+      );
+      column.position.set(
+        Math.cos(angle) * dims.columnRadius,
+        columnCenterY,
+        Math.sin(angle) * dims.columnRadius
+      );
+      tower.add(column);
+    }
+
+    const topRing = new THREE.Mesh(
+      new THREE.CylinderGeometry(dims.columnRadius * 1.08, dims.columnRadius * 1.12, S(0.008), 12),
+      frameMat
+    );
+    topRing.position.y = dims.towerTopY;
+    tower.add(topRing);
+
+    const umbilical = new THREE.Mesh(
+      new THREE.BoxGeometry(S(0.02), S(0.012), S(0.02)),
+      accentMat
+    );
+    umbilical.position.set(dims.columnRadius * 0.55, dims.armHeight + S(0.028), 0);
+    tower.add(umbilical);
+
+    for (let i = 0; i < 4; i++) {
+      const angle = (i / 4) * Math.PI * 2;
+      const pivot = new THREE.Group();
+      pivot.position.set(
+        Math.cos(angle) * dims.columnRadius,
+        dims.armHeight,
+        Math.sin(angle) * dims.columnRadius
+      );
+      pivot.rotation.y = angle;
+
+      const arm = new THREE.Mesh(
+        new THREE.BoxGeometry(dims.armLength, dims.armThickness, dims.armThickness * 1.2),
+        metallicMat
+      );
+      arm.position.x = -dims.armLength * 0.5;
+      pivot.add(arm);
+
+      const clamp = new THREE.Mesh(
+        new THREE.BoxGeometry(dims.armThickness * 0.9, dims.armThickness * 1.8, dims.armThickness * 1.8),
+        accentMat
+      );
+      clamp.position.x = -dims.armLength + dims.armThickness * 0.5;
+      pivot.add(clamp);
+
+      tower.add(pivot);
+      movingArms.push({
+        basePosition: pivot.position.clone(),
+        liftAngle: Math.PI * 0.35,
+        pivot,
+        travel: dims.armTravel
+      });
+    }
+
+    return {
+      launchTower: tower,
+      towerPieces: { movingArms },
+      towerAnimationState: {
+        active: false,
+        duration: LAUNCH_TOWER_RELEASE_DURATION,
+        elapsed: 0
+      }
+    };
+  }
+
+  function removeLaunchTower(record) {
+    if (!record?.launchTower) {
+      return;
+    }
+
+    scalableStage.remove(record.launchTower);
+    record.launchTower = null;
+    record.towerPieces = null;
+    record.towerAnimationState = null;
+  }
+
+  function startLaunchTowerRelease(record) {
+    if (!record?.launchTower || record.towerReleased || record.towerAnimationState?.active) {
+      return;
+    }
+
+    record.towerReleased = false;
+    record.towerAnimationState = {
+      active: true,
+      duration: LAUNCH_TOWER_RELEASE_DURATION,
+      elapsed: 0
+    };
+  }
+
+  function updateLaunchTower(record, deltaSeconds) {
+    if (!record?.launchTower || !record.towerAnimationState?.active) {
+      return;
+    }
+
+    const animation = record.towerAnimationState;
+    animation.elapsed += deltaSeconds;
+    const progress = Math.min(1, animation.elapsed / Math.max(0.001, animation.duration));
+    const eased = 1 - Math.pow(1 - progress, 3);
+
+    for (const arm of record.towerPieces?.movingArms ?? []) {
+      arm.pivot.position.set(
+        arm.basePosition.x * (1 + eased * 0.16),
+        arm.basePosition.y + S(0.012) * eased,
+        arm.basePosition.z * (1 + eased * 0.16)
+      );
+      arm.pivot.rotation.z = arm.liftAngle * eased;
+      arm.pivot.translateX(arm.travel * eased);
+    }
+
+    if (progress >= 1) {
+      record.towerReleased = true;
+      removeLaunchTower(record);
+    }
+  }
 
   function buildSingleStageRocket() {
     const group = new THREE.Group();
@@ -204,7 +1112,15 @@ export function createRocketController({
     membraneMesh.visible = false;
     group.add(membraneMesh);
 
-    return { group, membraneMesh, flame1, flame2: null, stage1Group: null, interstage: null };
+    return {
+      group,
+      membraneMesh,
+      flame1,
+      flame2: null,
+      interstage: null,
+      stage1Group: null,
+      stage2Group: group
+    };
   }
 
   function buildTwoStageRocket() {
@@ -320,19 +1236,146 @@ export function createRocketController({
     stage1Group.position.y = -(s1H / 2);
     group.add(stage1Group);
 
-    return { group, membraneMesh, flame1, flame2, stage1Group, interstage };
+    return { group, membraneMesh, flame1, flame2, stage1Group, stage2Group, interstage };
+  }
+
+  function buildSlsRocket() {
+    const group = new THREE.Group();
+    const orangeMat = new THREE.MeshBasicMaterial({ color: 0xc86e2d });
+    const darkOrangeMat = new THREE.MeshBasicMaterial({ color: 0x8c4f24 });
+    const whiteMat = new THREE.MeshBasicMaterial({ color: 0xf0f2f8 });
+    const grayMat = new THREE.MeshBasicMaterial({ color: 0x8a9098 });
+    const blackMat = new THREE.MeshBasicMaterial({ color: 0x1e2127 });
+
+    const stage1Group = new THREE.Group();
+    const stage2Group = new THREE.Group();
+    const coreHeight = S(0.098);
+    const coreRadius = S(0.0125);
+    const boosterHeight = S(0.104);
+    const boosterRadius = S(0.0055);
+    const upperStageHeight = S(0.052);
+    const upperStageRadius = S(0.0075);
+
+    const coreStage = new THREE.Mesh(
+      new THREE.CylinderGeometry(coreRadius, coreRadius * 1.08, coreHeight, 12),
+      orangeMat
+    );
+    stage1Group.add(coreStage);
+
+    const engineSection = new THREE.Mesh(
+      new THREE.CylinderGeometry(coreRadius * 1.02, coreRadius * 1.18, S(0.016), 12),
+      darkOrangeMat
+    );
+    engineSection.position.y = -(coreHeight / 2 + S(0.008));
+    stage1Group.add(engineSection);
+
+    for (const side of [-1, 1]) {
+      const booster = new THREE.Mesh(
+        new THREE.CylinderGeometry(boosterRadius, boosterRadius * 1.04, boosterHeight, 10),
+        whiteMat
+      );
+      booster.position.set(side * S(0.016), S(0.002), 0);
+      stage1Group.add(booster);
+
+      const boosterNose = new THREE.Mesh(
+        new THREE.ConeGeometry(boosterRadius * 0.94, S(0.018), 10),
+        blackMat
+      );
+      boosterNose.position.set(side * S(0.016), boosterHeight / 2 + S(0.009), 0);
+      stage1Group.add(boosterNose);
+
+      const boosterNozzle = new THREE.Mesh(
+        new THREE.CylinderGeometry(boosterRadius * 0.78, boosterRadius * 1.18, S(0.014), 10),
+        grayMat
+      );
+      boosterNozzle.position.set(side * S(0.016), -(boosterHeight / 2 + S(0.007)), 0);
+      stage1Group.add(boosterNozzle);
+    }
+
+    const flame1 = new THREE.Mesh(
+      new THREE.ConeGeometry(S(0.02), S(0.07), 12),
+      new THREE.MeshBasicMaterial({ color: 0xffa033 })
+    );
+    flame1.rotation.z = Math.PI;
+    flame1.position.y = -(coreHeight / 2 + S(0.055));
+    stage1Group.add(flame1);
+
+    const interstage = new THREE.Mesh(
+      new THREE.CylinderGeometry(coreRadius * 0.92, coreRadius * 1.08, S(0.018), 12),
+      grayMat
+    );
+    interstage.position.y = S(0.01);
+
+    const upperStage = new THREE.Mesh(
+      new THREE.CylinderGeometry(upperStageRadius, upperStageRadius * 0.96, upperStageHeight, 10),
+      whiteMat
+    );
+    stage2Group.add(upperStage);
+
+    const orionAdapter = new THREE.Mesh(
+      new THREE.CylinderGeometry(upperStageRadius * 0.72, upperStageRadius * 0.94, S(0.016), 10),
+      grayMat
+    );
+    orionAdapter.position.y = upperStageHeight / 2 + S(0.008);
+    stage2Group.add(orionAdapter);
+
+    const orionCapsule = new THREE.Mesh(
+      new THREE.ConeGeometry(upperStageRadius * 1.08, S(0.03), 10),
+      whiteMat
+    );
+    orionCapsule.position.y = upperStageHeight / 2 + S(0.028);
+    stage2Group.add(orionCapsule);
+
+    const serviceModule = new THREE.Mesh(
+      new THREE.CylinderGeometry(upperStageRadius * 0.82, upperStageRadius * 0.82, S(0.02), 10),
+      darkOrangeMat
+    );
+    serviceModule.position.y = upperStageHeight / 2 - S(0.008);
+    stage2Group.add(serviceModule);
+
+    const flame2 = new THREE.Mesh(
+      new THREE.ConeGeometry(S(0.008), S(0.04), 10),
+      new THREE.MeshBasicMaterial({ color: 0x7dc8ff })
+    );
+    flame2.rotation.z = Math.PI;
+    flame2.position.y = -(upperStageHeight / 2 + S(0.03));
+    flame2.visible = false;
+    stage2Group.add(flame2);
+
+    const membraneMesh = new THREE.Mesh(
+      new THREE.ConeGeometry(S(0.024), S(0.11), 16, 1, true),
+      new THREE.MeshBasicMaterial({
+        color: 0x88ccff, transparent: true, opacity: 0.5,
+        side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false
+      })
+    );
+    membraneMesh.position.y = upperStageHeight / 2 + S(0.07);
+    membraneMesh.visible = false;
+    stage2Group.add(membraneMesh);
+
+    stage2Group.position.y = S(0.076);
+    stage1Group.position.y = -S(0.018);
+    group.add(stage2Group);
+    group.add(interstage);
+    group.add(stage1Group);
+
+    return { group, membraneMesh, flame1, flame2, stage1Group, stage2Group, interstage };
   }
 
   // ??? 1??遺꾨━ (?먮룞媛? ???
   function startStageSeparation(r) {
     if (!r.stage1Group) return;
+    const separationRootPos = r.position.clone();
 
     // scalableStage媛 XZ ?ㅼ??쇱쓣 媛吏誘濡?getWorldPosition() ?ъ슜 遺덇?.
     // r.position? Rapier 醫뚰몴 = scalableStage 濡쒖뺄 醫뚰몴? ?숈씪?섎?濡??대? 湲곗??쇰줈 怨꾩궛.
     // stage1Group??濡쒖뺄 ?ㅽ봽?뗭쓣 濡쒖폆 ?뚯쟾?쇰줈 蹂?섑빐 ?뷀븿.
     const stage1Offset = r.stage1Group.position.clone();
     stage1Offset.applyQuaternion(r.mesh.quaternion);
-    const physicsPos = r.position.clone().add(stage1Offset);
+    const physicsPos = separationRootPos.clone().add(stage1Offset);
+    const stage2Offset = r.stage2Group?.position?.clone?.() ?? new THREE.Vector3();
+    stage2Offset.applyQuaternion(r.mesh.quaternion);
+    const stage2WorldPos = separationRootPos.clone().add(stage2Offset);
 
     // ?뚯쟾: getWorldQuaternion? ?ㅼ????곹뼢 ?놁쑝誘濡?洹몃?濡??ъ슜
     const worldQuat = new THREE.Quaternion();
@@ -340,6 +1383,18 @@ export function createRocketController({
 
     r.mesh.remove(r.stage1Group);
     if (r.interstage) r.mesh.remove(r.interstage);
+    if (r.stage2Group) {
+      r.stage2Group.position.set(0, 0, 0);
+    }
+    r.position.copy(stage2WorldPos);
+    r.mesh.position.copy(stage2WorldPos);
+    if (r.rigidBody) {
+      r.rigidBody.setTranslation({
+        x: stage2WorldPos.x,
+        y: stage2WorldPos.y,
+        z: stage2WorldPos.z
+      }, true);
+    }
 
     // ?? ?먮룞媛? ?곷떒(?깊겕 ?숈껜)怨??섎떒(?붿쭊遺+?) 遺꾨━ ??
     const pieceTop = new THREE.Group();
@@ -398,74 +1453,212 @@ export function createRocketController({
         ) });
     }
 
-    if (r.flame1) r.flame1.visible = false;
-    for (let i = 0; i < 10; i++) spawnSepParticle(r.position.clone());
+    setFlameHeat(r.flame1, 0);
+    r.engineHeat = 0;
+    for (let i = 0; i < 10; i++) spawnSepParticle(separationRootPos.clone());
   }
 
-  // ??? Launch ???
-  function launchRocket(spaceportIndex, rocketType = "two-stage") {
-    if (spaceportIndex < 0 || spaceportIndex >= SPACEPORTS.length) return;
-    const spaceport = SPACEPORTS[spaceportIndex];
-
-    const startPosGeo = getProjectedPositionFromGeo(
-      spaceport.lat, spaceport.lon,
-      constants.DISC_RADIUS, constants.SURFACE_Y
-    );
-    const startPos = new THREE.Vector3(startPosGeo.x, startPosGeo.y, startPosGeo.z);
-
-    const isTwoStage = rocketType === "two-stage";
-    const { group, membraneMesh, flame1, flame2, stage1Group, interstage } =
-      isTwoStage ? buildTwoStageRocket() : buildSingleStageRocket();
-
-    group.position.copy(startPos);
-    scalableStage.add(group);
-
-    // 諛쒖궗 諛⑺뼢 怨꾩궛
-    const localNorthDir = new THREE.Vector3(-startPos.x, 0, -startPos.z).normalize();
-    const localEastDir  = new THREE.Vector3(startPos.z, 0, -startPos.x).normalize();
-    const headingRad    = THREE.MathUtils.degToRad(spaceport.heading);
-    const targetFlightDir = new THREE.Vector3()
-      .addScaledVector(localNorthDir, Math.cos(headingRad))
-      .addScaledVector(localEastDir,  Math.sin(headingRad))
-      .normalize();
-
-    const maxFlightDistance      = S(1.5);
-    const targetDropOffProjected = startPos.clone().addScaledVector(targetFlightDir, maxFlightDistance);
-
-    let rigidBody = null;
-    if (physics && RAPIER) {
-      rigidBody = createRapierRocketBody(startPos);
+  function setRocketStandbyVisuals(record) {
+    setFlameHeat(record.flame1, 0);
+    setFlameHeat(record.flame2, 0);
+    if (record.membraneMesh) {
+      record.membraneMesh.visible = false;
     }
+    record.engineHeat = 0;
+  }
 
-    rockets.push({
-      mesh: group,
+  function setRocketLaunchVisuals(record) {
+    setFlameHeat(record.flame1, 1, record.ignitionProfile?.flameScale ?? 1);
+    setFlameHeat(record.flame2, 0);
+    if (record.membraneMesh) {
+      record.membraneMesh.visible = false;
+    }
+    record.engineHeat = 1;
+  }
+
+  function createRocketRecord(profile, rocketType = "two-stage", parts = null) {
+    const isTwoStage = rocketType === "two-stage" || rocketType === "sls";
+    const {
+      group,
       membraneMesh,
       flame1,
       flame2,
       stage1Group,
+      stage2Group,
+      interstage
+    } = parts ?? (
+      rocketType === "sls"
+        ? buildSlsRocket()
+        : (isTwoStage ? buildTwoStageRocket() : buildSingleStageRocket())
+    );
+
+    group.position.copy(profile.startPos);
+    orientRocketForStandby(group, profile.headingRad);
+    const tower = buildLaunchTower(profile, rocketType);
+    const ignitionProfile = getRocketIgnitionProfile(profile.effectiveRocketType ?? rocketType);
+    const standbyVisualLift = computeStandbyVisualLift(group, [flame1, flame2, membraneMesh]);
+
+    return {
+      flame1,
+      flame2,
+      flightProfile: { ...profile.flightProfile },
+      headingRad: profile.headingRad,
       interstage,
       isTwoStage,
-      state: isTwoStage ? "STAGE1" : "LAUNCH",
-      position: startPos.clone(),
-      velocity: new THREE.Vector3(0, 0, 0),
-      thrustDir: new THREE.Vector3(0, 1, 0),
-      targetFlightDir,
-      targetDropOffProjected,
-      startPos: startPos.clone(),
-      distanceTravelled: 0,
-      maxFlightDistance,
-      stageTimer: 0,
+      launchpadName: profile.spaceport.name,
+      maxFlightDistance: profile.maxFlightDistance,
+      membraneMesh,
+      mesh: group,
+      missionLabel: profile.missionLabel ?? "",
+      missionProfile: profile.missionProfile ?? DEFAULT_MISSION_PROFILE_ID,
+      ignitionDuration: ignitionProfile.duration,
+      ignitionProfile,
+      ignitionTimer: 0,
+      engineHeat: 0,
+      position: profile.startPos.clone(),
+      rocketType: profile.effectiveRocketType ?? rocketType,
+      standbyVisualLift,
+      launchTower: tower.launchTower,
+      towerAnimationState: tower.towerAnimationState,
+      towerPieces: tower.towerPieces,
+      towerReleased: false,
+      desiredFlightDir: new THREE.Vector3(0, 1, 0),
+      flightDir: new THREE.Vector3(0, 1, 0),
       scrapeTimer: 0,
-      wakeTimer: 0,
       smokeTimer: 0,
+      spaceportIndex: profile.spaceportIndex,
+      stage1ExitDir: null,
+      stage1Group,
+      stage2EntryDir: null,
+      stage2Group,
+      stageTimer: 0,
+      startPos: profile.startPos.clone(),
+      state: "STANDBY",
+      scrapeDir: profile.targetFlightDir.clone(),
+      targetDropOffProjected: profile.targetDropOffProjected.clone(),
+      targetFlightDir: profile.targetFlightDir.clone(),
+      thrustDir: new THREE.Vector3(0, 1, 0),
+      trackingEligible: false,
+      vehicleLabel: profile.vehicleLabel ?? "",
+      velocity: new THREE.Vector3(),
+      prelaunchPulseTimer: 0,
+      prelaunchSteamTimer: 0,
+      waterEntryTimer: 0,
+      lastImpactStrength: 0,
+      lastRippleEmitAt: 0,
+      lastTrailSpeed: 0,
+      lastTrailEmitAt: 0,
+      wakeTimer: 0
+    };
+  }
+
+  function promoteRecordToActive(record) {
+    const activeRecord = {
+      ...record,
+      distanceTravelled: 0,
+      engineHeat: 0,
+      ignitionDuration: record.ignitionDuration,
+      ignitionProfile: record.ignitionProfile,
+      ignitionTimer: 0,
+      liftoffState: record.isTwoStage ? "STAGE1" : "LAUNCH",
       pitchoverDir: null,
-      rigidBody
-    });
+      rigidBody: null,
+      prelaunchPulseTimer: 0,
+      prelaunchSteamTimer: 0,
+      scrapeTimer: 0,
+      sepVel: null,
+      smokeTimer: 0,
+      stage1ExitDir: record.stage1ExitDir?.clone?.() ?? null,
+      stage2EntryDir: record.stage2EntryDir?.clone?.() ?? null,
+      stageTimer: 0,
+      state: "IGNITION",
+      scrapeDir: record.scrapeDir?.clone?.() ?? record.targetFlightDir.clone(),
+      desiredFlightDir: record.desiredFlightDir?.clone?.() ?? new THREE.Vector3(0, 1, 0),
+      flightDir: record.flightDir?.clone?.() ?? new THREE.Vector3(0, 1, 0),
+      flightProfile: { ...(record.flightProfile ?? {}) },
+      thrustDir: record.thrustDir?.clone?.() ?? new THREE.Vector3(0, 1, 0),
+      trackingEligible: true,
+      vehicleLabel: record.vehicleLabel ?? "",
+      velocity: new THREE.Vector3(0, 0, 0),
+      waterEntryTimer: 0,
+      lastImpactStrength: 0,
+      lastRippleEmitAt: 0,
+      lastTrailSpeed: 0,
+      lastTrailEmitAt: 0,
+      wakeTimer: 0
+    };
+
+    if (physics && RAPIER) {
+      activeRecord.rigidBody = createRapierRocketBody(activeRecord.startPos);
+    }
+
+    setRocketStandbyVisuals(activeRecord);
+    rockets.push(activeRecord);
+    lastCompletedLaunchpadName = "";
+    return activeRecord;
+  }
+
+  function removeStandbyMesh() {
+    if (!standbyRocket) {
+      return;
+    }
+    removeLaunchTower(standbyRocket);
+    scalableStage.remove(standbyRocket.mesh);
+    standbyRocket = null;
+  }
+
+  function enterStandby(spaceportIndex, rocketType = "two-stage", missionProfile = DEFAULT_MISSION_PROFILE_ID) {
+    const profile = getLaunchProfile(spaceportIndex, rocketType, missionProfile);
+    if (!profile) {
+      return null;
+    }
+
+    removeStandbyMesh();
+    standbyRocket = createRocketRecord(profile, profile.effectiveRocketType ?? rocketType);
+    setRocketStandbyVisuals(standbyRocket);
+    syncRocketVisualPosition(standbyRocket);
+    scalableStage.add(standbyRocket.launchTower);
+    scalableStage.add(standbyRocket.mesh);
+    return getStandbySnapshot();
+  }
+
+  function launchStandby() {
+    if (!standbyRocket) {
+      return null;
+    }
+
+    const record = standbyRocket;
+    standbyRocket = null;
+    promoteRecordToActive(record);
+    return getActiveRocketSnapshot();
+  }
+
+  function clearStandby() {
+    removeStandbyMesh();
+  }
+
+  function launchRocketWithStandby(spaceportIndex, rocketType = "two-stage", missionProfile = DEFAULT_MISSION_PROFILE_ID) {
+    const activeRocket = rockets[rockets.length - 1];
+    if (activeRocket?.state === "IGNITION") {
+      return getActiveRocketSnapshot();
+    }
+
+    const nextRocketType = getMissionProfileConfig(missionProfile).rocketType ?? rocketType;
+    const shouldRestage = !standbyRocket
+      || standbyRocket.spaceportIndex !== spaceportIndex
+      || standbyRocket.rocketType !== nextRocketType
+      || standbyRocket.missionProfile !== missionProfile;
+
+    if (shouldRestage) {
+      enterStandby(spaceportIndex, rocketType, missionProfile);
+    }
+
+    return launchStandby();
   }
 
   // ??? Particles ???
   function spawnWake(position, moveDir) {
-    const mesh = new THREE.Mesh(sharedWakeGeo, sharedWakeMat);
+    const mesh = new THREE.Mesh(sharedWakeGeo, sharedWakeMat.clone());
     mesh.position.copy(position);
     mesh.position.x += (Math.random() - 0.5) * S(0.015);
     mesh.position.y += (Math.random() - 0.5) * S(0.015);
@@ -479,14 +1672,117 @@ export function createRocketController({
     wakes.push({ mesh, age: 0, velocity: drift.multiplyScalar(S(0.08)) });
   }
 
-  function spawnSmoke(position) {
-    const mesh = new THREE.Mesh(sharedSmokeGeo, sharedSmokeMat);
+  function spawnSmoke(position, options = {}) {
+    const {
+      initialScale = 1,
+      jitter = S(0.01),
+      material = "flight",
+      maxAge = SMOKE_DURATION,
+      opacityFactor = 1,
+      scaleGrowth = 4.0,
+      speed = null,
+      velocity = null,
+      velocityDamping = 0.9,
+      velocityGravity = 0.08
+    } = options;
+    const baseMaterial = material === "steam"
+      ? sharedSteamMat
+      : (material === "exhaust" ? sharedExhaustSmokeMat : sharedSmokeMat);
+    const mesh = new THREE.Mesh(sharedSmokeGeo, baseMaterial.clone());
     mesh.position.copy(position);
-    mesh.position.x += (Math.random() - 0.5) * S(0.01);
-    mesh.position.y += (Math.random() - 0.5) * S(0.01);
-    mesh.position.z += (Math.random() - 0.5) * S(0.01);
+    mesh.position.x += (Math.random() - 0.5) * jitter;
+    mesh.position.y += (Math.random() - 0.5) * jitter;
+    mesh.position.z += (Math.random() - 0.5) * jitter;
+    mesh.scale.setScalar(initialScale);
+    if (mesh.material?.opacity !== undefined) {
+      mesh.material.opacity *= opacityFactor;
+    }
     scalableStage.add(mesh);
-    smokes.push({ mesh, age: 0 });
+    if (velocity) {
+      smokes.push({
+        mesh,
+        age: 0,
+        maxAge,
+        scaleGrowth,
+        velocity: velocity.clone(),
+        velocityDamping,
+        velocityGravity
+      });
+      return;
+    }
+
+    smokes.push({
+      mesh,
+      age: 0,
+      driftY: speed ?? S(0.028),
+      maxAge,
+      scaleGrowth
+    });
+  }
+
+  function spawnSpray(position, direction, strength = 1) {
+    const mesh = new THREE.Mesh(sharedSmokeGeo, sharedSprayMat.clone());
+    mesh.position.copy(position);
+    mesh.position.x += (Math.random() - 0.5) * S(0.014);
+    mesh.position.y += (Math.random() - 0.5) * S(0.014);
+    mesh.position.z += (Math.random() - 0.5) * S(0.014);
+    scalableStage.add(mesh);
+    const velocity = direction.clone();
+    if (velocity.lengthSq() < 0.0001) {
+      velocity.set(0, 1, 0);
+    } else {
+      velocity.normalize();
+    }
+    velocity.multiplyScalar(S(0.12 + (Math.random() * 0.1) + (strength * 0.05)));
+    velocity.y += S(0.08 + (strength * 0.03));
+    smokes.push({
+      mesh,
+      age: 0,
+      velocity,
+      maxAge: DOME_WATER_SPRAY_LIFETIME * THREE.MathUtils.lerp(0.85, 1.25, Math.random()),
+      scaleGrowth: 3.4 + (strength * 1.8)
+    });
+  }
+
+  function spawnSprayBurst(position, direction, strength = 1) {
+    const burstCount = Math.max(3, Math.round(2 + (strength * 4)));
+    for (let index = 0; index < burstCount; index += 1) {
+      tempHorizontalDir.copy(direction);
+      tempHorizontalDir.x += (Math.random() - 0.5) * 0.85;
+      tempHorizontalDir.y += Math.random() * 0.85;
+      tempHorizontalDir.z += (Math.random() - 0.5) * 0.85;
+      spawnSpray(position, tempHorizontalDir, strength);
+    }
+  }
+
+  function spawnAscentExhaust(position, stageTimer, intensity = 1) {
+    const hotLaunchPhase = THREE.MathUtils.clamp(1 - ((stageTimer ?? 0) / 0.75), 0, 1);
+    const burstCount = Math.max(2, Math.round(ASCENT_EXHAUST_BURST_MULTIPLIER + (intensity * 1.8) + (hotLaunchPhase * 2.4)));
+    if (hotLaunchPhase > 0.001) {
+      for (let burstIndex = 0; burstIndex < burstCount; burstIndex += 1) {
+        spawnSmoke(position, {
+          jitter: S(0.018),
+          material: "exhaust",
+          maxAge: THREE.MathUtils.lerp(1.25, 0.9, hotLaunchPhase) * THREE.MathUtils.lerp(0.92, 1.18, Math.random()),
+          scaleGrowth: THREE.MathUtils.lerp(6.2, 4.4, hotLaunchPhase) * intensity,
+          speed: S(0.024 + (0.024 * hotLaunchPhase * intensity)) * THREE.MathUtils.lerp(0.9, 1.16, Math.random()),
+          opacityFactor: THREE.MathUtils.lerp(0.96, 0.68, hotLaunchPhase),
+          initialScale: THREE.MathUtils.lerp(1.2, 0.88, hotLaunchPhase) * THREE.MathUtils.lerp(0.9, 1.18, Math.random())
+        });
+      }
+      return;
+    }
+
+    for (let burstIndex = 0; burstIndex < Math.max(2, burstCount - 1); burstIndex += 1) {
+      spawnSmoke(position, {
+        jitter: S(0.02),
+        maxAge: SMOKE_DURATION * THREE.MathUtils.lerp(1.05, 1.45, Math.random()),
+        scaleGrowth: 5.2 * intensity * THREE.MathUtils.lerp(0.92, 1.18, Math.random()),
+        speed: S(0.032 + (0.012 * Math.random())),
+        opacityFactor: 0.86,
+        initialScale: THREE.MathUtils.lerp(0.96, 1.28, Math.random())
+      });
+    }
   }
 
   function spawnSepParticle(position) {
@@ -520,7 +1816,9 @@ export function createRocketController({
       } else {
         removed = updateRocketFallback(r, deltaSeconds, i);
       }
-      if (!removed) r.mesh.position.copy(r.position);
+      if (!removed) {
+        syncRocketVisualPosition(r);
+      }
     }
 
     // ?? Debris (1???뷀빐) ??????????????????????????????
@@ -556,6 +1854,7 @@ export function createRocketController({
       const maxAge = w.maxAge ?? WAKE_DURATION;
       w.age += deltaSeconds;
       if (w.age > maxAge) {
+        w.mesh.material?.dispose?.();
         scalableStage.remove(w.mesh);
         wakes.splice(i, 1);
       } else {
@@ -572,12 +1871,24 @@ export function createRocketController({
     for (let i = smokes.length - 1; i >= 0; i--) {
       const s = smokes[i];
       s.age += deltaSeconds;
-      if (s.age > SMOKE_DURATION) {
+      const maxAge = s.maxAge ?? SMOKE_DURATION;
+      if (s.age > maxAge) {
+        s.mesh.material?.dispose?.();
         scalableStage.remove(s.mesh);
         smokes.splice(i, 1);
       } else {
-        const scale = 1.0 + (s.age / SMOKE_DURATION) * 4.0;
+        if (s.velocity) {
+          s.velocity.y -= GRAVITY * (s.velocityGravity ?? 0.08) * deltaSeconds;
+          s.velocity.multiplyScalar(Math.max(0.92, 1.0 - (deltaSeconds * (s.velocityDamping ?? 0.9))));
+          s.mesh.position.addScaledVector(s.velocity, deltaSeconds);
+        } else if (s.driftY) {
+          s.mesh.position.y += s.driftY * deltaSeconds;
+        }
+        const scale = 1.0 + (s.age / maxAge) * (s.scaleGrowth ?? 4.0);
         s.mesh.scale.set(scale, scale, scale);
+        if (s.mesh.material?.opacity !== undefined) {
+          s.mesh.material.opacity = Math.max(0, 1.0 - (s.age / maxAge));
+        }
       }
     }
   }
@@ -586,9 +1897,243 @@ export function createRocketController({
   //  Rapier 臾쇰━ 寃쎈줈
   // ?????????????????????????????????????????????????????
   const _UP = new THREE.Vector3(0, 1, 0);
+  const tempIgnitionWorldPosition = new THREE.Vector3();
+  const tempIgnitionWorldDirection = new THREE.Vector3();
+  const tempIgnitionLocalOffset = new THREE.Vector3();
+  const tempIgnitionColor = new THREE.Color();
+  const tempRocketAnchor = new THREE.Vector3();
+  const tempRocketExhaustPosition = new THREE.Vector3();
+  const ignitionFlameCoolColor = new THREE.Color(0xff7a2f);
+  const ignitionFlameHotColor = new THREE.Color(0xfff1a6);
+
+  function getWaterDragCoefficients(timer) {
+    const dragBlend = THREE.MathUtils.clamp(
+      timer / Math.max(DOME_WATER_PLANING_DURATION, 0.0001),
+      0,
+      1
+    );
+    return {
+      fluid: THREE.MathUtils.lerp(
+        DOME_FLUID_DRAG * DOME_WATER_PLANING_DRAG_MULTIPLIER,
+        DOME_FLUID_DRAG,
+        dragBlend
+      ),
+      viscous: THREE.MathUtils.lerp(
+        DOME_VISCOUS_DRAG * DOME_WATER_PLANING_VISCOUS_MULTIPLIER,
+        DOME_VISCOUS_DRAG * 1.18,
+        dragBlend
+      )
+    };
+  }
+
+  function computeImpactStrength(speed, surfaceAlignment) {
+    const normalizedSpeed = THREE.MathUtils.clamp(speed / Math.max(STAGE2_SPEED, 0.0001), 0.15, 1.35);
+    return THREE.MathUtils.clamp(normalizedSpeed * THREE.MathUtils.lerp(1.05, 1.7, surfaceAlignment), 0.5, 2.2);
+  }
+
+  function enterWaterScrapeState(r, incomingVelocity, fallbackDirection, body = null) {
+    const surfaceY = domeYAt(r.position.x, r.position.z);
+    r.position.y = surfaceY;
+    if (body) {
+      body.setTranslation({ x: r.position.x, y: surfaceY, z: r.position.z }, true);
+    }
+
+    tempImpactVelocity.set(
+      incomingVelocity?.x ?? 0,
+      incomingVelocity?.y ?? 0,
+      incomingVelocity?.z ?? 0
+    );
+    const incomingSpeed = tempImpactVelocity.length();
+    const surfaceNormal = getDomeSurfaceNormalAt(r.position.x, r.position.z);
+    const normalSpeed = Math.abs(tempImpactVelocity.dot(surfaceNormal));
+    tempDesiredFlightDir
+      .copy(tempImpactVelocity)
+      .addScaledVector(surfaceNormal, -tempImpactVelocity.dot(surfaceNormal));
+
+    if (tempDesiredFlightDir.lengthSq() < 0.000001) {
+      tempDesiredFlightDir.copy(
+        getScrapeDirectionAt(r.position.x, r.position.z, tempImpactVelocity, fallbackDirection)
+      );
+    } else {
+      tempDesiredFlightDir.normalize();
+    }
+
+    const entryAlignment = incomingSpeed > 0.0001
+      ? THREE.MathUtils.clamp(normalSpeed / incomingSpeed, 0, 1)
+      : 0.5;
+    const tangentialSpeed = Math.max(0, Math.sqrt(Math.max(0, (incomingSpeed * incomingSpeed) - (normalSpeed * normalSpeed))));
+    const retention = THREE.MathUtils.clamp(
+      1 - (DOME_WATER_ENTRY_DRAG * THREE.MathUtils.lerp(0.62, 1.04, entryAlignment)),
+      0.18,
+      0.76
+    );
+    const planingSpeed = Math.max(
+      DOME_WATER_PLANING_MIN_SPEED,
+      tangentialSpeed * retention,
+      SCRAPE_SPEED * 0.38
+    );
+    const impactStrength = computeImpactStrength(incomingSpeed, entryAlignment);
+
+    r.state = "SCRAPE";
+    r.scrapeTimer = 0;
+    r.waterEntryTimer = 0;
+    r.lastTrailEmitAt = 0;
+    r.lastRippleEmitAt = 0;
+    r.lastImpactStrength = impactStrength;
+    r.lastTrailSpeed = planingSpeed;
+    r.scrapeDir.copy(tempDesiredFlightDir);
+    r.velocity.set(r.scrapeDir.x * planingSpeed, 0, r.scrapeDir.z * planingSpeed);
+
+    if (r.membraneMesh) {
+      r.membraneMesh.visible = true;
+    }
+
+    domeWaterApi?.registerImpact({
+      position: r.position,
+      velocity: tempImpactVelocity,
+      strength: impactStrength
+    });
+    spawnSprayBurst(r.position, surfaceNormal, impactStrength);
+
+    if (body) {
+      body.setLinvel({
+        x: r.velocity.x,
+        y: 0,
+        z: r.velocity.z
+      }, true);
+    }
+  }
+
+  function resolveScrapeTrailDirection(r, moveDir, target) {
+    if (moveDir?.lengthSq?.() > 0.000001) {
+      target.copy(moveDir).normalize();
+      return target;
+    }
+    if (r.scrapeDir?.lengthSq?.() > 0.000001) {
+      target.copy(r.scrapeDir).normalize();
+      return target;
+    }
+    target.set(0, 0, 1);
+    return target;
+  }
+
+  function resolveScrapeTrailAnchorPosition(r, moveDir, target) {
+    const trailDirection = resolveScrapeTrailDirection(r, moveDir, tempScrapeTrailDirection);
+    tempScrapeFallbackAnchor.copy(r.position).addScaledVector(trailDirection, ROCKET_SCRAPE_TRAIL_NOSE_OFFSET);
+    if (r.membraneMesh) {
+      r.mesh.position.copy(r.position);
+      r.mesh.updateMatrixWorld(true);
+      r.membraneMesh.getWorldPosition(tempMembraneWorldPosition);
+      if (
+        Number.isFinite(tempMembraneWorldPosition.x)
+        && Number.isFinite(tempMembraneWorldPosition.y)
+        && Number.isFinite(tempMembraneWorldPosition.z)
+      ) {
+        const membraneAhead =
+          ((tempMembraneWorldPosition.x - r.position.x) * trailDirection.x)
+          + ((tempMembraneWorldPosition.y - r.position.y) * trailDirection.y)
+          + ((tempMembraneWorldPosition.z - r.position.z) * trailDirection.z);
+        const fallbackAhead =
+          ((tempScrapeFallbackAnchor.x - r.position.x) * trailDirection.x)
+          + ((tempScrapeFallbackAnchor.y - r.position.y) * trailDirection.y)
+          + ((tempScrapeFallbackAnchor.z - r.position.z) * trailDirection.z);
+        return target.copy(membraneAhead >= fallbackAhead ? tempMembraneWorldPosition : tempScrapeFallbackAnchor);
+      }
+    }
+    return target.copy(tempScrapeFallbackAnchor);
+  }
+
+  function emitScrapeWaterEffects(r, moveDir, deltaSeconds) {
+    const trailDirection = resolveScrapeTrailDirection(r, moveDir, tempScrapeTrailDirection);
+    const trailAnchor = resolveScrapeTrailAnchorPosition(r, trailDirection, tempScrapeTrailAnchor);
+    const horizontalSpeed = Math.hypot(
+      trailDirection.x,
+      trailDirection.z
+    );
+    r.lastTrailSpeed = horizontalSpeed;
+    r.lastRippleEmitAt += deltaSeconds;
+    r.lastTrailEmitAt += deltaSeconds;
+    if (r.waterEntryTimer <= DOME_WATER_RIPPLE_BURST_DURATION && r.lastRippleEmitAt >= 0.34) {
+      domeWaterApi?.registerImpact({
+        position: r.position,
+        velocity: trailDirection,
+        strength: THREE.MathUtils.clamp(0.24 + (r.lastImpactStrength * 0.18), 0.24, 0.6)
+      });
+      r.lastRippleEmitAt = 0;
+    }
+    if (r.lastTrailEmitAt >= DOME_WATER_TRAIL_EMIT_INTERVAL) {
+      const remainingScrapeTime = Math.max(0, SCRAPE_FUEL_DURATION - r.scrapeTimer);
+      const scrapeProgress = THREE.MathUtils.clamp(
+        r.scrapeTimer / Math.max(SCRAPE_FUEL_DURATION, 0.0001),
+        0,
+        1
+      );
+      const growth = 1 - Math.pow(
+        1 - scrapeProgress,
+        Math.max(0.01, ROCKET_SCRAPE_TRAIL_GROWTH_EASE)
+      );
+      const timeFade = THREE.MathUtils.clamp(
+        remainingScrapeTime / Math.max(DOME_WATER_TRAIL_END_FADE_DURATION, 0.0001),
+        0,
+        1
+      );
+      const speedFade = THREE.MathUtils.clamp(
+        (horizontalSpeed - DOME_WATER_STOP_SPEED) / Math.max(DOME_WATER_TRAIL_END_FADE_SPEED, 0.0001),
+        0,
+        1
+      );
+      const trailVisibility = Math.min(timeFade, speedFade);
+      if (trailVisibility <= 0.16) {
+        r.lastTrailEmitAt = 0;
+        return;
+      }
+      const speedFactor = THREE.MathUtils.clamp(horizontalSpeed / Math.max(STAGE2_SPEED, 0.0001), 0, 1.25);
+      const headGrowth = Math.pow(
+        THREE.MathUtils.clamp(growth, 0, 1),
+        1 / Math.max(0.01, ROCKET_SCRAPE_TRAIL_HEAD_EXPANSION_BIAS)
+      );
+      const headScale = THREE.MathUtils.lerp(
+        1.0,
+        ROCKET_SCRAPE_TRAIL_HEAD_GROWTH_MAX,
+        headGrowth
+      );
+      const tailScale = THREE.MathUtils.lerp(1.25, ROCKET_SCRAPE_TRAIL_TAIL_GROWTH_MAX, growth);
+      const bodyScale = THREE.MathUtils.lerp(1.0, 1.24, headGrowth);
+      const lengthVisibility = THREE.MathUtils.lerp(
+        ROCKET_SCRAPE_TRAIL_LENGTH_VISIBILITY_FLOOR,
+        1.0,
+        trailVisibility
+      );
+      const width = THREE.MathUtils.lerp(
+        DOME_WATER_TRAIL_WIDTH * 0.84,
+        DOME_WATER_TRAIL_WIDTH * 0.48,
+        speedFactor
+      ) * THREE.MathUtils.lerp(0.9, 1.03, trailVisibility) * bodyScale;
+      const length = THREE.MathUtils.lerp(
+        DOME_WATER_TRAIL_LENGTH * ROCKET_SCRAPE_TRAIL_LENGTH_MIN_SCALE,
+        DOME_WATER_TRAIL_LENGTH * 3.9,
+        speedFactor
+      ) * lengthVisibility * tailScale;
+      domeWaterApi?.registerTrail({
+        position: trailAnchor,
+        direction: trailDirection,
+        strength: THREE.MathUtils.clamp((0.34 + (r.lastImpactStrength * 0.4)) * trailVisibility, 0.18, 1.05),
+        speed: horizontalSpeed,
+        width,
+        length,
+        headScale
+      });
+      r.lastTrailEmitAt = 0;
+    }
+  }
 
   function updateRocketPhysics(r, deltaSeconds, arrayIndex) {
     const body = r.rigidBody;
+    updateLaunchTower(r, deltaSeconds);
+
+    if (r.state === "IGNITION") {
+      return updateIgnitionState(r, deltaSeconds, body);
+    }
 
     // ?? STAGE1: 1???곗냼 ???곗냽 以묐젰 ?좏쉶 (?щЪ??沅ㅻ룄) ??????
     if (r.state === "STAGE1") {
@@ -600,20 +2145,14 @@ export function createRocketController({
       ));
 
       // ?곗냽 以묐젰 ?좏쉶: 怨좊룄???곕씪 0째 ??30째 ?щЪ??湲곗슱湲?
-      const turnProgress = Math.min(1, altFrac1 / STAGE1_ALT_TRIGGER);
-      const pitchAngle = turnProgress * turnProgress * PITCHOVER_SEP_ANGLE;
-      r.thrustDir.set(
-        r.targetFlightDir.x * Math.sin(pitchAngle),
-        Math.cos(pitchAngle),
-        r.targetFlightDir.z * Math.sin(pitchAngle)
-      ).normalize();
+      const turnProgress = Math.min(1, altFrac1 / getRocketStage1AltTrigger(r));
+      const pitchAngle = turnProgress * turnProgress * getRocketPitchoverSeparationAngle(r);
+      const desiredDir = computePitchProgramDirection(r.targetFlightDir, pitchAngle);
+      const steeredDir = steerFlightDirection(r, desiredDir, deltaSeconds, getRocketStage1TurnRate(r));
+      r.thrustDir.copy(steeredDir);
 
-      const climbSpeed = ROCKET_SPEED * (1.0 - LAUNCH_DRAG_FACTOR * altFrac1);
-      body.setLinvel({
-        x: r.thrustDir.x * climbSpeed,
-        y: r.thrustDir.y * climbSpeed,
-        z: r.thrustDir.z * climbSpeed
-      }, true);
+      const climbSpeed = getRocketStage1Speed(r) * (1.0 - LAUNCH_DRAG_FACTOR * altFrac1);
+      applyFlightVelocity(r, steeredDir, climbSpeed, body);
 
       const pos1 = body.translation();
       r.position.set(pos1.x, pos1.y, pos1.z);
@@ -623,8 +2162,13 @@ export function createRocketController({
       r.mesh.quaternion.slerp(tq1, 5.0 * deltaSeconds);
 
       r.smokeTimer += deltaSeconds;
-      if (r.smokeTimer > 0.04) {
-        spawnSmoke(r.position.clone().addScaledVector(r.thrustDir.clone().negate(), S(0.07)));
+      if (r.smokeTimer > (0.04 * ASCENT_EXHAUST_INTERVAL_SCALE)) {
+        const exhaustOrigin = getRocketExhaustWorldPosition(r, r.flame1);
+        spawnAscentExhaust(
+          exhaustOrigin.clone().addScaledVector(r.thrustDir.clone().negate(), S(0.012)),
+          r.stageTimer,
+          1.05
+        );
         r.smokeTimer = 0;
       }
 
@@ -634,75 +2178,22 @@ export function createRocketController({
         body.setTranslation({ x: r.position.x, y: domeY1, z: r.position.z }, true);
         const cv = body.linvel();
         body.setLinvel({ x: cv.x, y: 0, z: cv.z }, true);
-        r.pitchoverDir = r.thrustDir.clone();
+        captureFlightDirectionFromVelocity(r, { x: cv.x, y: 0, z: cv.z }, r.thrustDir);
+        r.stage1ExitDir = r.flightDir.clone();
+        r.pitchoverDir = r.flightDir.clone();
         r.sepVel = { x: cv.x, y: 0, z: cv.z };
         r.state = "SEPARATION"; r.stageTimer = 0;
         startStageSeparation(r);
       } else {
         // 80% 怨좊룄(30째 湲곗슱湲? ?꾨떖 ??遺꾨━
         const domeFrac1 = altFrac1;
-        if (domeFrac1 >= STAGE1_ALT_TRIGGER || r.stageTimer >= STAGE1_DURATION) {
-          r.pitchoverDir = r.thrustDir.clone();
+        if (domeFrac1 >= getRocketStage1AltTrigger(r) || r.stageTimer >= STAGE1_DURATION) {
           const cv = body.linvel();
+          captureFlightDirectionFromVelocity(r, cv, r.thrustDir);
+          r.stage1ExitDir = r.flightDir.clone();
+          r.pitchoverDir = r.flightDir.clone();
           r.sepVel = { x: cv.x, y: cv.y, z: cv.z };
           r.state = "SEPARATION"; r.stageTimer = 0;
-          startStageSeparation(r);
-        }
-      }
-
-    // ?? PITCHOVER: ?먯꽭 ?쒖뼱 ???섏쭅 ???섑룊 湲곗슱湲???????????
-    } else if (r.state === "PITCHOVER") {
-      r.stageTimer += deltaSeconds;
-
-      const pitchFrac  = Math.min(1.0, r.stageTimer / PITCHOVER_DURATION);
-      const pitchAngle = pitchFrac * PITCHOVER_ANGLE;
-      r.thrustDir.set(
-        r.targetFlightDir.x * Math.sin(pitchAngle),
-        Math.cos(pitchAngle),
-        r.targetFlightDir.z * Math.sin(pitchAngle)
-      ).normalize();
-
-      // ?쇱튂?ㅻ쾭 以? ?섑룊?쇰줈留??대룞, Y=0 怨좊룄 ?좎? (30째 ?꾩뿉 ???꾨떖 諛⑹?)
-      const pitchSpeed = ROCKET_SPEED * (1.0 - LAUNCH_DRAG_FACTOR);
-      body.setLinvel({
-        x: r.thrustDir.x * pitchSpeed,
-        y: 0,
-        z: r.thrustDir.z * pitchSpeed
-      }, true);
-
-      const posPitch = body.translation();
-      r.position.set(posPitch.x, posPitch.y, posPitch.z);
-
-      // ??愿??諛⑹?: ?쇱튂?ㅻ쾭 以???硫??꾨떖 ??利됱떆 遺꾨━
-      const pitchDomeY = domeYAt(r.position.x, r.position.z);
-      if (r.position.y >= pitchDomeY) {
-        r.position.y = pitchDomeY;
-        body.setTranslation({ x: r.position.x, y: pitchDomeY, z: r.position.z }, true);
-        const pitchVel = body.linvel();
-        body.setLinvel({ x: pitchVel.x, y: 0, z: pitchVel.z }, true);
-        r.pitchoverDir = r.thrustDir.clone();
-        r.sepVel = { x: pitchVel.x, y: 0, z: pitchVel.z };
-        r.state      = "SEPARATION";
-        r.stageTimer = 0;
-        startStageSeparation(r);
-      } else {
-        // 濡쒖폆 ?먯꽭瑜?thrustDir濡?鍮좊Ⅴ寃??뺣젹
-        const tqPitch = new THREE.Quaternion().setFromUnitVectors(_UP, r.thrustDir);
-        r.mesh.quaternion.slerp(tqPitch, 8.0 * deltaSeconds);
-
-        r.smokeTimer += deltaSeconds;
-        if (r.smokeTimer > 0.04) {
-          spawnSmoke(r.position.clone().addScaledVector(r.thrustDir.clone().negate(), S(0.07)));
-          r.smokeTimer = 0;
-        }
-
-        // 30째 ?꾨떖 ??遺꾨━ (?먮뒗 理쒕? ?쒓컙 珥덇낵)
-        if (pitchAngle >= PITCHOVER_SEP_ANGLE || r.stageTimer >= PITCHOVER_DURATION) {
-          r.pitchoverDir = r.thrustDir.clone();
-          const cv = body.linvel();
-          r.sepVel = { x: cv.x, y: cv.y, z: cv.z };
-          r.state      = "SEPARATION";
-          r.stageTimer = 0;
           startStageSeparation(r);
         }
       }
@@ -712,7 +2203,11 @@ export function createRocketController({
       r.stageTimer += deltaSeconds;
 
       // 遺꾨━ 以?愿???좎?: ??λ맂 ?띾룄 洹몃?濡??좎? (以묐젰???섑븳 媛먯냽 諛⑹?)
-      if (r.sepVel) body.setLinvel(r.sepVel, true);
+      if (r.sepVel) {
+        body.setLinvel(r.sepVel, true);
+        captureFlightDirectionFromVelocity(r, r.sepVel, r.stage1ExitDir ?? r.targetFlightDir);
+        r.velocity.set(r.sepVel.x, r.sepVel.y, r.sepVel.z);
+      }
 
       const pos = body.translation();
       r.position.set(pos.x, pos.y, pos.z);
@@ -728,76 +2223,74 @@ export function createRocketController({
 
       // 遺꾨━ ?꾨즺 ??2???먰솕
       if (r.stageTimer >= SEP_DURATION) {
-        r.state      = "STAGE2";
-        r.stageTimer = 0;
-        if (r.flame2) r.flame2.visible = true;
+        const exitVelocity = body.linvel();
+        tempStageEntryDirection.copy(r.stage1ExitDir ?? r.targetFlightDir);
+        captureFlightDirectionFromVelocity(r, exitVelocity, tempStageEntryDirection);
+        r.stage2EntryDir = r.flightDir.clone();
+        r.state          = "STAGE2";
+        r.stageTimer     = 0;
+        r.stage2StartPos = r.position.clone();
+        setFlameHeat(r.flame2, 1, 1);
+        r.engineHeat = 1;
       }
 
     // ?? STAGE2: 2???먰솕 ??沅곸갹源뚯? ?곸듅 (?곗냽 以묐젰 ?좏쉶) ????
     } else if (r.state === "STAGE2") {
       r.stageTimer += deltaSeconds;
 
-      // ?곗냽 以묐젰 ?좏쉶: 遺꾨━ ??媛곷룄(30째)?먯꽌 ???묎렐源뚯? 遺?쒕읇寃?湲곗슱湲?利앷?
-      const domeY2 = domeYAt(r.position.x, r.position.z);
-      const altFrac2 = Math.min(1, Math.max(0,
-        (r.position.y - r.startPos.y) / Math.max(0.001, domeY2 - r.startPos.y)
+      // ?곗냽 以묐젰 ?좏쉶: 遺꾨━ ?꾨즺 ?꾩튂?먯꽌 ?붽퉴吏 0??濡?留ㅽ븨, 30째??2째源뚯? 遺?쒕읇寃?利앷?
+      const domeY2       = domeYAt(r.position.x, r.position.z);
+      const s2Base       = r.stage2StartPos ?? r.startPos;
+      const stage2Progress = Math.min(1, Math.max(0,
+        (r.position.y - s2Base.y) / Math.max(0.001, domeY2 - s2Base.y)
       ));
-      // 80%??00% 援ш컙??0??濡?留ㅽ븨, 30째??2째源뚯? 遺?쒕읇寃?利앷?
-      const stage2Progress = Math.min(1, (altFrac2 - STAGE1_ALT_TRIGGER) / (1.0 - STAGE1_ALT_TRIGGER));
-      const stage2Angle = PITCHOVER_SEP_ANGLE + stage2Progress * stage2Progress * (PITCHOVER_ANGLE - PITCHOVER_SEP_ANGLE);
-      const stage2Dir = new THREE.Vector3(
-        r.targetFlightDir.x * Math.sin(stage2Angle),
-        Math.cos(stage2Angle),
-        r.targetFlightDir.z * Math.sin(stage2Angle)
-      ).normalize();
+      const stage2Angle = getRocketPitchoverSeparationAngle(r)
+        + stage2Progress * stage2Progress * (getRocketMaxPitchAngle(r) - getRocketPitchoverSeparationAngle(r));
+      const desiredDir = computePitchProgramDirection(r.targetFlightDir, stage2Angle);
+
+      if (r.stageTimer <= deltaSeconds) {
+        tempStageEntryDirection.copy(r.stage2EntryDir ?? r.stage1ExitDir ?? desiredDir);
+        initializeFlightDirection(r, tempStageEntryDirection);
+        r.thrustDir.copy(r.flightDir);
+      }
+
+      const steeredDir = steerFlightDirection(r, desiredDir, deltaSeconds, getRocketStage2TurnRate(r));
+      r.thrustDir.copy(steeredDir);
 
       // ?먯쭊??媛?? 遺꾨━ ?띾룄 ??STAGE2_SPEED (0.8珥덉뿉 嫄몄퀜 ramp up)
       const rampT = Math.min(1.0, r.stageTimer / 0.8);
       const entrySpd = r.sepVel
         ? Math.hypot(r.sepVel.x, r.sepVel.y, r.sepVel.z)
-        : ROCKET_SPEED;
-      const rampSpeed = entrySpd + (STAGE2_SPEED - entrySpd) * rampT;
+        : getRocketStage1Speed(r);
+      const rampSpeed = entrySpd + (getRocketStage2Speed(r) - entrySpd) * rampT;
 
-      body.setLinvel({
-        x: stage2Dir.x * rampSpeed,
-        y: stage2Dir.y * rampSpeed,
-        z: stage2Dir.z * rampSpeed
-      }, true);
+      applyFlightVelocity(r, steeredDir, rampSpeed, body);
 
       const pos2 = body.translation();
       r.position.set(pos2.x, pos2.y, pos2.z);
 
       // 濡쒖폆 諛⑺뼢: 2??異붾젰 諛⑺뼢?쇰줈 湲곗슱湲?
-      const tq2 = new THREE.Quaternion().setFromUnitVectors(_UP, stage2Dir);
+      const tq2 = new THREE.Quaternion().setFromUnitVectors(_UP, steeredDir);
       r.mesh.quaternion.slerp(tq2, 6.0 * deltaSeconds);
 
       // 2??諛곌린 ?곌린
       r.smokeTimer += deltaSeconds;
-      if (r.smokeTimer > 0.035) {
-        spawnSmoke(r.position.clone().addScaledVector(stage2Dir.clone().negate(), S(0.05)));
+        if (r.smokeTimer > (0.035 * ASCENT_EXHAUST_INTERVAL_SCALE)) {
+        const exhaustOrigin = getRocketExhaustWorldPosition(r, r.flame2 ?? r.flame1);
+        spawnAscentExhaust(
+          exhaustOrigin.clone().addScaledVector(steeredDir.clone().negate(), S(0.01)),
+          r.stageTimer,
+          0.95
+        );
         r.smokeTimer = 0;
       }
 
       // 沅곸갹 ?묒큺(Y ?대옩?? ?먮뒗 ?곗냼 ?쒓컙 珥덇낵 ??SCRAPE
       if (r.position.y >= domeY2 || r.stageTimer >= STAGE2_DURATION) {
         // 愿??諛⑹?: Y瑜???硫댁뿉 怨좎젙
-        r.position.y = Math.min(r.position.y, domeY2);
-        body.setTranslation({ x: r.position.x, y: r.position.y, z: r.position.z }, true);
-        r.state = "SCRAPE";
-        r.scrapeTimer = 0;
-        if (r.membraneMesh) r.membraneMesh.visible = true;
-        // ?꾩옱 ?섑룊 ?띾룄 洹몃?濡??좎? (?띾룄 ?먰봽 ?놁씠 ?먯뿰?ㅻ읇寃?SCRAPE 吏꾩엯)
         const curVel = body.linvel();
-        const hSpd = Math.hypot(curVel.x, curVel.z);
-        const sDir = hSpd > 0.01
-          ? new THREE.Vector3(curVel.x / hSpd, 0, curVel.z / hSpd)
-          : r.targetFlightDir.clone();
-        const scrapeEntrySpd = Math.max(hSpd, SCRAPE_SPEED * 0.4);
-        body.setLinvel({
-          x: sDir.x * scrapeEntrySpd,
-          y: 0,
-          z: sDir.z * scrapeEntrySpd
-        }, true);
+        captureFlightDirectionFromVelocity(r, curVel, r.thrustDir);
+        enterWaterScrapeState(r, curVel, r.targetFlightDir, body);
       }
 
     // ?? LAUNCH: ?⑥씪 ?④퀎 ?섏쭅 ?곸듅 ??????????????????????
@@ -806,48 +2299,59 @@ export function createRocketController({
       const altFrac  = Math.min(1.0, Math.max(0,
         (r.position.y - r.startPos.y) / Math.max(0.001, domeTopY - r.startPos.y)
       ));
-      const launchSpeed = ROCKET_SPEED * (1.0 - LAUNCH_DRAG_FACTOR * altFrac);
-      body.setLinvel({ x: 0, y: launchSpeed, z: 0 }, true);
+      const turnProgress = Math.min(1, altFrac / getRocketStage1AltTrigger(r));
+      const pitchAngle = turnProgress * turnProgress * getRocketPitchoverSeparationAngle(r);
+      const desiredDir = computePitchProgramDirection(r.targetFlightDir, pitchAngle);
+      const steeredDir = steerFlightDirection(r, desiredDir, deltaSeconds, getRocketStage1TurnRate(r));
+      r.thrustDir.copy(steeredDir);
+
+      const launchSpeed = getRocketStage1Speed(r) * (1.0 - LAUNCH_DRAG_FACTOR * altFrac);
+      applyFlightVelocity(r, steeredDir, launchSpeed, body);
 
       const pos = body.translation();
       r.position.set(pos.x, pos.y, pos.z);
 
-      r.mesh.quaternion.setFromUnitVectors(_UP, new THREE.Vector3(0, 1, 0));
+      r.mesh.quaternion.slerp(
+        new THREE.Quaternion().setFromUnitVectors(_UP, steeredDir),
+        5.0 * deltaSeconds
+      );
 
       r.smokeTimer += deltaSeconds;
-      if (r.smokeTimer > 0.05) {
-        spawnSmoke(r.position.clone().addScaledVector(new THREE.Vector3(0, -1, 0), S(0.04)));
+      if (r.smokeTimer > (0.05 * ASCENT_EXHAUST_INTERVAL_SCALE)) {
+        const exhaustOrigin = getRocketExhaustWorldPosition(r, r.flame1);
+        spawnAscentExhaust(
+          exhaustOrigin.clone().addScaledVector(steeredDir.clone().negate(), S(0.01)),
+          r.stageTimer,
+          0.88
+        );
         r.smokeTimer = 0;
       }
 
       const domeY = domeYAt(r.position.x, r.position.z);
       if (r.position.y >= domeY - S(0.04)) {
-        r.state = "SCRAPE";
-        r.scrapeTimer = 0;
-        if (r.membraneMesh) r.membraneMesh.visible = true;
-        body.setLinvel({
-          x: r.targetFlightDir.x * SCRAPE_SPEED,
-          y: 0,
-          z: r.targetFlightDir.z * SCRAPE_SPEED
-        }, true);
+        const launchVel = body.linvel();
+        captureFlightDirectionFromVelocity(r, launchVel, steeredDir);
+        enterWaterScrapeState(r, launchVel, steeredDir, body);
       }
 
     // ?? SCRAPE: ???쒕㈃ ?щ씪?대뵫 (?붿뿬異붿쭊??+ ?좎껜??? ??
     } else if (r.state === "SCRAPE") {
       // ?붿뿬 異붿쭊?? 2???곕즺 ?뚯쭊 ?꾧퉴吏 ?ㅻ뵫 諛⑺뼢?쇰줈 怨꾩냽 諛湲?
       const fuelLeft = Math.max(0, 1.0 - r.scrapeTimer / SCRAPE_FUEL_DURATION);
+      r.waterEntryTimer += deltaSeconds;
       body.applyForce({
-        x: r.targetFlightDir.x * SCRAPE_RESIDUAL_THRUST * fuelLeft,
+        x: r.scrapeDir.x * SCRAPE_RESIDUAL_THRUST * fuelLeft,
         y: 0,
-        z: r.targetFlightDir.z * SCRAPE_RESIDUAL_THRUST * fuelLeft
+        z: r.scrapeDir.z * SCRAPE_RESIDUAL_THRUST * fuelLeft
       }, true);
 
       // 沅곸갹 ?좎껜??? ?댁감(?띾룄짼) + ?좏삎(?먯꽦)
       const velPre = body.linvel();
       const hSpeed = Math.hypot(velPre.x, velPre.z);
       if (hSpeed > 0.0001) {
-        const fluidForce = DOME_FLUID_DRAG * hSpeed * hSpeed
-                         + DOME_VISCOUS_DRAG * hSpeed;
+        const { fluid, viscous } = getWaterDragCoefficients(r.waterEntryTimer);
+        const fluidForce = fluid * hSpeed * hSpeed
+                         + viscous * hSpeed;
         body.applyForce({
           x: -(velPre.x / hSpeed) * fluidForce,
           y: 0,
@@ -879,17 +2383,7 @@ export function createRocketController({
         );
       }
 
-      r.wakeTimer += deltaSeconds;
-      if (r.wakeTimer > 0.01) {
-        spawnWake(r.position, moveDir.lengthSq() > 0 ? moveDir : r.targetFlightDir);
-        r.wakeTimer = 0;
-      }
-      r.smokeTimer += deltaSeconds;
-      if (r.smokeTimer > 0.05) {
-        const tailDir = moveDir.clone().negate().normalize();
-        spawnSmoke(r.position.clone().addScaledVector(tailDir, S(0.04)));
-        r.smokeTimer = 0;
-      }
+      emitScrapeWaterEffects(r, moveDir.lengthSq() > 0 ? moveDir : r.scrapeDir, deltaSeconds);
 
       r.scrapeTimer += deltaSeconds;
 
@@ -900,7 +2394,7 @@ export function createRocketController({
       // ?좎껜???쑝濡?媛먯냽 ???뺤? ?먮뒗 ???댄깉 ???숉븯
       const finalVel = body.linvel();
       const finalHSpeed = Math.hypot(finalVel.x, finalVel.z);
-      const stoppedByFluid = finalHSpeed < S(0.01);
+      const stoppedByFluid = finalHSpeed < DOME_WATER_STOP_SPEED;
       if (stoppedByFluid || r.scrapeTimer >= SCRAPE_FUEL_DURATION || outsideDome) {
         r.state = "FALL";
         if (r.membraneMesh) r.membraneMesh.visible = false;
@@ -927,17 +2421,15 @@ export function createRocketController({
       }
 
       r.smokeTimer += deltaSeconds;
-      if (r.smokeTimer > 0.05) {
+      if (r.smokeTimer > (0.05 * FALL_SMOKE_INTERVAL_SCALE)) {
+        const fallOrigin = getRocketDisplayPosition(r).clone();
         const tailDir = r.velocity.clone().negate().normalize();
-        spawnSmoke(r.position.clone().addScaledVector(tailDir, S(0.04)));
+        spawnSmoke(fallOrigin.addScaledVector(tailDir, S(0.04)));
         r.smokeTimer = 0;
       }
 
       if (r.position.y <= constants.SURFACE_Y) {
-        physics.world.removeRigidBody(body);
-        scalableStage.remove(r.mesh);
-        rockets.splice(arrayIndex, 1);
-        return true;
+        return handleRocketRemoval(r, arrayIndex, body);
       }
     }
 
@@ -951,6 +2443,11 @@ export function createRocketController({
     const domeRadius   = constants.DOME_RADIUS;
     const domeBaseY    = constants.DOME_BASE_Y;
     const domeVertScale = constants.DOME_VERTICAL_SCALE;
+    updateLaunchTower(r, deltaSeconds);
+
+    if (r.state === "IGNITION") {
+      return updateIgnitionState(r, deltaSeconds);
+    }
 
     function fbDomeYAt(x, z) {
       const rSq = x * x + z * z;
@@ -967,93 +2464,47 @@ export function createRocketController({
       ));
 
       // ?곗냽 以묐젰 ?좏쉶: 怨좊룄???곕씪 0째 ??30째 ?щЪ??湲곗슱湲?
-      const fbTurnP = Math.min(1, fbAlt1 / STAGE1_ALT_TRIGGER);
-      const fbPitchA = fbTurnP * fbTurnP * PITCHOVER_SEP_ANGLE;
-      r.thrustDir.set(
-        r.targetFlightDir.x * Math.sin(fbPitchA),
-        Math.cos(fbPitchA),
-        r.targetFlightDir.z * Math.sin(fbPitchA)
-      ).normalize();
+      const fbTurnP = Math.min(1, fbAlt1 / getRocketStage1AltTrigger(r));
+      const fbPitchA = fbTurnP * fbTurnP * getRocketPitchoverSeparationAngle(r);
+      const desiredDir = computePitchProgramDirection(r.targetFlightDir, fbPitchA);
+      const steeredDir = steerFlightDirection(r, desiredDir, deltaSeconds, getRocketStage1TurnRate(r));
+      r.thrustDir.copy(steeredDir);
 
-      const fbClimb = ROCKET_SPEED * (1.0 - LAUNCH_DRAG_FACTOR * fbAlt1);
-      r.velocity.set(
-        r.thrustDir.x * fbClimb,
-        r.thrustDir.y * fbClimb,
-        r.thrustDir.z * fbClimb
-      );
+      const fbClimb = getRocketStage1Speed(r) * (1.0 - LAUNCH_DRAG_FACTOR * fbAlt1);
+      applyFlightVelocity(r, steeredDir, fbClimb);
       r.position.addScaledVector(r.velocity, deltaSeconds);
 
       const fbTq1 = new THREE.Quaternion().setFromUnitVectors(_UP, r.thrustDir);
       r.mesh.quaternion.slerp(fbTq1, 5.0 * deltaSeconds);
 
       r.smokeTimer += deltaSeconds;
-      if (r.smokeTimer > 0.05) {
-        spawnSmoke(r.position.clone().addScaledVector(r.thrustDir.clone().negate(), S(0.06)));
+      if (r.smokeTimer > (0.05 * ASCENT_EXHAUST_INTERVAL_SCALE)) {
+        const exhaustOrigin = getRocketExhaustWorldPosition(r, r.flame1);
+        spawnAscentExhaust(
+          exhaustOrigin.clone().addScaledVector(r.thrustDir.clone().negate(), S(0.012)),
+          r.stageTimer,
+          1.05
+        );
         r.smokeTimer = 0;
       }
 
       // ??愿??諛⑹?
       if (r.position.y >= fbDomeH1) {
         r.position.y = fbDomeH1;
-        r.pitchoverDir = r.thrustDir.clone();
+        captureFlightDirectionFromVelocity(r, { x: r.velocity.x, y: 0, z: r.velocity.z }, r.thrustDir);
+        r.stage1ExitDir = r.flightDir.clone();
+        r.pitchoverDir = r.flightDir.clone();
         r.sepVel = { x: r.velocity.x, y: 0, z: r.velocity.z };
         r.state = "SEPARATION"; r.stageTimer = 0;
         startStageSeparation(r);
       } else {
         const fbDomeFrac = fbAlt1;
-        if (fbDomeFrac >= STAGE1_ALT_TRIGGER || r.stageTimer >= STAGE1_DURATION) {
-          r.pitchoverDir = r.thrustDir.clone();
+        if (fbDomeFrac >= getRocketStage1AltTrigger(r) || r.stageTimer >= STAGE1_DURATION) {
+          captureFlightDirectionFromVelocity(r, r.velocity, r.thrustDir);
+          r.stage1ExitDir = r.flightDir.clone();
+          r.pitchoverDir = r.flightDir.clone();
           r.sepVel = { x: r.velocity.x, y: r.velocity.y, z: r.velocity.z };
           r.state = "SEPARATION"; r.stageTimer = 0;
-          startStageSeparation(r);
-        }
-      }
-
-    // ?? PITCHOVER ?대갚: ?먯꽭 ?쒖뼱 ???????????????????????????
-    } else if (r.state === "PITCHOVER") {
-      r.stageTimer += deltaSeconds;
-
-      const fbPitchFrac  = Math.min(1.0, r.stageTimer / PITCHOVER_DURATION);
-      const fbPitchAngle = fbPitchFrac * PITCHOVER_ANGLE;
-      r.thrustDir.set(
-        r.targetFlightDir.x * Math.sin(fbPitchAngle),
-        Math.cos(fbPitchAngle),
-        r.targetFlightDir.z * Math.sin(fbPitchAngle)
-      ).normalize();
-
-      const fbPitchSpeed = ROCKET_SPEED * (1.0 - LAUNCH_DRAG_FACTOR);
-      r.velocity.set(
-        r.thrustDir.x * fbPitchSpeed,
-        0,
-        r.thrustDir.z * fbPitchSpeed
-      );
-      r.position.addScaledVector(r.velocity, deltaSeconds);
-
-      // ??愿??諛⑹?: ?쇱튂?ㅻ쾭 以???硫??꾨떖 ??利됱떆 遺꾨━
-      const fbPitchDomeY = fbDomeYAt(r.position.x, r.position.z);
-      if (r.position.y >= fbPitchDomeY) {
-        r.position.y = fbPitchDomeY;
-        r.pitchoverDir = r.thrustDir.clone();
-        r.sepVel = { x: r.velocity.x, y: 0, z: r.velocity.z };
-        r.velocity.set(r.velocity.x, 0, r.velocity.z);
-        r.state      = "SEPARATION";
-        r.stageTimer = 0;
-        startStageSeparation(r);
-      } else {
-        const tqPitch = new THREE.Quaternion().setFromUnitVectors(_UP, r.thrustDir);
-        r.mesh.quaternion.slerp(tqPitch, 8.0 * deltaSeconds);
-
-        r.smokeTimer += deltaSeconds;
-        if (r.smokeTimer > 0.05) {
-          spawnSmoke(r.position.clone().addScaledVector(r.thrustDir.clone().negate(), S(0.06)));
-          r.smokeTimer = 0;
-        }
-
-        if (fbPitchAngle >= PITCHOVER_SEP_ANGLE || r.stageTimer >= PITCHOVER_DURATION) {
-          r.pitchoverDir = r.thrustDir.clone();
-          r.sepVel = { x: r.velocity.x, y: r.velocity.y, z: r.velocity.z };
-          r.state      = "SEPARATION";
-          r.stageTimer = 0;
           startStageSeparation(r);
         }
       }
@@ -1064,65 +2515,68 @@ export function createRocketController({
       // 遺꾨━ 以??띾룄 ?좎? (愿??肄붿뒪??
       if (r.sepVel) {
         r.velocity.set(r.sepVel.x, r.sepVel.y, r.sepVel.z);
+        captureFlightDirectionFromVelocity(r, r.sepVel, r.stage1ExitDir ?? r.targetFlightDir);
         r.position.addScaledVector(r.velocity, deltaSeconds);
       }
       if (r.stageTimer >= SEP_DURATION) {
-        r.state      = "STAGE2";
-        r.stageTimer = 0;
-        if (r.flame2) r.flame2.visible = true;
+        tempStageEntryDirection.copy(r.stage1ExitDir ?? r.targetFlightDir);
+        captureFlightDirectionFromVelocity(r, r.velocity, tempStageEntryDirection);
+        r.stage2EntryDir = r.flightDir.clone();
+        r.state          = "STAGE2";
+        r.stageTimer     = 0;
+        r.stage2StartPos = r.position.clone();
+        setFlameHeat(r.flame2, 1, 1);
+        r.engineHeat = 1;
       }
 
     // ?? STAGE2 ?대갚 ??沅곸갹源뚯? ?곸듅 (?곗냽 以묐젰 ?좏쉶) ??????
     } else if (r.state === "STAGE2") {
       r.stageTimer += deltaSeconds;
-      // ?곗냽 以묐젰 ?좏쉶: 怨좊룄 湲곕컲?쇰줈 30째??2째 遺?쒕읇寃?利앷?
-      const fbDomeH2 = fbDomeYAt(r.position.x, r.position.z);
-      const fbAltFrac2 = Math.min(1, Math.max(0,
-        (r.position.y - r.startPos.y) / Math.max(0.001, fbDomeH2 - r.startPos.y)
+      // ?곗냽 以묐젰 ?좏쉶: 遺꾨━ ?꾨즺 ?꾩튂?먯꽌 ?붽퉴吏 0??濡?留ㅽ븨, 30째??2째 遺?쒕읇寃?利앷?
+      const fbDomeH2   = fbDomeYAt(r.position.x, r.position.z);
+      const fbS2Base   = r.stage2StartPos ?? r.startPos;
+      const fbS2Progress = Math.min(1, Math.max(0,
+        (r.position.y - fbS2Base.y) / Math.max(0.001, fbDomeH2 - fbS2Base.y)
       ));
-      const fbS2Progress = Math.min(1, (fbAltFrac2 - STAGE1_ALT_TRIGGER) / (1.0 - STAGE1_ALT_TRIGGER));
-      const fbS2Angle = PITCHOVER_SEP_ANGLE + fbS2Progress * fbS2Progress * (PITCHOVER_ANGLE - PITCHOVER_SEP_ANGLE);
-      const stage2Dir = new THREE.Vector3(
-        r.targetFlightDir.x * Math.sin(fbS2Angle),
-        Math.cos(fbS2Angle),
-        r.targetFlightDir.z * Math.sin(fbS2Angle)
-      ).normalize();
+      const fbS2Angle = getRocketPitchoverSeparationAngle(r)
+        + fbS2Progress * fbS2Progress * (getRocketMaxPitchAngle(r) - getRocketPitchoverSeparationAngle(r));
+      const desiredDir = computePitchProgramDirection(r.targetFlightDir, fbS2Angle);
+
+      if (r.stageTimer <= deltaSeconds) {
+        tempStageEntryDirection.copy(r.stage2EntryDir ?? r.stage1ExitDir ?? desiredDir);
+        initializeFlightDirection(r, tempStageEntryDirection);
+        r.thrustDir.copy(r.flightDir);
+      }
+
+      const steeredDir = steerFlightDirection(r, desiredDir, deltaSeconds, getRocketStage2TurnRate(r));
+      r.thrustDir.copy(steeredDir);
 
       const fbRampT = Math.min(1.0, r.stageTimer / 0.8);
       const fbEntrySpd = r.sepVel
         ? Math.hypot(r.sepVel.x, r.sepVel.y, r.sepVel.z)
-        : ROCKET_SPEED;
-      const fbRampSpeed = fbEntrySpd + (STAGE2_SPEED - fbEntrySpd) * fbRampT;
-      r.velocity.set(
-        stage2Dir.x * fbRampSpeed,
-        stage2Dir.y * fbRampSpeed,
-        stage2Dir.z * fbRampSpeed
-      );
+        : getRocketStage1Speed(r);
+      const fbRampSpeed = fbEntrySpd + (getRocketStage2Speed(r) - fbEntrySpd) * fbRampT;
+      applyFlightVelocity(r, steeredDir, fbRampSpeed);
       r.position.addScaledVector(r.velocity, deltaSeconds);
 
-      const tq2 = new THREE.Quaternion().setFromUnitVectors(_UP, stage2Dir);
+      const tq2 = new THREE.Quaternion().setFromUnitVectors(_UP, steeredDir);
       r.mesh.quaternion.slerp(tq2, 6.0 * deltaSeconds);
 
       r.smokeTimer += deltaSeconds;
-      if (r.smokeTimer > 0.035) {
-        spawnSmoke(r.position.clone().addScaledVector(stage2Dir.clone().negate(), S(0.05)));
+      if (r.smokeTimer > (0.035 * ASCENT_EXHAUST_INTERVAL_SCALE)) {
+        const exhaustOrigin = getRocketExhaustWorldPosition(r, r.flame2 ?? r.flame1);
+        spawnAscentExhaust(
+          exhaustOrigin.clone().addScaledVector(steeredDir.clone().negate(), S(0.01)),
+          r.stageTimer,
+          0.95
+        );
         r.smokeTimer = 0;
       }
 
       if (r.position.y >= fbDomeH2 || r.stageTimer >= STAGE2_DURATION) {
         r.position.y = Math.min(r.position.y, fbDomeH2);
-        r.state = "SCRAPE";
-        r.scrapeTimer = 0;
-        if (r.membraneMesh) r.membraneMesh.visible = true;
-        const fbHSpd = Math.hypot(r.velocity.x, r.velocity.z);
-        const fbSDir = fbHSpd > 0.01
-          ? new THREE.Vector3(r.velocity.x / fbHSpd, 0, r.velocity.z / fbHSpd)
-          : r.targetFlightDir.clone();
-        const fbScrapeEntrySpd = Math.max(fbHSpd, SCRAPE_SPEED * 0.4);
-        r.velocity.set(
-          fbSDir.x * fbScrapeEntrySpd, 0,
-          fbSDir.z * fbScrapeEntrySpd
-        );
+        captureFlightDirectionFromVelocity(r, r.velocity, r.thrustDir);
+        enterWaterScrapeState(r, r.velocity, r.targetFlightDir);
       }
 
     // ?? LAUNCH ?대갚 ??????????????????????????????????????
@@ -1131,41 +2585,53 @@ export function createRocketController({
       const fbAltFrac = Math.min(1.0, Math.max(0,
         (r.position.y - r.startPos.y) / Math.max(0.001, fbDomeH - r.startPos.y)
       ));
-      const fbSpeed = ROCKET_SPEED * (1.0 - LAUNCH_DRAG_FACTOR * fbAltFrac);
-      r.velocity.set(0, fbSpeed, 0);
+      const fbTurnP = Math.min(1, fbAltFrac / getRocketStage1AltTrigger(r));
+      const fbPitchA = fbTurnP * fbTurnP * getRocketPitchoverSeparationAngle(r);
+      const desiredDir = computePitchProgramDirection(r.targetFlightDir, fbPitchA);
+      const steeredDir = steerFlightDirection(r, desiredDir, deltaSeconds, getRocketStage1TurnRate(r));
+      r.thrustDir.copy(steeredDir);
+
+      const fbSpeed = getRocketStage1Speed(r) * (1.0 - LAUNCH_DRAG_FACTOR * fbAltFrac);
+      applyFlightVelocity(r, steeredDir, fbSpeed);
       r.position.addScaledVector(r.velocity, deltaSeconds);
-      r.mesh.quaternion.setFromUnitVectors(_UP, new THREE.Vector3(0, 1, 0));
+      r.mesh.quaternion.slerp(
+        new THREE.Quaternion().setFromUnitVectors(_UP, steeredDir),
+        5.0 * deltaSeconds
+      );
 
       r.smokeTimer += deltaSeconds;
-      if (r.smokeTimer > 0.05) {
-        spawnSmoke(r.position.clone().addScaledVector(new THREE.Vector3(0, -1, 0), S(0.04)));
+      if (r.smokeTimer > (0.05 * ASCENT_EXHAUST_INTERVAL_SCALE)) {
+        const exhaustOrigin = getRocketExhaustWorldPosition(r, r.flame1);
+        spawnAscentExhaust(
+          exhaustOrigin.clone().addScaledVector(steeredDir.clone().negate(), S(0.01)),
+          r.stageTimer,
+          0.88
+        );
         r.smokeTimer = 0;
       }
 
       if (r.position.y >= fbDomeH) {
         r.position.y = fbDomeH;
-        r.state = "SCRAPE";
-        r.scrapeTimer = 0;
-        r.velocity.set(0, 0, 0);
-        if (r.membraneMesh) r.membraneMesh.visible = true;
+        captureFlightDirectionFromVelocity(r, r.velocity, steeredDir);
+        enterWaterScrapeState(r, r.velocity, steeredDir);
       } else if (r.position.y < constants.SURFACE_Y) {
-        scalableStage.remove(r.mesh);
-        rockets.splice(arrayIndex, 1);
-        return true;
+        return handleRocketRemoval(r, arrayIndex);
       }
 
     // ?? SCRAPE ?대갚 (?붿뿬異붿쭊??+ ?좎껜??? ?????????????
     } else if (r.state === "SCRAPE") {
       // ?붿뿬 異붿쭊??
       const fbFuelLeft = Math.max(0, 1.0 - r.scrapeTimer / SCRAPE_FUEL_DURATION);
-      r.velocity.x += r.targetFlightDir.x * SCRAPE_RESIDUAL_THRUST * fbFuelLeft * deltaSeconds;
-      r.velocity.z += r.targetFlightDir.z * SCRAPE_RESIDUAL_THRUST * fbFuelLeft * deltaSeconds;
+      r.waterEntryTimer += deltaSeconds;
+      r.velocity.x += r.scrapeDir.x * SCRAPE_RESIDUAL_THRUST * fbFuelLeft * deltaSeconds;
+      r.velocity.z += r.scrapeDir.z * SCRAPE_RESIDUAL_THRUST * fbFuelLeft * deltaSeconds;
 
       // ?좎껜???쑝濡?媛먯냽
       const fbHSpd = Math.hypot(r.velocity.x, r.velocity.z);
       if (fbHSpd > 0.0001) {
-        const fbForce = DOME_FLUID_DRAG * fbHSpd * fbHSpd
-                      + DOME_VISCOUS_DRAG * fbHSpd;
+        const { fluid, viscous } = getWaterDragCoefficients(r.waterEntryTimer);
+        const fbForce = fluid * fbHSpd * fbHSpd
+                      + viscous * fbHSpd;
         const fbDecel = fbForce * deltaSeconds; // a*dt 諛⑹떇
         const fbClamp = Math.min(fbDecel, fbHSpd * 0.95);
         r.velocity.x -= (r.velocity.x / fbHSpd) * fbClamp;
@@ -1192,13 +2658,7 @@ export function createRocketController({
         );
       }
 
-      r.wakeTimer += deltaSeconds;
-      if (r.wakeTimer > 0.01) { spawnWake(r.position, moveDir); r.wakeTimer = 0; }
-      r.smokeTimer += deltaSeconds;
-      if (r.smokeTimer > 0.05) {
-        spawnSmoke(r.position.clone().addScaledVector(moveDir.clone().negate(), S(0.04)));
-        r.smokeTimer = 0;
-      }
+      emitScrapeWaterEffects(r, moveDir, deltaSeconds);
 
       r.scrapeTimer += deltaSeconds;
 
@@ -1206,7 +2666,7 @@ export function createRocketController({
         >= domeRadius * domeRadius * 0.97;
 
       const fbFinalHSpd = Math.hypot(r.velocity.x, r.velocity.z);
-      const fbStopped = fbFinalHSpd < S(0.01);
+      const fbStopped = fbFinalHSpd < DOME_WATER_STOP_SPEED;
       if (fbStopped || r.scrapeTimer >= SCRAPE_FUEL_DURATION || fbOutsideDome) {
         r.state = "FALL";
         if (r.membraneMesh) r.membraneMesh.visible = false;
@@ -1226,14 +2686,13 @@ export function createRocketController({
         r.mesh.quaternion.setFromUnitVectors(_UP, r.velocity.clone().normalize());
       }
       r.smokeTimer += deltaSeconds;
-      if (r.smokeTimer > 0.05) {
-        spawnSmoke(r.position.clone().addScaledVector(r.velocity.clone().negate().normalize(), S(0.04)));
+      if (r.smokeTimer > (0.05 * FALL_SMOKE_INTERVAL_SCALE)) {
+        const fallOrigin = getRocketDisplayPosition(r).clone();
+        spawnSmoke(fallOrigin.addScaledVector(r.velocity.clone().negate().normalize(), S(0.04)));
         r.smokeTimer = 0;
       }
       if (r.position.y <= constants.SURFACE_Y) {
-        scalableStage.remove(r.mesh);
-        rockets.splice(arrayIndex, 1);
-        return true;
+        return handleRocketRemoval(r, arrayIndex);
       }
     }
 
@@ -1243,24 +2702,44 @@ export function createRocketController({
   function getTelemetry() {
     if (rockets.length === 0) return null;
     const r = rockets[rockets.length - 1]; // 媛??理쒓렐 濡쒖폆
-    const speed = r.velocity
-      ? Math.hypot(r.velocity.x, r.velocity.y, r.velocity.z)
-      : (r.rigidBody ? (() => { const v = r.rigidBody.linvel(); return Math.hypot(v.x, v.y, v.z); })() : 0);
+    const velocity = getRocketVelocity(r);
+    const speed = Math.hypot(velocity.x, velocity.y, velocity.z);
     const domeY = domeYAt(r.position.x, r.position.z);
     const altPct = Math.max(0, Math.min(100,
       ((r.position.y - (r.startPos?.y ?? 0)) / Math.max(0.001, domeY - (r.startPos?.y ?? 0))) * 100
     ));
     return {
+      debrisCount: debris.length,
+      engineHeat: r.engineHeat ?? 0,
+      ignitionProgress: THREE.MathUtils.clamp(
+        (r.ignitionTimer ?? 0) / Math.max(r.ignitionDuration ?? 1, 0.0001),
+        0,
+        1
+      ),
+      launchpadName: r.launchpadName ?? "",
+      missionLabel: r.missionLabel ?? "",
+      missionProfile: r.missionProfile ?? DEFAULT_MISSION_PROFILE_ID,
       state:     r.state,
       isTwoStage: r.isTwoStage,
       altitude:  altPct.toFixed(1),          // % of dome height
       speed:     (speed * 1000).toFixed(1),  // scaled for readability
-      stageTimer: (r.stageTimer ?? 0).toFixed(1),
+      stageTimer: ((r.state === "IGNITION" ? r.ignitionTimer : r.stageTimer) ?? 0).toFixed(1),
       scrapeTimer: (r.scrapeTimer ?? 0).toFixed(1),
-      debrisCount: debris.length,
+      vehicleLabel: r.vehicleLabel ?? ""
     };
   }
 
-  return { update, launchRocket, getTelemetry };
+  return {
+    clearStandby,
+    enterStandby,
+    getActiveRocketSnapshot,
+    getLastCompletedLaunchpadName() {
+      return lastCompletedLaunchpadName;
+    },
+    getStandbySnapshot,
+    getTelemetry,
+    launchRocket: launchRocketWithStandby,
+    launchStandby,
+    update
+  };
 }
-
