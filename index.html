@@ -768,6 +768,95 @@
                 <span class="field-label" data-i18n="routeDestinationAirportLabel">Destination Airport</span>
                 <select class="select-input" id="route-destination-airport" disabled></select>
               </label>
+
+              <div class="route-direct-input">
+                <p class="sync-copy subtle route-direct-title" data-i18n="routeDirectSectionTitle">Direct Airport Codes</p>
+                <label class="field" for="route-direct-origin-code">
+                  <span class="field-label" data-i18n="routeDirectOriginCodeLabel">Origin Code (IATA/ICAO)</span>
+                  <input class="route-code-input" id="route-direct-origin-code" type="text" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" disabled>
+                </label>
+                <label class="field" for="route-direct-destination-code">
+                  <span class="field-label" data-i18n="routeDirectDestinationCodeLabel">Destination Code (IATA/ICAO)</span>
+                  <input class="route-code-input" id="route-direct-destination-code" type="text" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" disabled>
+                </label>
+                <div class="field">
+                  <span class="field-label" data-i18n="routeDirectLayoversLabel">Layovers (Optional)</span>
+                  <div class="route-direct-layover-stack">
+                    <div class="route-direct-layover-row" data-route-direct-layover-row="0" hidden>
+                      <input
+                        class="route-code-input route-direct-layover-input"
+                        id="route-direct-layover-1"
+                        data-route-direct-layover-input="0"
+                        type="text"
+                        maxlength="4"
+                        autocomplete="off"
+                        autocapitalize="characters"
+                        spellcheck="false"
+                        disabled
+                      >
+                      <button
+                        class="button secondary compact-button route-direct-remove-layover"
+                        id="route-direct-remove-layover-1"
+                        type="button"
+                        data-route-direct-remove-layover="0"
+                        data-i18n="routeDirectRemoveLayoverButton"
+                        disabled
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <div class="route-direct-layover-row" data-route-direct-layover-row="1" hidden>
+                      <input
+                        class="route-code-input route-direct-layover-input"
+                        id="route-direct-layover-2"
+                        data-route-direct-layover-input="1"
+                        type="text"
+                        maxlength="4"
+                        autocomplete="off"
+                        autocapitalize="characters"
+                        spellcheck="false"
+                        disabled
+                      >
+                      <button
+                        class="button secondary compact-button route-direct-remove-layover"
+                        id="route-direct-remove-layover-2"
+                        type="button"
+                        data-route-direct-remove-layover="1"
+                        data-i18n="routeDirectRemoveLayoverButton"
+                        disabled
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <div class="route-direct-layover-row" data-route-direct-layover-row="2" hidden>
+                      <input
+                        class="route-code-input route-direct-layover-input"
+                        id="route-direct-layover-3"
+                        data-route-direct-layover-input="2"
+                        type="text"
+                        maxlength="4"
+                        autocomplete="off"
+                        autocapitalize="characters"
+                        spellcheck="false"
+                        disabled
+                      >
+                      <button
+                        class="button secondary compact-button route-direct-remove-layover"
+                        id="route-direct-remove-layover-3"
+                        type="button"
+                        data-route-direct-remove-layover="2"
+                        data-i18n="routeDirectRemoveLayoverButton"
+                        disabled
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                  <div class="button-row compact route-direct-actions">
+                    <button class="button secondary compact-button" id="route-direct-add-layover" type="button" data-i18n="routeDirectAddLayoverButton" disabled>Add Layover</button>
+                  </div>
+                </div>
+              </div>
             </div>
             <label class="field" for="route-speed">
               <span class="field-label" data-i18n="playbackSpeedLabel">Playback Speed</span>

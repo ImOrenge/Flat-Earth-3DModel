@@ -447,6 +447,12 @@ const routeOriginCountryEl = document.getElementById("route-origin-country");
 const routeOriginAirportEl = document.getElementById("route-origin-airport");
 const routeDestinationCountryEl = document.getElementById("route-destination-country");
 const routeDestinationAirportEl = document.getElementById("route-destination-airport");
+const routeDirectOriginCodeEl = document.getElementById("route-direct-origin-code");
+const routeDirectDestinationCodeEl = document.getElementById("route-direct-destination-code");
+const routeDirectAddLayoverButtonEl = document.getElementById("route-direct-add-layover");
+const routeDirectLayoverRowEls = [...document.querySelectorAll("[data-route-direct-layover-row]")];
+const routeDirectLayoverInputEls = [...document.querySelectorAll("[data-route-direct-layover-input]")];
+const routeDirectRemoveLayoverButtons = [...document.querySelectorAll("[data-route-direct-remove-layover]")];
 const routeSpeedEl = document.getElementById("route-speed");
 const routeSpeedValueEl = document.getElementById("route-speed-value");
 const routePlaybackButton = document.getElementById("route-playback");
@@ -1798,6 +1804,12 @@ const routeSimulationApi = createRouteSimulationController({
     routeAdvancedPanelEl,
     routeCountriesEl,
     routeDatasetStatusEl,
+    routeDirectAddLayoverButtonEl,
+    routeDirectDestinationCodeEl,
+    routeDirectLayoverInputEls,
+    routeDirectLayoverRowEls,
+    routeDirectOriginCodeEl,
+    routeDirectRemoveLayoverButtons,
     routeDestinationAirportEl,
     routeDestinationContinentEl,
     routeDestinationCountryEl,
@@ -2573,6 +2585,8 @@ if (routeTrackCameraButtonEl) {
     exitFirstPersonMode, enterFirstPersonMode, walkerModeEl, resetWalkerButton,
     routeModeSelectEl, routeOriginContinentEl, routeDestinationContinentEl, routeRecommendedRouteEl,
     routeOriginCountryEl, routeOriginAirportEl, routeDestinationCountryEl, routeDestinationAirportEl,
+    routeDirectOriginCodeEl, routeDirectDestinationCodeEl, routeDirectLayoverRowEls,
+    routeDirectLayoverInputEls, routeDirectRemoveLayoverButtons, routeDirectAddLayoverButtonEl,
     routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl,
     celestialSpeedPresetButtons,
     celestialFullTrailEl, routePlaybackButton, routeResetButton, realitySyncEl,
