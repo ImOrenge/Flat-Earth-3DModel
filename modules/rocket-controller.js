@@ -296,23 +296,11 @@ export function createRocketController({
     const { vertices, indices } = buildDomeMesh();
     // 돔 트라이메시 콜라이더 제거: 돔 접촉은 domeYAt() 위치 검사로 코드 제어.
     // 물리 충돌 반응(튕김) 방지.
-    let groundColliderDesc = null;
-    if (typeof RAPIER.ColliderDesc?.halfSpace === "function") {
-      groundColliderDesc = RAPIER.ColliderDesc.halfSpace(new RAPIER.Vector3(0, 1, 0))
-        .setTranslation(0, constants.SURFACE_Y, 0);
-    } else if (typeof RAPIER.ColliderDesc?.halfspace === "function") {
-      groundColliderDesc = RAPIER.ColliderDesc.halfspace(new RAPIER.Vector3(0, 1, 0))
-        .setTranslation(0, constants.SURFACE_Y, 0);
-    } else {
-      const fallbackHalfThickness = 0.5;
-      groundColliderDesc = RAPIER.ColliderDesc
-        .cuboid(constants.DISC_RADIUS * 2, fallbackHalfThickness, constants.DISC_RADIUS * 2)
-        .setTranslation(0, constants.SURFACE_Y - fallbackHalfThickness, 0);
-    }
     world.createCollider(
-      groundColliderDesc
-        .setRestitution(0.0)
-        .setFriction(1.0)
+      RAPIER.ColliderDesc
+        .halfSpace(new RAPIER.Vector3(0, 1, 0))
+        .setTranslation(0, constants.SURFACE_Y, 0)
+        .setRestitution(0.0).setFriction(1.0)
     );
     physics = { world };
   }
