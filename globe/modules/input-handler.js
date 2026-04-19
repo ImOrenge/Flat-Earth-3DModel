@@ -1,4 +1,4 @@
-import * as THREE from "../vendor/three.module.js";
+import * as THREE from "../../vendor/three.module.js";
 
 export function setupInputHandlers(deps) {
   const {
@@ -22,6 +22,7 @@ export function setupInputHandlers(deps) {
     isUiBlocking,
     skyTexture,
     scene,
+    defaultCameraLookTarget,
     setControlTab,
     createSolarEclipseState,
     syncFullTrailVisibility,
@@ -33,7 +34,7 @@ export function setupInputHandlers(deps) {
     exitFirstPersonMode, enterFirstPersonMode, walkerModeEl, resetWalkerButton,
     routeModeSelectEl, routeOriginContinentEl, routeDestinationContinentEl, routeRecommendedRouteEl,
     routeOriginCountryEl, routeOriginAirportEl, routeDestinationCountryEl, routeDestinationAirportEl,
-    routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl, celestialSpeedPresetButtons = [],
+    routeRefreshButton, routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl, celestialSpeedPresetButtons = [],
     celestialFullTrailEl, routePlaybackButton, routeResetButton, realitySyncEl,
     realityLiveEl, observationTimeEl, observationMinusHourButton, observationPlusHourButton,
     eclipseCatalogSourceEl, eclipseCatalogUploadEl, eclipseKindSelectEl, eclipseYearSelectEl,
@@ -48,13 +49,7 @@ export function setupInputHandlers(deps) {
     seasonalEventButtons
   } = deps;
 
-  const {
-    rocketMissionProfileSelect,
-    rocketSpaceportSelect,
-    rocketTypeSelect,
-    rocketLaunchBtn,
-    rocketStandbyBtn
-  } = ui;
+  const { rocketSpaceportSelect, rocketTypeSelect, rocketLaunchBtn } = ui;
 
   const {
     WALKER_PITCH_MIN,
@@ -91,100 +86,6 @@ export function setupInputHandlers(deps) {
   let touchStartX = 0;
   let touchStartY = 0;
   let touchStartTime = 0;
-  const ARTEMIS_MISSION_PROFILE_ID = "artemis-ii";
-  const ARTEMIS_LOCKED_SPACEPORT_VALUE = "__artemis_lc39b__";
-  const ARTEMIS_LOCKED_ROCKET_TYPE_VALUE = "sls";
-  const rocketSelectionMemory = {
-    spaceportValue: rocketSpaceportSelect?.value ?? "",
-    rocketTypeValue: rocketTypeSelect?.value ?? "two-stage"
-  };
-
-  function getRocketUiText(key) {
-    if (i18n?.getLanguage?.() === "ko") {
-      if (key === "artemisLaunchpad") {
-        return "LC-39B / \uCF00\uB124\uB514 \uC6B0\uC8FC\uC13C\uD130";
-      }
-      if (key === "slsVehicle") {
-        return "SLS / Orion";
-      }
-    }
-
-    if (key === "artemisLaunchpad") {
-      return "LC-39B / Kennedy Space Center";
-    }
-    if (key === "slsVehicle") {
-      return "SLS / Orion";
-    }
-    return "";
-  }
-
-  function ensureSelectOption(selectEl, value, label) {
-    if (!selectEl) {
-      return;
-    }
-
-    let option = Array.from(selectEl.options).find((entry) => entry.value === value);
-    if (!option) {
-      option = document.createElement("option");
-      option.value = value;
-      selectEl.append(option);
-    }
-    option.textContent = label;
-  }
-
-  function removeSelectOption(selectEl, value) {
-    if (!selectEl) {
-      return;
-    }
-
-    const option = Array.from(selectEl.options).find((entry) => entry.value === value);
-    option?.remove?.();
-  }
-
-  function syncRocketMissionProfileControls() {
-    const missionProfile = rocketMissionProfileSelect?.value ?? "default";
-    const isArtemis = missionProfile === ARTEMIS_MISSION_PROFILE_ID;
-
-    if (rocketSpaceportSelect) {
-      if (isArtemis) {
-        if (rocketSpaceportSelect.value && rocketSpaceportSelect.value !== ARTEMIS_LOCKED_SPACEPORT_VALUE) {
-          rocketSelectionMemory.spaceportValue = rocketSpaceportSelect.value;
-        }
-        ensureSelectOption(
-          rocketSpaceportSelect,
-          ARTEMIS_LOCKED_SPACEPORT_VALUE,
-          getRocketUiText("artemisLaunchpad")
-        );
-        rocketSpaceportSelect.value = ARTEMIS_LOCKED_SPACEPORT_VALUE;
-        rocketSpaceportSelect.disabled = true;
-      } else {
-        removeSelectOption(rocketSpaceportSelect, ARTEMIS_LOCKED_SPACEPORT_VALUE);
-        rocketSpaceportSelect.disabled = false;
-        if (rocketSelectionMemory.spaceportValue) {
-          rocketSpaceportSelect.value = rocketSelectionMemory.spaceportValue;
-        }
-      }
-    }
-
-    if (rocketTypeSelect) {
-      if (isArtemis) {
-        if (rocketTypeSelect.value && rocketTypeSelect.value !== ARTEMIS_LOCKED_ROCKET_TYPE_VALUE) {
-          rocketSelectionMemory.rocketTypeValue = rocketTypeSelect.value;
-        }
-        ensureSelectOption(
-          rocketTypeSelect,
-          ARTEMIS_LOCKED_ROCKET_TYPE_VALUE,
-          getRocketUiText("slsVehicle")
-        );
-        rocketTypeSelect.value = ARTEMIS_LOCKED_ROCKET_TYPE_VALUE;
-        rocketTypeSelect.disabled = true;
-      } else {
-        removeSelectOption(rocketTypeSelect, ARTEMIS_LOCKED_ROCKET_TYPE_VALUE);
-        rocketTypeSelect.disabled = false;
-        rocketTypeSelect.value = rocketSelectionMemory.rocketTypeValue || "two-stage";
-      }
-    }
-  }
 
   function getResponsivePresetValues(preset = "top") {
     const viewportWidth = Math.max(canvas?.clientWidth || window.innerWidth || 0, 1);
@@ -194,12 +95,23 @@ export function setupInputHandlers(deps) {
     const portraitTightness = isMobileViewport
       ? THREE.MathUtils.clamp((0.68 - aspectRatio) / 0.28, 0, 1)
       : 0;
+    const isGlobeView = cameraState.earthModelView === "spherical";
 
     if (preset === "angle") {
       return {
         theta: constants.CAMERA_ANGLED_DEFAULT_THETA,
         phi: THREE.MathUtils.lerp(constants.CAMERA_ANGLED_DEFAULT_PHI, 1.02, portraitTightness),
-        radius: constants.CAMERA_ANGLED_DEFAULT_RADIUS * THREE.MathUtils.lerp(1, 0.88, portraitTightness)
+        radius: (isGlobeView
+          ? (constants.CAMERA_GLOBE_DEFAULT_RADIUS ?? constants.CAMERA_ANGLED_DEFAULT_RADIUS)
+          : constants.CAMERA_ANGLED_DEFAULT_RADIUS) * THREE.MathUtils.lerp(1, 0.88, portraitTightness)
+      };
+    }
+
+    if (isGlobeView) {
+      return {
+        theta: 0,
+        phi: THREE.MathUtils.lerp(0.42, 0.34, portraitTightness),
+        radius: (constants.CAMERA_GLOBE_DEFAULT_RADIUS ?? constants.CAMERA_TOPDOWN_FULL_RADIUS) * THREE.MathUtils.lerp(1.08, 0.94, portraitTightness)
       };
     }
 
@@ -218,6 +130,10 @@ export function setupInputHandlers(deps) {
     const responsivePreset = getResponsivePresetValues(preset);
 
     celestialTrackingCameraApi.clearTracking();
+    if (defaultCameraLookTarget) {
+      cameraState.targetLookTarget.copy(defaultCameraLookTarget);
+      cameraState.lookTarget.copy(defaultCameraLookTarget);
+    }
     cameraState.targetTheta = responsivePreset.theta;
     cameraState.targetPhi = responsivePreset.phi;
     cameraState.targetRadius = responsivePreset.radius;
@@ -229,40 +145,6 @@ export function setupInputHandlers(deps) {
       cameraViewToggleEl.checked = preset === "angle";
       syncCameraViewToggleUi();
     }
-  }
-
-  function getSelectedRocketConfig() {
-    if (!rocketSpaceportSelect) {
-      return null;
-    }
-
-    const missionProfile = rocketMissionProfileSelect?.value ?? "default";
-    if (missionProfile === ARTEMIS_MISSION_PROFILE_ID) {
-      return {
-        index: -1,
-        missionProfile,
-        rocketType: ARTEMIS_LOCKED_ROCKET_TYPE_VALUE
-      };
-    }
-
-    const index = Number.parseInt(rocketSpaceportSelect.value, 10);
-    if (Number.isNaN(index)) {
-      return null;
-    }
-
-    return {
-      index,
-      missionProfile,
-      rocketType: rocketTypeSelect ? rocketTypeSelect.value : "two-stage"
-    };
-  }
-
-  function stageSelectedRocket() {
-    const config = getSelectedRocketConfig();
-    if (!config) {
-      return null;
-    }
-    return rocketApi.enterStandby(config.index, config.rocketType, config.missionProfile);
   }
   
   
@@ -711,62 +593,86 @@ export function setupInputHandlers(deps) {
     walkerApi.updateWalkerAvatar();
   
   });
+
+
+
+  routeModeSelectEl?.addEventListener("change", () => {
+
+    routeSimulationApi.setRouteMode(routeModeSelectEl.value);
+
+  });
+
+
+
+  routeOriginContinentEl?.addEventListener("change", () => {
+
+    routeSimulationApi.setOriginContinent(routeOriginContinentEl.value);
+
+  });
+
+
+
+  routeDestinationContinentEl?.addEventListener("change", () => {
+
+    routeSimulationApi.setDestinationContinent(routeDestinationContinentEl.value);
+
+  });
+
+
+
+  routeRecommendedRouteEl?.addEventListener("change", () => {
+
+    routeSimulationApi.setRecommendedRoute(routeRecommendedRouteEl.value);
+
+  });
+
+
+
+  routeOriginCountryEl?.addEventListener("change", () => {
+
+    routeSimulationApi.setOriginCountry(routeOriginCountryEl.value);
+
+  });
+
+
+
+  routeOriginAirportEl?.addEventListener("change", () => {
+
+    routeSimulationApi.setOriginAirport(routeOriginAirportEl.value);
+
+  });
+
+
+
+  routeDestinationCountryEl?.addEventListener("change", () => {
+
+    routeSimulationApi.setDestinationCountry(routeDestinationCountryEl.value);
+
+  });
+
+
+
+  routeDestinationAirportEl?.addEventListener("change", () => {
+
+    routeSimulationApi.setDestinationAirport(routeDestinationAirportEl.value);
+
+  });
+
+
+
+  routeRefreshButton?.addEventListener("click", () => {
+
+    void routeSimulationApi.refreshDataset({ forceRemote: true });
+
+  });
   
   
   
-  if (routeModeSelectEl) {
-    routeModeSelectEl.addEventListener("change", () => {
-      routeSimulationApi.setRouteMode(routeModeSelectEl.value);
-    });
-  }
-
-  if (routeOriginContinentEl) {
-    routeOriginContinentEl.addEventListener("change", () => {
-      routeSimulationApi.setOriginContinent(routeOriginContinentEl.value);
-    });
-  }
-
-  if (routeDestinationContinentEl) {
-    routeDestinationContinentEl.addEventListener("change", () => {
-      routeSimulationApi.setDestinationContinent(routeDestinationContinentEl.value);
-    });
-  }
-
-  if (routeRecommendedRouteEl) {
-    routeRecommendedRouteEl.addEventListener("change", () => {
-      routeSimulationApi.setRecommendedRoute(routeRecommendedRouteEl.value);
-    });
-  }
-
-  if (routeOriginCountryEl) {
-    routeOriginCountryEl.addEventListener("change", () => {
-      routeSimulationApi.setOriginCountry(routeOriginCountryEl.value);
-    });
-  }
-
-  if (routeOriginAirportEl) {
-    routeOriginAirportEl.addEventListener("change", () => {
-      routeSimulationApi.setOriginAirport(routeOriginAirportEl.value);
-    });
-  }
-
-  if (routeDestinationCountryEl) {
-    routeDestinationCountryEl.addEventListener("change", () => {
-      routeSimulationApi.setDestinationCountry(routeDestinationCountryEl.value);
-    });
-  }
-
-  if (routeDestinationAirportEl) {
-    routeDestinationAirportEl.addEventListener("change", () => {
-      routeSimulationApi.setDestinationAirport(routeDestinationAirportEl.value);
-    });
-  }
-
-  if (routeSpeedEl) {
-    routeSpeedEl.addEventListener("input", () => {
-      routeSimulationApi.setSpeedMultiplier(routeSpeedEl.value);
-    });
-  }
+  routeSpeedEl?.addEventListener("input", () => {
+  
+    routeSimulationApi.setSpeedMultiplier(routeSpeedEl.value);
+  
+  });
   
   
   
@@ -832,7 +738,7 @@ export function setupInputHandlers(deps) {
   
   
   
-  routePlaybackButton.addEventListener("click", () => {
+  routePlaybackButton?.addEventListener("click", () => {
   
     routeSimulationApi.togglePlayback();
   
@@ -840,7 +746,7 @@ export function setupInputHandlers(deps) {
   
   
   
-  routeResetButton.addEventListener("click", () => {
+  routeResetButton?.addEventListener("click", () => {
   
     routeSimulationApi.resetProgress();
   
@@ -1116,23 +1022,29 @@ export function setupInputHandlers(deps) {
   
   
     if (astronomyState.enabled) {
-  
+
       const observationDate = astronomyState.live ? new Date() : astronomyState.selectedDate;
-  
+
       const snapshot = astronomyApi.getAstronomySnapshot(observationDate);
   
       astronomyApi.updateDayNightOverlayFromSun(snapshot.sun.latitudeDegrees, snapshot.sun.longitudeDegrees, true);
-  
+
       return;
-  
+
     }
-  
-  
-  
-    const demoSunGeo = getGeoFromProjectedPosition(orbitSun.position, DISC_RADIUS);
-  
-    astronomyApi.updateDayNightOverlayFromSun(demoSunGeo.latitudeDegrees, demoSunGeo.longitudeDegrees, true);
-  
+
+    const demoDate = new Date(
+      Number.isFinite(simulationState.simulatedDateMs)
+        ? simulationState.simulatedDateMs
+        : astronomyState.selectedDate.getTime()
+    );
+    const demoSnapshot = astronomyApi.getAstronomySnapshot(demoDate);
+    astronomyApi.updateDayNightOverlayFromSun(
+      demoSnapshot.sun.latitudeDegrees,
+      demoSnapshot.sun.longitudeDegrees,
+      true
+    );
+
   });
   
   
@@ -1338,50 +1250,15 @@ export function setupInputHandlers(deps) {
     }
   });
 
-  if (rocketStandbyBtn && rocketSpaceportSelect) {
-    rocketStandbyBtn.addEventListener("click", () => {
-      stageSelectedRocket();
-    });
-  }
-
-  if (rocketSpaceportSelect) {
-    rocketSpaceportSelect.addEventListener("change", () => {
-      rocketSelectionMemory.spaceportValue = rocketSpaceportSelect.value;
-      if (rocketApi.getStandbySnapshot() && !rocketApi.getActiveRocketSnapshot()) {
-        stageSelectedRocket();
-      }
-    });
-  }
-
-  if (rocketTypeSelect) {
-    rocketTypeSelect.addEventListener("change", () => {
-      rocketSelectionMemory.rocketTypeValue = rocketTypeSelect.value;
-      if (rocketApi.getStandbySnapshot() && !rocketApi.getActiveRocketSnapshot()) {
-        stageSelectedRocket();
-      }
-    });
-  }
-
-  if (rocketMissionProfileSelect) {
-    rocketMissionProfileSelect.addEventListener("change", () => {
-      syncRocketMissionProfileControls();
-      if (rocketApi.getStandbySnapshot() && !rocketApi.getActiveRocketSnapshot()) {
-        stageSelectedRocket();
-      }
-    });
-  }
-
   if (rocketLaunchBtn && rocketSpaceportSelect) {
     rocketLaunchBtn.addEventListener("click", () => {
-      const config = getSelectedRocketConfig();
-      if (!config) {
-        return;
+      const index     = parseInt(rocketSpaceportSelect.value, 10);
+      const rocketType = rocketTypeSelect ? rocketTypeSelect.value : "two-stage";
+      if (!isNaN(index)) {
+        rocketApi.launchRocket(index, rocketType);
       }
-      rocketApi.launchRocket(config.index, config.rocketType, config.missionProfile);
     });
   }
-
-  syncRocketMissionProfileControls();
 
   return {
     applyCameraPreset,
@@ -1389,3 +1266,4 @@ export function setupInputHandlers(deps) {
     applyZoomDelta
   };
 }
+

@@ -1,11 +1,13 @@
-﻿import * as THREE from "./vendor/three.module.js";
+﻿import * as THREE from "../vendor/three.module.js";
 import {
+  createGlobeModelFrame,
   getGeoFromProjectedPosition,
   projectedRadiusFromLatitude
 } from "./modules/geo-utils.js";
 import {
   createSolarEclipseState,
   getMoonPhase,
+  getSunHorizontalCoordinates,
   getSeasonalEclipticPhase,
   getSeasonalEclipticAngle,
   getZodiacAgeOffsetRadians,
@@ -13,23 +15,21 @@ import {
 } from "./modules/astronomy-utils.js?v=20260326-seasonal-ecliptic1";
 import { createAstronomyController } from "./modules/astronomy-controller.js?v=20260325-eclipse-selector1";
 import { createCameraController } from "./modules/camera-controller.js?v=20260406-globecam1";
-import { createCelestialTrackingCameraController } from "./modules/celestial-tracking-camera-controller.js?v=20260320-constellation-precession1";
-import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js?v=20260312-darksun-eclipse1";
-import { createI18n } from "./modules/i18n.js?v=20260327-mobilehud1";
+import { createCelestialTrackingCameraController } from "./modules/celestial-tracking-camera-controller.js?v=20260407-aircraft-tracking1";
+import { createFirstPersonWorldController } from "./modules/first-person-world-controller.js?v=20260405-surfacepatch2";
+import { createI18n } from "./modules/i18n.js?v=20260405-hybridroute1";
 import { createMagneticFieldController } from "./modules/magnetic-field-controller.js?v=20260314-magnetic-pinecone3";
-import { createRouteSimulationController } from "./modules/route-simulation-controller.js?v=20260406-mainremote5";
-import { createTextureManager } from "./modules/texture-manager.js?v=20260311-gpu-daynight";
+import { createRouteSimulationController } from "./modules/route-simulation-controller.js?v=20260406-routecore-sync8";
+import { createTextureManager } from "./modules/texture-manager.js?v=20260405-surfacepatch1";
 import { createWalkerController } from "./modules/walker-controller.js?v=20260324-moon-cycle28";
 
 import * as constants from "./modules/constants.js";
 import { createEclipseController } from "./modules/eclipse-controller.js?v=20260320-reality-eclipse-sync2";
 import { createCelestialVisualsController } from "./modules/celestial-visuals-controller.js?v=20260321-sunset5";
 import { createConstellationTabController } from "./modules/constellation-tab-controller.js?v=20260320-constellation-precession1";
-import { setupInputHandlers } from "./modules/input-handler.js?v=20260405-mainroutes1";
+import { setupInputHandlers } from "./modules/input-handler.js?v=20260405-hybridroute1";
 import { createRocketController, SPACEPORTS } from "./modules/rocket-controller.js?v=20260319-parabola";
 const {
-  DEFAULT_MAP_PATH,
-  DEFAULT_MAP_LABEL,
   MODEL_SCALE,
   scaleDimension,
   CELESTIAL_SIZE_SCALE,
@@ -341,11 +341,8 @@ const hudSideCardEl = document.getElementById("hud-side-card");
 const hudSideCardTitleEl = document.getElementById("hud-side-card-title");
 const hudSideCardSlotEl = document.getElementById("hud-side-card-slot");
 const rocketSpaceportSelect = document.getElementById("rocket-spaceport-select");
-const rocketMissionProfileSelect = document.getElementById("rocket-mission-profile-select");
 const rocketTypeSelect      = document.getElementById("rocket-type-select");
-const rocketStandbyBtn      = document.getElementById("rocket-standby-btn");
 const rocketLaunchBtn       = document.getElementById("rocket-launch-btn");
-const rocketCameraSummaryEl = document.getElementById("rocket-camera-summary");
 const controlTabButtons = [...document.querySelectorAll("[data-control-tab]")];
 const cameraPresetButtons = [...document.querySelectorAll("[data-camera-preset]")];
 const controlTabPanels = [...document.querySelectorAll("[data-control-panel]")];
@@ -437,6 +434,9 @@ const walkerCoordinatesEl = document.getElementById("walker-coordinates");
 const walkerLightEl = document.getElementById("walker-light");
 const resetWalkerButton = document.getElementById("reset-walker");
 const routeDatasetStatusEl = document.getElementById("route-dataset-status");
+const routeRefreshButton = document.getElementById("route-refresh");
+const routeDataSourceEl = document.getElementById("route-data-source");
+const routeLastSyncEl = document.getElementById("route-last-sync");
 const routeModeSelectEl = document.getElementById("route-mode-select");
 const routeRecommendedPanelEl = document.getElementById("route-recommended-panel");
 const routeAdvancedPanelEl = document.getElementById("route-advanced-panel");
@@ -488,22 +488,34 @@ const zodiacAgeOffsetEl = document.getElementById("zodiac-sidereal-offset");
 const zodiacAgeCycleEl = document.getElementById("zodiac-age-cycle");
 const zodiacObservationDateEl = document.getElementById("zodiac-observation-date");
 const i18n = createI18n();
-const LAYOUT_STORAGE_KEY = "flat-earth-layout-mode";
+const LAYOUT_STORAGE_KEY = "globe-earth-layout-mode";
 const MOBILE_LAYOUT_BREAKPOINT = 1080;
 const TAB_SWIPE_THRESHOLD_X = 48;
 const TAB_SWIPE_MAX_DRIFT_Y = 24;
 const TAB_ORDER_FALLBACK = ["astronomy", "routes", "constellations", "rockets"];
+const GLOBE_FEATURE_TOGGLES = Object.freeze({
+  constellationLayer: false,
+  domeLayer: false,
+  flatCelestialLayer: false
+});
+const DISABLED_CONTROL_TABS = new Set(
+  GLOBE_FEATURE_TOGGLES.constellationLayer ? [] : ["constellations"]
+);
 const HUD_PANEL_SECTION_DEFAULTS = {
-  astronomy: "time",
+  astronomy: "system",
   routes: "playback",
   constellations: "controls",
   rockets: "launch"
 };
 const HUD_SIDE_CARD_CONFIG = {
   astronomy: {
-    home: moonPhasePanelHomeEl,
-    node: moonPhasePanelEl,
-    titleKey: "moonPhasePanelTitle"
+    sections: {
+      moon: {
+        home: moonPhasePanelHomeEl,
+        node: moonPhasePanelEl,
+        titleKey: "moonPhasePanelTitle"
+      }
+    }
   },
   constellations: {
     home: constellationMapHomeEl,
@@ -535,6 +547,61 @@ let currentControlTab = controlTabButtons.find((button) => button.classList.cont
 let lastFocusedBeforeHelpModal = null;
 let lastFocusedBeforeSettingsPanel = null;
 const hudPanelSectionState = { ...HUD_PANEL_SECTION_DEFAULTS };
+
+function applyDisabledControlTabs() {
+  for (const button of controlTabButtons) {
+    const tabKey = button.dataset.controlTab;
+    if (!tabKey) {
+      continue;
+    }
+    const disabled = DISABLED_CONTROL_TABS.has(tabKey);
+    button.hidden = disabled;
+    button.style.display = disabled ? "none" : "";
+    button.setAttribute("aria-hidden", disabled ? "true" : "false");
+  }
+
+  for (const panel of controlTabPanels) {
+    const tabKey = panel.dataset.controlPanel;
+    if (!tabKey) {
+      continue;
+    }
+    const disabled = DISABLED_CONTROL_TABS.has(tabKey);
+    panel.hidden = disabled;
+    panel.classList.toggle("active", false);
+  }
+}
+
+function hideOwningSubpanel(node) {
+  const subpanel = node?.closest("section.hud-subpanel");
+  if (!subpanel) {
+    return;
+  }
+  subpanel.hidden = true;
+  subpanel.classList.remove("active");
+  subpanel.style.display = "none";
+}
+
+function applyDisabledFeatureUi() {
+  if (!GLOBE_FEATURE_TOGGLES.flatCelestialLayer) {
+    hideOwningSubpanel(celestialTrailLengthEl);
+    hideOwningSubpanel(cameraTrackSummaryEl);
+    hideOwningSubpanel(orbitModeButtons[0]);
+    if (darkSunDebugEl) {
+      darkSunDebugEl.checked = false;
+      darkSunDebugEl.disabled = true;
+      darkSunDebugEl.closest(".sync-row")?.setAttribute("hidden", "");
+    }
+    if (darkSunDebugSummaryEl) {
+      darkSunDebugSummaryEl.hidden = true;
+    }
+  }
+}
+
+applyDisabledControlTabs();
+applyDisabledFeatureUi();
+if (DISABLED_CONTROL_TABS.has(currentControlTab)) {
+  currentControlTab = "astronomy";
+}
 
 function getInitialLayoutMode() {
   try {
@@ -657,7 +724,8 @@ function syncHudSideCard() {
   const isDesktopHud = currentLayoutMode === "hud" && window.innerWidth > 1080;
   const baseCardConfig = isDesktopHud ? HUD_SIDE_CARD_CONFIG[currentControlTab] : null;
   const activeSectionKey = hudPanelSectionState[currentControlTab];
-  const activeCardConfig = baseCardConfig?.sections?.[activeSectionKey] ?? baseCardConfig ?? null;
+  const activeCardConfig = baseCardConfig?.sections?.[activeSectionKey]
+    ?? (baseCardConfig?.node ? baseCardConfig : null);
 
   if (!hudSideRailEl || !hudSideCardEl || !hudSideCardSlotEl || !hudSideCardTitleEl || !activeCardConfig) {
     if (hudSideCardEl) {
@@ -1159,8 +1227,10 @@ window.addEventListener("resize", () => {
 function getControlTabOrder() {
   const tabs = controlTabButtons
     .map((button) => button.dataset.controlTab)
-    .filter(Boolean);
-  return tabs.length > 0 ? tabs : TAB_ORDER_FALLBACK;
+    .filter((tabKey) => Boolean(tabKey) && !DISABLED_CONTROL_TABS.has(tabKey));
+  return tabs.length > 0
+    ? tabs
+    : TAB_ORDER_FALLBACK.filter((tabKey) => !DISABLED_CONTROL_TABS.has(tabKey));
 }
 
 function scrollActiveControlTabIntoView() {
@@ -1197,6 +1267,9 @@ for (let i = 0; i < SPACEPORTS.length; i++) {
 }
 
 function setControlTab(tabKey) {
+  if (DISABLED_CONTROL_TABS.has(tabKey)) {
+    tabKey = "astronomy";
+  }
   currentControlTab = tabKey;
 
   for (const button of controlTabButtons) {
@@ -1297,10 +1370,8 @@ const {
   defaultCameraLookTarget,
   cameraState,
   stage,
-  scalableStage,
+  globeRuntimeStage,
   globeStage,
-  globeSurface,
-  topMaterial,
   sideMaterial,
   bottomMaterial,
   disc,
@@ -1439,16 +1510,54 @@ const {
   createSunRayTexture,
   createSunRayMesh,
   createOrbitTrack,
-  orbitGuideGroups,
-  domeWaterApi,
-  setEarthModelView
+  globeSurface
 } = setupScene({ canvas });
 
-// Add constellations
-const constellationApi = createConstellations();
-scalableStage.add(constellationApi.group);
-const zodiacWheelApi = createZodiacWheel({ i18n });
-scalableStage.add(zodiacWheelApi.group);
+function createDisabledConstellationApi() {
+  const group = new THREE.Group();
+  group.visible = false;
+  return {
+    group,
+    getConstellationState() { return null; },
+    getConstellationLinesVisible() { return false; },
+    getConstellationCatalog() { return []; },
+    setConstellationsVisible() {},
+    setConstellationLinesVisible() {},
+    setHighlightedConstellation() {},
+    setSeasonalEclipticAngle() {}
+  };
+}
+
+function createDisabledZodiacWheelApi() {
+  const group = new THREE.Group();
+  group.visible = false;
+  return {
+    group,
+    getVisible() { return false; },
+    getSeasonalAngle() { return 0; },
+    getAgeOffset() { return 0; },
+    getAgeSignIndex() { return 0; },
+    setVisible() {},
+    setSeasonalAngle() {},
+    setAgeOffset() {},
+    setSuppressed() {}
+  };
+}
+
+let constellationApi = createDisabledConstellationApi();
+let zodiacWheelApi = createDisabledZodiacWheelApi();
+if (GLOBE_FEATURE_TOGGLES.constellationLayer) {
+  constellationApi = createConstellations();
+  globeRuntimeStage.add(constellationApi.group);
+  zodiacWheelApi = createZodiacWheel({ i18n });
+  globeRuntimeStage.add(zodiacWheelApi.group);
+}
+const globeRouteStage = new THREE.Group();
+globeRouteStage.name = "globeRouteStage";
+globeSurface.add(globeRouteStage);
+const globeFrame = createGlobeModelFrame(globeSurface, { space: "parent" });
+const globeCenter = new THREE.Vector3(globeFrame.center.x, globeFrame.center.y, globeFrame.center.z);
+const globeRadius = globeFrame.radius;
 
 const initialTimelineDateMs = Date.now();
 const initialTimelineNowMs = performance.now();
@@ -1480,6 +1589,51 @@ const simulationState = {
   timelineAnchorNowMs: initialTimelineNowMs,
   useRealityTimelineInDemo: true
 };
+
+function enforceDisabledVisualLayers() {
+  if (!GLOBE_FEATURE_TOGGLES.constellationLayer) {
+    constellationApi.group.visible = false;
+    zodiacWheelApi.group.visible = false;
+  }
+
+  if (!GLOBE_FEATURE_TOGGLES.domeLayer) {
+    dome.visible = false;
+    domeRing.visible = false;
+    polaris.visible = false;
+    polarisCore.visible = false;
+    polarisGlow.visible = false;
+    polarisHalo.visible = false;
+    glow.visible = false;
+  }
+
+  if (!GLOBE_FEATURE_TOGGLES.flatCelestialLayer) {
+    orbitSun.visible = false;
+    orbitDarkSun.visible = false;
+    orbitMoon.visible = false;
+    observerSun.visible = false;
+    observerDarkSun.visible = false;
+    observerMoon.visible = false;
+    firstPersonSunRayGroup.visible = false;
+
+    sunFullTrail.visible = false;
+    sunFullTrailPointsCloud.visible = false;
+    sunTrail.visible = false;
+    sunTrailPointsCloud.visible = false;
+    moonFullTrail.visible = false;
+    moonFullTrailPointsCloud.visible = false;
+    moonTrail.visible = false;
+    moonTrailPointsCloud.visible = false;
+    darkSunFullTrail.visible = false;
+    darkSunFullTrailPointsCloud.visible = false;
+    darkSunTrail.visible = false;
+    darkSunTrailPointsCloud.visible = false;
+
+    orbitSunLight.intensity = 0;
+    orbitMoonLight.intensity = 0;
+    observerSunLight.intensity = 0;
+    observerMoonLight.intensity = 0;
+  }
+}
 
 // Expose state for E2E testing
 if (typeof window !== "undefined") {
@@ -1539,6 +1693,10 @@ const walkerState = {
   heading: Math.PI * 0.1,
   pitch: -0.08,
   position: new THREE.Vector3(),
+  latitudeDegrees: constants.WALKER_START_LATITUDE,
+  longitudeDegrees: constants.WALKER_START_LONGITUDE,
+  surfaceRadius: globeRadius + constants.WALKER_SURFACE_OFFSET,
+  eyeHeightOffset: Math.max(constants.WALKER_EYE_HEIGHT - constants.SURFACE_Y, 0.001),
   velocity: new THREE.Vector3(),
   lastLightLabel: "",
   lastCoordinatesLabel: ""
@@ -1662,10 +1820,7 @@ const ui = {
   walkerModeEl,
   walkerSummaryEl,
   rocketSpaceportSelect,
-  rocketMissionProfileSelect,
   rocketTypeSelect,
-  rocketStandbyBtn,
-  rocketCameraSummaryEl,
   rocketLaunchBtn
 };
 
@@ -1676,14 +1831,14 @@ const magneticFieldApi = createMagneticFieldController({
   ui,
   magneticFieldState,
   orbitSun,
-  scalableStage,
+  scalableStage: globeRuntimeStage,
   walkerState
 });
 const textureApi = createTextureManager({
   constants,
   i18n,
   renderer,
-  topMaterial,
+  surfaceMaterial: globeSurface.material,
   statusEl,
   onTextureUpdated() {
     dayNightState.lastLatitudeDegrees = null;
@@ -1700,8 +1855,17 @@ const textureApi = createTextureManager({
       return;
     }
 
-    const demoSunGeo = getGeoFromProjectedPosition(orbitSun.position, DISC_RADIUS);
-    astronomyApi.updateDayNightOverlayFromSun(demoSunGeo.latitudeDegrees, demoSunGeo.longitudeDegrees, true);
+    const demoDate = new Date(
+      Number.isFinite(simulationState.simulatedDateMs)
+        ? simulationState.simulatedDateMs
+        : astronomyState.selectedDate.getTime()
+    );
+    const demoSnapshot = astronomyApi.getAstronomySnapshot(demoDate);
+    astronomyApi.updateDayNightOverlayFromSun(
+      demoSnapshot.sun.latitudeDegrees,
+      demoSnapshot.sun.longitudeDegrees,
+      true
+    );
   }
 });
 dayNightOverlayMaterial.uniforms.nightLightsMap.value = textureApi.getNightLightsTexture();
@@ -1710,8 +1874,11 @@ const cameraApi = createCameraController({
   camera,
   cameraState,
   constants,
+  defaultLookTarget: defaultCameraLookTarget,
+  globeSurface,
   renderState,
   renderer,
+  trackingCenter: defaultCameraLookTarget,
   walkerState
 });
 
@@ -1719,6 +1886,7 @@ astronomyApi = createAstronomyController({
   constants,
   i18n,
   ui,
+  globeSurface,
   magneticFieldApi,
   astronomyState,
   eclipseSelectionState,
@@ -1759,6 +1927,7 @@ astronomyApi = createAstronomyController({
 
 const walkerApi = createWalkerController({
   constants,
+  globeSurface,
   i18n,
   renderState,
   walkerState,
@@ -1777,8 +1946,12 @@ const walkerApi = createWalkerController({
 const firstPersonWorldApi = createFirstPersonWorldController({
   scene: firstPersonScene,
   constants,
+  globeSurface,
   walkerState,
   renderState,
+  drawSurfacePatch: (...args) => textureApi.drawSurfacePatch(...args),
+  getSurfaceSample: (...args) => textureApi.getSurfaceSample(...args),
+  getSurfaceSampleVersion: () => textureApi.getSurfaceSampleVersion(),
   ambient: firstPersonAmbient,
   keyLight: firstPersonKeyLight,
   rimLight: firstPersonRimLight,
@@ -1787,38 +1960,41 @@ const firstPersonWorldApi = createFirstPersonWorldController({
 });
 
 const routeSimulationApi = createRouteSimulationController({
-  cameraState,
   constants,
-  globeStage,
+  globeCenter,
+  globeRadius,
   globeSurface,
   i18n,
-  scalableStage,
+  routeStage: globeRouteStage,
   ui: {
     routeAircraftEl,
-    routeAdvancedPanelEl,
     routeCountriesEl,
+    routeDataSourceEl,
     routeDatasetStatusEl,
-    routeDestinationAirportEl,
-    routeDestinationContinentEl,
-    routeDestinationCountryEl,
     routeDestinationEl,
+    routeDestinationAirportEl,
+    routeDestinationCountryEl,
     routeDurationEl,
     routeGeoSummaryEl,
     routeLegEl,
-    routeLayoversEl,
+    routeLastSyncEl,
     routeModeSelectEl,
+    routeRecommendedPanelEl,
+    routeAdvancedPanelEl,
+    routeOriginContinentEl,
+    routeDestinationContinentEl,
+    routeRecommendedRouteEl,
     routeOriginEl,
     routeOriginAirportEl,
-    routeOriginContinentEl,
     routeOriginCountryEl,
     routePlaybackButton,
     routeProgressEl,
-    routeRecommendedPanelEl,
-    routeRecommendedRouteEl,
+    routeRefreshButton,
     routeResetButton,
     routeSpeedEl,
     routeSpeedValueEl,
-    routeSummaryEl
+    routeSummaryEl,
+    routeLayoversEl
   }
 });
 
@@ -1846,6 +2022,7 @@ const routeCameraTrackingGlobeWorldQuaternionInverse = new THREE.Quaternion();
 const ROUTE_CAMERA_TRACKING_GLOBE_ROTATION_LERP = 0.2;
 const ROUTE_CAMERA_TRACKING_GLOBE_RESET_LERP = 0.12;
 
+
 let celestialTrackingCameraApi;
 
 function focusCameraOnConstellation(entry) {
@@ -1855,12 +2032,13 @@ function focusCameraOnConstellation(entry) {
 
   if (!entry) {
     celestialTrackingCameraApi?.clearTracking();
-    cameraState.targetLookTarget.set(0, constants.SURFACE_Y * (5 / 6), 0);
-    cameraState.targetTheta = constants.CAMERA_TOPDOWN_EXACT_THETA;
+    cameraState.targetLookTarget.copy(defaultCameraLookTarget);
+    cameraState.lookTarget.copy(defaultCameraLookTarget);
+    cameraState.targetTheta = 0;
     cameraState.theta = cameraState.targetTheta;
-    cameraState.targetPhi = constants.CAMERA_TOPDOWN_EXACT_PHI;
+    cameraState.targetPhi = 0.42;
     cameraState.phi = cameraState.targetPhi;
-    cameraState.targetRadius = constants.CAMERA_TOPDOWN_FULL_RADIUS;
+    cameraState.targetRadius = constants.CAMERA_GLOBE_DEFAULT_RADIUS ?? constants.CAMERA_TOPDOWN_FULL_RADIUS;
     cameraState.radius = cameraState.targetRadius;
     cameraApi.clampCamera();
     return;
@@ -1869,7 +2047,7 @@ function focusCameraOnConstellation(entry) {
   const resolveFocus = () => (
     constellationApi.getConstellationState(entry.name)?.centroidWorldPoint ??
     entry.centroidWorldPoint ??
-    { x: 0, y: constants.SURFACE_Y * (5 / 6), z: 0 }
+    { x: defaultCameraLookTarget.x, y: defaultCameraLookTarget.y, z: defaultCameraLookTarget.z }
   );
   const focus = resolveFocus();
   const polarisAngle = THREE.MathUtils.euclideanModulo(Math.atan2(focus.x, -focus.z), Math.PI * 2);
@@ -1895,36 +2073,46 @@ function focusCameraOnConstellation(entry) {
   cameraApi.clampCamera();
 }
 
-constellationTabApi = createConstellationTabController({
-  i18n,
-  constellationApi,
-  getObservationDate: () => astronomyState.selectedDate,
-  onSelectionChange: focusCameraOnConstellation,
-  zodiacWheelApi,
-  ui: {
-    constellationLineVisibilityTextEl,
-    constellationLineVisibilityToggleEl,
-    constellationVisibilityToggleEl,
-    constellationVisibilityTextEl,
-    zodiacWheelTextEl,
-    zodiacWheelToggleEl,
-    constellationSelectEl,
-    constellationMapEl,
-    constellationDirectionEl,
-    constellationRaEl,
-    constellationDecEl,
-    constellationHemisphereEl,
-    constellationSegmentsEl,
-    constellationStarsEl,
-    zodiacAgeViewEl,
-    zodiacAgeSummaryEl,
-    zodiacCurrentAgeEl,
-    zodiacCurrentTropicalEl,
-    zodiacAgeOffsetEl,
-    zodiacAgeCycleEl,
-    zodiacObservationDateEl,
-  },
-});
+if (GLOBE_FEATURE_TOGGLES.constellationLayer) {
+  constellationTabApi = createConstellationTabController({
+    i18n,
+    constellationApi,
+    getObservationDate: () => astronomyState.selectedDate,
+    onSelectionChange: focusCameraOnConstellation,
+    zodiacWheelApi,
+    ui: {
+      constellationLineVisibilityTextEl,
+      constellationLineVisibilityToggleEl,
+      constellationVisibilityToggleEl,
+      constellationVisibilityTextEl,
+      zodiacWheelTextEl,
+      zodiacWheelToggleEl,
+      constellationSelectEl,
+      constellationMapEl,
+      constellationDirectionEl,
+      constellationRaEl,
+      constellationDecEl,
+      constellationHemisphereEl,
+      constellationSegmentsEl,
+      constellationStarsEl,
+      zodiacAgeViewEl,
+      zodiacAgeSummaryEl,
+      zodiacCurrentAgeEl,
+      zodiacCurrentTropicalEl,
+      zodiacAgeOffsetEl,
+      zodiacAgeCycleEl,
+      zodiacObservationDateEl,
+    },
+  });
+  constellationTabApi.initialize();
+} else {
+  constellationTabApi = {
+    initialize() {},
+    refreshLocalizedUi() {},
+    refreshDynamicState() {},
+    setPanelActive() {}
+  };
+}
 
 i18n.subscribe(() => {
   constellationTabApi.refreshLocalizedUi();
@@ -1932,7 +2120,6 @@ i18n.subscribe(() => {
   syncRouteCameraTrackingUi();
 });
 
-constellationTabApi.initialize();
 setDemoSeasonPhaseFromDate(astronomyState.selectedDate.getTime());
 const initialSeasonalAngle = getSeasonalEclipticAngle(astronomyState.selectedDate);
 const initialAgeOffset = getZodiacAgeOffsetRadians(astronomyState.selectedDate);
@@ -1940,6 +2127,7 @@ constellationApi.setSeasonalEclipticAngle(initialSeasonalAngle);
 zodiacWheelApi.setSeasonalAngle(initialSeasonalAngle);
 zodiacWheelApi.setAgeOffset(initialAgeOffset);
 constellationTabApi.refreshDynamicState({ force: true });
+enforceDisabledVisualLayers();
 
 celestialTrackingCameraApi = createCelestialTrackingCameraController({
   buttons: cameraTrackButtons,
@@ -1950,301 +2138,26 @@ celestialTrackingCameraApi = createCelestialTrackingCameraController({
   trackables: {
     moon: orbitMoon,
     sun: orbitSun
-  }
+  },
+  defaultLookTarget: defaultCameraLookTarget
 });
 
 const rocketApi = createRocketController({
-  scalableStage,
-  constants,
-  domeWaterApi
+  scalableStage: globeRuntimeStage,
+  constants
 });
-
-const rocketCameraUiState = {
-  activeProfileKey: "",
-  engaged: false,
-  lastEndedLaunchpadName: ""
-};
-const rocketCameraTempRadial = new THREE.Vector3();
-const rocketCameraTempTangent = new THREE.Vector3();
-const rocketCameraTempHeading = new THREE.Vector3();
-const rocketCameraLockedPosition = new THREE.Vector3();
-const ROCKET_FRONT_VIEW_TRANSITION_SECONDS = 1.15;
-const ROCKET_FIXED_CAMERA_HEIGHT = SURFACE_Y + scaleDimension(0.18);
-const ROCKET_CAMERA_COPY = {
-  en: {
-    idle: "Choose a launchpad and stage a rocket to preview the pad camera.",
-    standby: "Standby camera is locked on {launchpad}. Launch when ready.",
-    standbyButton: "Stage Standby",
-    states: {
-      FALL: "Fall",
-      IGNITION: "Engine Ignition",
-      LAUNCH: "Launch",
-      PITCHOVER: "Pitchover",
-      SCRAPE: "Dome Scrape",
-      SEPARATION: "Stage Separation",
-      STAGE1: "Stage 1 Burn",
-      STAGE2: "Stage 2 Burn",
-      STANDBY: "Standby"
-    },
-    tracking: "Tracking the {launchpad} launch through {stage}. Drag and zoom stay enabled.",
-    ended: "Tracking finished for the {launchpad} launch. Stage another rocket to preview a pad again."
-  },
-  ko: {
-    idle: "諛쒖궗?瑜??좏깮?섍퀬 濡쒖폆???ㅽ깲諛붿씠濡?諛곗튂?섎㈃ 諛쒖궗??移대찓??誘몃━蹂닿린媛 ?쒖옉?⑸땲??",
-    standby: "{launchpad}???ㅽ깲諛붿씠 移대찓?쇰? 怨좎젙?덉뒿?덈떎. 以鍮꾨릺硫?諛쒖궗?섏꽭??",
-    standbyButton: "?ㅽ깲諛붿씠 諛곗튂",
-    states: {
-      FALL: "낙하",
-      IGNITION: "\uc810\ud654 \uc608\uc5f4",
-      LAUNCH: "발사",
-      PITCHOVER: "자세 전환",
-      SCRAPE: "궁창 접촉",
-      SEPARATION: "단 분리",
-      STAGE1: "1단 연소",
-      STAGE2: "2단 연소",
-      STANDBY: "스탠바이"
-    },
-    tracking: "{launchpad} 諛쒖궗瑜?{stage} ?④퀎源뚯? 異붿쟻 以묒엯?덈떎. ?쒕옒洹몄? 以뚯? 怨꾩냽 ?ъ슜?????덉뒿?덈떎.",
-    ended: "{launchpad} 諛쒖궗 異붿쟻??醫낅즺?섏뿀?듬땲?? ?ㅼ쓬 諛쒖궗瑜?誘몃━ 蹂대젮硫??ㅼ떆 ?ㅽ깲諛붿씠瑜?諛곗튂?섏꽭??"
-  }
-};
-
-function getRocketCameraCopy() {
-  return ROCKET_CAMERA_COPY[i18n.getLanguage()] ?? ROCKET_CAMERA_COPY.en;
-}
-
-function getRocketStateLabelKey(state) {
-  return getRocketCameraCopy().states[state] ?? state;
-}
-
-function getRocketStateLabel(state) {
-  return getRocketStateLabelKey(state);
-}
-
-function wrapTrackingAngle(angle) {
-  return Math.atan2(Math.sin(angle), Math.cos(angle));
-}
-
-function lerpTrackingAngle(fromAngle, toAngle, alpha) {
-  const delta = wrapTrackingAngle(toAngle - fromAngle);
-  return wrapTrackingAngle(fromAngle + delta * alpha);
-}
-
-function getRocketFrontViewAzimuth(snapshot) {
-  rocketCameraTempRadial.set(snapshot?.position?.x ?? 0, 0, snapshot?.position?.z ?? 0);
-  if (rocketCameraTempRadial.lengthSq() < 0.0001) {
-    rocketCameraTempRadial.set(0, 0, 1);
-  } else {
-    rocketCameraTempRadial.normalize();
-  }
-
-  rocketCameraTempTangent.set(-rocketCameraTempRadial.z, 0, rocketCameraTempRadial.x);
-  const headingSource = snapshot?.headingDirection?.lengthSq?.() > 0.0001
-    ? snapshot.headingDirection
-    : snapshot?.forward;
-  rocketCameraTempHeading.set(headingSource?.x ?? 0, 0, headingSource?.z ?? 0);
-
-  if (rocketCameraTempHeading.lengthSq() < 0.0001) {
-    return -0.38;
-  }
-
-  rocketCameraTempHeading.normalize();
-  return Math.atan2(
-    rocketCameraTempHeading.dot(rocketCameraTempTangent),
-    rocketCameraTempHeading.dot(rocketCameraTempRadial)
-  );
-}
-
-function blendRocketTrackingProfile(fromProfile, toProfile, alpha) {
-  return {
-    azimuth: lerpTrackingAngle(fromProfile.azimuth, toProfile.azimuth, alpha),
-    distance: THREE.MathUtils.lerp(fromProfile.distance, toProfile.distance, alpha),
-    elevation: THREE.MathUtils.lerp(fromProfile.elevation, toProfile.elevation, alpha)
-  };
-}
-
-function shouldContinuouslyUpdateRocketProfile(snapshot) {
-  return Boolean(
-    snapshot
-    && (snapshot.state === "STAGE1" || snapshot.state === "LAUNCH")
-    && (snapshot.stageTimer ?? 0) < ROCKET_FRONT_VIEW_TRANSITION_SECONDS
-  );
-}
-
-function getRocketTrackingSummary(snapshot) {
-  const copy = getRocketCameraCopy();
-  if (!snapshot) {
-    return copy.idle;
-  }
-
-  const launchLabel = snapshot.missionLabel
-    ? `${snapshot.missionLabel} · ${snapshot.launchpadName ?? ""}`
-    : (snapshot.launchpadName ?? "");
-
-  if (snapshot.state === "STANDBY") {
-    return copy.standby.replace("{launchpad}", launchLabel);
-  }
-
-  return copy.tracking
-    .replace("{launchpad}", launchLabel)
-    .replace("{stage}", getRocketStateLabel(snapshot.state));
-}
-
-function getRocketTrackingProfile(snapshot) {
-  switch (snapshot?.state) {
-    case "STANDBY": {
-      return {
-        azimuth: getRocketFrontViewAzimuth(snapshot),
-        distance: constants.CAMERA_TRACKING_MIN_DISTANCE * 1.12,
-        elevation: 0.16
-      };
-    }
-    case "IGNITION":
-      return {
-        azimuth: getRocketFrontViewAzimuth(snapshot),
-        distance: constants.CAMERA_TRACKING_MIN_DISTANCE * 1.04,
-        elevation: 0.14
-      };
-    case "STAGE1":
-    case "LAUNCH": {
-      const frontProfile = {
-        azimuth: getRocketFrontViewAzimuth(snapshot),
-        distance: constants.CAMERA_TRACKING_MIN_DISTANCE * 1.18,
-        elevation: 0.18
-      };
-      const followProfile = {
-        azimuth: -0.9,
-        distance: constants.CAMERA_TRACKING_DEFAULT_DISTANCE * 0.96,
-        elevation: 0.5
-      };
-      const rawProgress = THREE.MathUtils.clamp(
-        (snapshot.stageTimer ?? 0) / ROCKET_FRONT_VIEW_TRANSITION_SECONDS,
-        0,
-        1
-      );
-      const progress = THREE.MathUtils.smootherstep(rawProgress, 0, 1);
-      return blendRocketTrackingProfile(frontProfile, followProfile, progress);
-    }
-    case "SEPARATION":
-      return {
-        azimuth: -0.64,
-        distance: constants.CAMERA_TRACKING_DEFAULT_DISTANCE * 1.18,
-        elevation: 0.74
-      };
-    case "STAGE2":
-      return {
-        azimuth: -0.52,
-        distance: constants.CAMERA_TRACKING_DEFAULT_DISTANCE * 0.88,
-        elevation: 0.68
-      };
-    case "SCRAPE":
-    case "FALL":
-      return {
-        azimuth: -0.44,
-        distance: constants.CAMERA_TRACKING_DEFAULT_DISTANCE * 1.3,
-        elevation: 0.82
-      };
-    default:
-      return {
-        azimuth: constants.CAMERA_TRACKING_DEFAULT_AZIMUTH,
-        distance: constants.CAMERA_TRACKING_DEFAULT_DISTANCE,
-        elevation: constants.CAMERA_TRACKING_DEFAULT_ELEVATION
-      };
-  }
-}
-
-function syncRocketCameraAndUi() {
-  const activeSnapshot = rocketApi.getActiveRocketSnapshot();
-  const standbySnapshot = activeSnapshot ? null : rocketApi.getStandbySnapshot();
-  const snapshot = activeSnapshot ?? standbySnapshot;
-  const completedLaunchpadName = rocketApi.getLastCompletedLaunchpadName();
-  const copy = getRocketCameraCopy();
-  const shouldHideOrbitGuides = Boolean(activeSnapshot);
-
-  if (orbitGuideGroups) {
-    orbitGuideGroups.north.visible = !shouldHideOrbitGuides;
-    orbitGuideGroups.equator.visible = !shouldHideOrbitGuides;
-    orbitGuideGroups.south.visible = !shouldHideOrbitGuides;
-  }
-
-  if (rocketStandbyBtn) {
-    rocketStandbyBtn.textContent = copy.standbyButton;
-    rocketStandbyBtn.disabled = activeSnapshot?.state === "IGNITION";
-  }
-
-  if (rocketLaunchBtn) {
-    rocketLaunchBtn.disabled = activeSnapshot?.state === "IGNITION";
-  }
-
-  if (snapshot) {
-    const summaryText = getRocketTrackingSummary(snapshot);
-    const profileKey = `${snapshot.state}:${snapshot.spaceportIndex ?? "none"}:${snapshot.rocketType ?? "default"}:${snapshot.missionProfile ?? "default"}`;
-    celestialTrackingCameraApi.setTrackedCustomTargetResolver(
-      () => {
-        const latestActive = rocketApi.getActiveRocketSnapshot();
-        const latestStandby = latestActive ? null : rocketApi.getStandbySnapshot();
-        return latestActive?.lookTarget ?? latestStandby?.lookTarget ?? null;
-      },
-      summaryText,
-      { immediate: !rocketCameraUiState.engaged || rocketCameraUiState.activeProfileKey !== profileKey }
-    );
-
-    const profile = getRocketTrackingProfile(snapshot);
-    if (shouldContinuouslyUpdateRocketProfile(snapshot) || rocketCameraUiState.activeProfileKey !== profileKey) {
-      cameraState.targetTrackingAzimuth = profile.azimuth;
-      cameraState.targetTrackingElevation = profile.elevation;
-      cameraState.targetTrackingDistance = profile.distance;
-      cameraState.targetTrackingGroundLocked = true;
-      cameraState.targetTrackingGroundHeight = ROCKET_FIXED_CAMERA_HEIGHT;
-      cameraApi.clampCamera();
-      rocketCameraUiState.activeProfileKey = profileKey;
-    }
-
-    if (activeSnapshot) {
-      if (!cameraState.targetTrackingPositionLocked) {
-        rocketCameraLockedPosition.copy(camera.position);
-        rocketCameraLockedPosition.y = Math.max(rocketCameraLockedPosition.y, ROCKET_FIXED_CAMERA_HEIGHT);
-        cameraState.targetTrackingLockedPosition.copy(rocketCameraLockedPosition);
-      }
-      cameraState.targetTrackingPositionLocked = true;
-    } else {
-      cameraState.targetTrackingPositionLocked = false;
-    }
-
-    rocketCameraUiState.engaged = true;
-    rocketCameraUiState.lastEndedLaunchpadName = "";
-    if (rocketCameraSummaryEl) {
-      rocketCameraSummaryEl.textContent = summaryText;
-    }
-    return;
-  }
-
-  if (completedLaunchpadName) {
-    rocketCameraUiState.lastEndedLaunchpadName = completedLaunchpadName;
-  }
-
-  if (rocketCameraUiState.engaged) {
-    celestialTrackingCameraApi.clearCustomTracking({ immediate: false });
-    rocketCameraUiState.engaged = false;
-    rocketCameraUiState.activeProfileKey = "";
-  }
-  cameraState.targetTrackingGroundLocked = false;
-  cameraState.trackingGroundLocked = false;
-  cameraState.targetTrackingGroundHeight = ROCKET_FIXED_CAMERA_HEIGHT;
-  cameraState.targetTrackingPositionLocked = false;
-  cameraState.trackingPositionLocked = false;
-
-  if (!rocketCameraSummaryEl) {
-    return;
-  }
-
-  rocketCameraSummaryEl.textContent = rocketCameraUiState.lastEndedLaunchpadName
-    ? copy.ended.replace("{launchpad}", rocketCameraUiState.lastEndedLaunchpadName)
-    : copy.idle;
-}
 
 function getRouteCameraTrackingCopy() {
   return ROUTE_CAMERA_TRACKING_COPY[i18n.getLanguage()] ?? ROUTE_CAMERA_TRACKING_COPY.en;
+}
+
+function wrapRouteTrackingAngle(angle) {
+  return Math.atan2(Math.sin(angle), Math.cos(angle));
+}
+
+function lerpRouteTrackingAngle(fromAngle, toAngle, alpha) {
+  const delta = wrapRouteTrackingAngle(toAngle - fromAngle);
+  return wrapRouteTrackingAngle(fromAngle + (delta * alpha));
 }
 
 function getRouteTrackingPose() {
@@ -2274,7 +2187,7 @@ function syncRouteTrackingGlobeRotation(pose = null, { resetOnly = false } = {})
 
   const spherical = cameraState.earthModelView === "spherical";
   if (!spherical || resetOnly || !pose?.tangent) {
-    globeStage.rotation.y = lerpTrackingAngle(
+    globeStage.rotation.y = lerpRouteTrackingAngle(
       globeStage.rotation.y,
       0,
       ROUTE_CAMERA_TRACKING_GLOBE_RESET_LERP
@@ -2300,8 +2213,8 @@ function syncRouteTrackingGlobeRotation(pose = null, { resetOnly = false } = {})
     routeCameraTrackingLocalTangent.x,
     routeCameraTrackingLocalTangent.z
   );
-  const desiredRotation = wrapTrackingAngle(-headingRadians);
-  globeStage.rotation.y = lerpTrackingAngle(
+  const desiredRotation = wrapRouteTrackingAngle(-headingRadians);
+  globeStage.rotation.y = lerpRouteTrackingAngle(
     globeStage.rotation.y,
     desiredRotation,
     ROUTE_CAMERA_TRACKING_GLOBE_ROTATION_LERP
@@ -2334,7 +2247,7 @@ function setRouteCameraTrackingEnabled(enabled) {
   }
 
   routeCameraTrackingState.enabled = nextEnabled;
-  if (!nextEnabled && routeCameraTrackingState.applied && !rocketCameraUiState.engaged) {
+  if (!nextEnabled && routeCameraTrackingState.applied) {
     celestialTrackingCameraApi.clearCustomTracking({ immediate: false });
     routeCameraTrackingState.applied = false;
   }
@@ -2364,7 +2277,7 @@ function setRouteCameraTrackingEnabled(enabled) {
 
 function syncRouteCameraTracking() {
   if (!routeCameraTrackingState.enabled) {
-    if (routeCameraTrackingState.applied && !rocketCameraUiState.engaged) {
+    if (routeCameraTrackingState.applied) {
       celestialTrackingCameraApi.clearCustomTracking({ immediate: false });
       routeCameraTrackingState.applied = false;
     }
@@ -2376,17 +2289,10 @@ function syncRouteCameraTracking() {
   const pose = getRouteTrackingPose();
   if (!pose?.position) {
     routeCameraTrackingState.enabled = false;
-    if (routeCameraTrackingState.applied && !rocketCameraUiState.engaged) {
+    if (routeCameraTrackingState.applied) {
       celestialTrackingCameraApi.clearCustomTracking({ immediate: false });
       routeCameraTrackingState.applied = false;
     }
-    syncRouteTrackingGlobeRotation(null, { resetOnly: true });
-    syncRouteCameraTrackingUi();
-    return;
-  }
-
-  if (rocketCameraUiState.engaged) {
-    routeCameraTrackingState.applied = false;
     syncRouteTrackingGlobeRotation(null, { resetOnly: true });
     syncRouteCameraTrackingUi();
     return;
@@ -2412,7 +2318,7 @@ if (routeTrackCameraButtonEl) {
 
   const eclipseApi = createEclipseController({
     constants, i18n, ui, orbitSun, orbitDarkSun, observerSun, observerDarkSun, orbitSunBody,
-    orbitDarkSunRim, orbitDarkSunBody, orbitSunHalo, scene, camera, stage, scalableStage, dome,
+    orbitDarkSunRim, orbitDarkSunBody, orbitSunHalo, scene, camera, stage, scalableStage: globeRuntimeStage, dome,
     dayNightOverlayMaterial, firstPersonSunRayGroup, firstPersonSunRayMeshes, simulationState,
     astronomyState, renderState, walkerState, cameraState, astronomyApi,
     cameraApi, celestialTrackingCameraApi, celestialControlState,
@@ -2530,7 +2436,8 @@ if (routeTrackCameraButtonEl) {
     constants, i18n, ui, orbitSun, orbitDarkSun, observerSun, observerDarkSun, orbitSunBody,
     orbitDarkSunRim, orbitDarkSunBody, orbitSunHalo, orbitSunAureole, orbitSunCorona, orbitMoonBody,
     orbitMoonHalo, orbitMoonCoolGlow, orbitMoonCorona, orbitMoonAureole, orbitMoonWarmFringe,
-    orbitMoonLight, observerMoonBody, scene, firstPersonScene, camera, stage, scalableStage, dome,
+    orbitMoonLight, observerMoonBody, scene, firstPersonScene, camera, stage, scalableStage: globeRuntimeStage, globeStage, dome,
+    globeSurface,
     dayNightOverlayMaterial, firstPersonSunRayGroup, firstPersonSunRayMeshes, simulationState,
     astronomyState, renderState, walkerState, movementState, astronomyApi, walkerApi,
     ambient: firstPersonAmbient, keyLight: firstPersonKeyLight, rimLight: firstPersonRimLight,
@@ -2562,10 +2469,10 @@ if (routeTrackCameraButtonEl) {
   } = celestialVisualsApi;
 
 
-  const inputHandlersApi = setupInputHandlers({
+const inputHandlersApi = setupInputHandlers({
     constants, canvas, cameraApi, walkerApi, celestialTrackingCameraApi, magneticFieldApi,
     routeSimulationApi, astronomyApi, rocketApi, ui, renderState, walkerState, cameraState,
-    movementState, simulationState, astronomyState, celestialControlState, isUiBlocking, skyTexture, scene,
+    movementState, simulationState, astronomyState, celestialControlState, isUiBlocking, skyTexture, scene, defaultCameraLookTarget,
     setControlTab, createSolarEclipseState: eclipseApi.createSolarEclipseState, syncFullTrailVisibility: eclipseApi.syncFullTrailVisibility,
     resetDarkSunStageState: eclipseApi.resetDarkSunStageState, showSolarEclipseToast: eclipseApi.showSolarEclipseToast,
     resetDarkSunOcclusionMotion: eclipseApi.resetDarkSunOcclusionMotion, darkSunOcclusionState,
@@ -2573,7 +2480,7 @@ if (routeTrackCameraButtonEl) {
     exitFirstPersonMode, enterFirstPersonMode, walkerModeEl, resetWalkerButton,
     routeModeSelectEl, routeOriginContinentEl, routeDestinationContinentEl, routeRecommendedRouteEl,
     routeOriginCountryEl, routeOriginAirportEl, routeDestinationCountryEl, routeDestinationAirportEl,
-    routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl,
+    routeRefreshButton, routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl,
     celestialSpeedPresetButtons,
     celestialFullTrailEl, routePlaybackButton, routeResetButton, realitySyncEl,
     realityLiveEl, observationTimeEl, observationMinusHourButton, observationPlusHourButton,
@@ -2899,8 +2806,17 @@ function animate() {
   zodiacWheelApi.setSuppressed(walkerState.enabled);
   constellationTabApi.refreshDynamicState();
 
-  dome.visible = true;
-  domeRing.visible = true;
+  const isFreeTopViewPresentation = !walkerState.enabled &&
+    cameraState.mode === "free" &&
+    cameraState.phi <= 0.5 &&
+    cameraState.radius >= (constants.CAMERA_TOPDOWN_FULL_RADIUS * 0.72);
+  if (GLOBE_FEATURE_TOGGLES.domeLayer) {
+    dome.visible = !isFreeTopViewPresentation;
+    domeRing.visible = !isFreeTopViewPresentation;
+  } else {
+    dome.visible = false;
+    domeRing.visible = false;
+  }
 
   walkerApi.updateWalkerMovement(deltaSeconds);
   walkerApi.updateWalkerAvatar();
@@ -2909,22 +2825,24 @@ function animate() {
   routeSimulationApi.update(deltaSeconds);
   syncRouteCameraTracking();
   rocketApi.update(deltaSeconds);
+  // ?? 濡쒖폆 ?붾젅硫뷀듃由?UI ?낅뜲?댄듃 ??
   (function updateRocketTelemetry() {
-    const panel = document.getElementById("rocket-telemetry-panel");
+    const panel = document.getElementById('rocket-telemetry-panel');
     if (!panel) return;
     const tel = rocketApi.getTelemetry();
-    if (!tel) { panel.style.display = "none"; return; }
-    panel.style.display = "";
-    document.getElementById("tel-mission").textContent = tel.missionLabel ?? "-";
-    document.getElementById("tel-vehicle").textContent = tel.vehicleLabel ?? "-";
-    document.getElementById("tel-state").textContent = getRocketStateLabel(tel.state);
-    document.getElementById("tel-alt").textContent = `${tel.altitude}%`;
-    document.getElementById("tel-speed").textContent = `${tel.speed} u/s`;
-    document.getElementById("tel-stage-t").textContent = `${tel.stageTimer}s`;
-    document.getElementById("tel-scrape-t").textContent = tel.state === "SCRAPE" ? `${tel.scrapeTimer}s` : "-";
-    document.getElementById("tel-debris").textContent = `${tel.debrisCount}`;
+    if (!tel) { panel.style.display = 'none'; return; }
+    panel.style.display = '';
+    const STATE_KO = {
+      STAGE1: '1???곗냼', PITCHOVER: '?먯꽭 ?쒖뼱', SEPARATION: '??遺꾨━',
+      STAGE2: '2???먰솕', SCRAPE: '沅곸갹 ?묒큺', FALL: '?숉븯', LAUNCH: '諛쒖궗'
+    };
+    document.getElementById('tel-state').textContent    = STATE_KO[tel.state] ?? tel.state;
+    document.getElementById('tel-alt').textContent      = tel.altitude + '%';
+    document.getElementById('tel-speed').textContent    = tel.speed + ' u/s';
+    document.getElementById('tel-stage-t').textContent  = tel.stageTimer + 's';
+    document.getElementById('tel-scrape-t').textContent = tel.state === 'SCRAPE' ? (tel.scrapeTimer + 's') : '-';
+    document.getElementById('tel-debris').textContent   = tel.debrisCount + ' pcs';
   })();
-  syncRocketCameraAndUi();
   astronomyApi.syncSeasonalSunUi();
   if (snapshot) {
     walkerApi.updateWalkerUi(snapshot);
@@ -2933,7 +2851,6 @@ function animate() {
   syncPreparationPresentation();
   celestialTrackingCameraApi.update();
   cameraApi.updateCamera();
-  domeWaterApi.update(deltaSeconds, camera.position);
   if (snapshot) {
     if (!walkerState.enabled) {
       resetDarkSunOcclusionMotion(darkSunOcclusionState.orbit);
@@ -3044,6 +2961,7 @@ function animate() {
   }
 
   updateSunVisualEffects(snapshot);
+  enforceDisabledVisualLayers();
   magneticFieldApi.update(performance.now());
   
   if (walkerState.enabled) {
@@ -3058,7 +2976,7 @@ function animate() {
   }
 }
 
-const ONBOARDING_STORAGE_KEY = "flat-earth-onboarding-v1";
+const ONBOARDING_STORAGE_KEY = "globe-earth-onboarding-v1";
 
 function runOnboarding() {
   try {
@@ -3077,7 +2995,7 @@ function runOnboarding() {
     { tab: "routes",         key: "onboardingRoutes" },
     { tab: "constellations", key: "onboardingConstellations" },
     { tab: "rockets",        key: "onboardingRockets" },
-  ];
+  ].filter(({ tab }) => !DISABLED_CONTROL_TABS.has(tab));
 
   let step = 0;
   let timer = null;
@@ -3149,15 +3067,15 @@ runOnboarding();
   const shell = btn && btn.closest('.detail-panel-shell');
   if (!btn || !shell) return;
 
-  const STORAGE_KEY = 'flat-earth-detail-collapsed';
+  const STORAGE_KEY = 'globe-earth-detail-collapsed';
   const collapsed = localStorage.getItem(STORAGE_KEY) === '1';
   if (collapsed) shell.classList.add('detail-panel-shell--collapsed');
 
   btn.addEventListener('click', () => {
     const isCollapsed = shell.classList.toggle('detail-panel-shell--collapsed');
     try { localStorage.setItem(STORAGE_KEY, isCollapsed ? '1' : '0'); } catch {}
-    btn.title = isCollapsed ? "Expand details" : "Collapse details";
-    btn.setAttribute("aria-label", isCollapsed ? "Expand details" : "Collapse details");
+    btn.title = isCollapsed ? 'Expand details' : 'Collapse details';
+    btn.setAttribute('aria-label', isCollapsed ? 'Expand details' : 'Collapse details');
   });
 })();
 
@@ -3172,22 +3090,31 @@ runOnboarding();
   let targetEvent = 'sunset';
   let aimHeading = null;
 
+  function getWalkerObserverGeo() {
+    return {
+      latitudeDegrees: walkerState.latitudeDegrees ?? constants.WALKER_START_LATITUDE,
+      longitudeDegrees: walkerState.longitudeDegrees ?? constants.WALKER_START_LONGITUDE
+    };
+  }
+
   function getSunAltitudeDeg() {
-    const sunPos = orbitSun.position;
-    const wx = walkerState.position.x;
-    const wz = walkerState.position.z;
-    const eyeH = constants.WALKER_EYE_HEIGHT || 0;
-    const dx = sunPos.x - wx;
-    const dz = sunPos.z - wz;
-    const dy = Math.max(sunPos.y - eyeH, 0.0001);
-    const planar = Math.hypot(dx, dz);
-    const raw = THREE.MathUtils.radToDeg(Math.atan2(dy, planar));
-    return raw - (constants.LOCAL_LIGHT_HORIZON_OFFSET_DEGREES || 22);
+    const observerGeo = getWalkerObserverGeo();
+    return getSunHorizontalCoordinates(
+      astronomyState.selectedDate,
+      observerGeo.latitudeDegrees,
+      observerGeo.longitudeDegrees
+    ).altitudeDegrees;
   }
 
   function getSunHeading() {
-    const sunPos = orbitSun.position;
-    return Math.atan2(sunPos.x - walkerState.position.x, sunPos.z - walkerState.position.z);
+    const observerGeo = getWalkerObserverGeo();
+    return THREE.MathUtils.degToRad(
+      getSunHorizontalCoordinates(
+        astronomyState.selectedDate,
+        observerGeo.latitudeDegrees,
+        observerGeo.longitudeDegrees
+      ).azimuthDegrees
+    );
   }
 
   function updateLabel() {

@@ -1,0 +1,8 @@
+[
+  { "icaoCode": "A21N", "iataCode": "321", "name": "Airbus A321neo", "category": "Narrowbody" },
+  { "icaoCode": "A359", "iataCode": "359", "name": "Airbus A350-900", "category": "Widebody" },
+  { "icaoCode": "A388", "iataCode": "388", "name": "Airbus A380-800", "category": "Very Large" },
+  { "icaoCode": "B738", "iataCode": "738", "name": "Boeing 737-800", "category": "Narrowbody" },
+  { "icaoCode": "B77W", "iataCode": "77W", "name": "Boeing 777-300ER", "category": "Widebody" },
+  { "icaoCode": "B789", "iataCode": "789", "name": "Boeing 787-9", "category": "Widebody" }
+]

@@ -1,0 +1,14 @@
+[
+  { "alpha2": "AE", "name": "United Arab Emirates", "latitude": 24.3, "longitude": 54.4 },
+  { "alpha2": "AU", "name": "Australia", "latitude": -25.2744, "longitude": 133.7751 },
+  { "alpha2": "BR", "name": "Brazil", "latitude": -14.235, "longitude": -51.9253 },
+  { "alpha2": "CL", "name": "Chile", "latitude": -35.6751, "longitude": -71.543 },
+  { "alpha2": "DE", "name": "Germany", "latitude": 51.1657, "longitude": 10.4515 },
+  { "alpha2": "FR", "name": "France", "latitude": 46.2276, "longitude": 2.2137 },
+  { "alpha2": "GB", "name": "United Kingdom", "latitude": 55.3781, "longitude": -3.436 },
+  { "alpha2": "JP", "name": "Japan", "latitude": 36.2048, "longitude": 138.2529 },
+  { "alpha2": "KR", "name": "South Korea", "latitude": 36.5, "longitude": 127.8 },
+  { "alpha2": "SG", "name": "Singapore", "latitude": 1.3521, "longitude": 103.8198 },
+  { "alpha2": "US", "name": "United States", "latitude": 39.8283, "longitude": -98.5795 },
+  { "alpha2": "ZA", "name": "South Africa", "latitude": -30.5595, "longitude": 22.9375 }
+]

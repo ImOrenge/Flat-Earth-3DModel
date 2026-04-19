@@ -1,38 +1,78 @@
-import * as THREE from "../vendor/three.module.js";
+import * as THREE from "../../vendor/three.module.js";
+import {
+  createGlobeModelFrame,
+  getGlobeBasisFromGeo,
+  getGeoFromGlobePosition
+} from "./geo-utils.js";
 
 export function createCameraController({
   camera,
   cameraState,
+  globeSurface,
   walkerState,
   renderState,
   renderer,
-  constants
+  constants,
+  defaultLookTarget = null,
+  trackingCenter = null
 }) {
   const modelScale = constants.MODEL_SCALE ?? 1;
   const tempCameraLookTarget = new THREE.Vector3();
-  const defaultLookTarget = new THREE.Vector3(0, constants.SURFACE_Y * (5 / 6), 0);
-  const trackingDiscCenter = new THREE.Vector3(0, constants.SURFACE_Y, 0);
+  const resolvedDefaultLookTarget = defaultLookTarget?.clone?.()
+    ?? new THREE.Vector3(0, constants.SURFACE_Y * (5 / 6), 0);
+  const trackingDiscCenter = trackingCenter?.clone?.()
+    ?? new THREE.Vector3(0, constants.SURFACE_Y, 0);
   const tempTrackingRadial = new THREE.Vector3();
   const tempTrackingTangent = new THREE.Vector3();
   const tempTrackingOffset = new THREE.Vector3();
+  const tempWalkerNorth = new THREE.Vector3();
+  const tempWalkerEast = new THREE.Vector3();
+  const tempWalkerUp = new THREE.Vector3();
+  const globeFrame = createGlobeModelFrame(globeSurface, { space: "parent" });
+
+  function getGlobeFrame() {
+    return globeFrame;
+  }
+
+  function getWalkerGeo() {
+    const frame = getGlobeFrame();
+    if (Number.isFinite(walkerState.latitudeDegrees) && Number.isFinite(walkerState.longitudeDegrees)) {
+      return {
+        latitudeDegrees: walkerState.latitudeDegrees,
+        longitudeDegrees: walkerState.longitudeDegrees
+      };
+    }
+
+    return getGeoFromGlobePosition(
+      walkerState.position,
+      frame.center,
+      Math.max(walkerState.surfaceRadius ?? frame.radius, 0.0001),
+      frame
+    );
+  }
+
+  function getWalkerBasis() {
+    const frame = getGlobeFrame();
+    const walkerGeo = getWalkerGeo();
+    const basis = getGlobeBasisFromGeo(
+      walkerGeo.latitudeDegrees,
+      walkerGeo.longitudeDegrees,
+      frame
+    );
+    tempWalkerNorth.set(basis.north.x, basis.north.y, basis.north.z).normalize();
+    tempWalkerEast.set(basis.east.x, basis.east.y, basis.east.z).normalize();
+    tempWalkerUp.set(basis.up.x, basis.up.y, basis.up.z).normalize();
+  }
 
   cameraState.mode = cameraState.mode ?? "free";
-  cameraState.lookTarget = cameraState.lookTarget ?? defaultLookTarget.clone();
-  cameraState.targetLookTarget = cameraState.targetLookTarget ?? defaultLookTarget.clone();
+  cameraState.lookTarget = cameraState.lookTarget ?? resolvedDefaultLookTarget.clone();
+  cameraState.targetLookTarget = cameraState.targetLookTarget ?? resolvedDefaultLookTarget.clone();
   cameraState.trackingAzimuth = cameraState.trackingAzimuth ?? constants.CAMERA_TRACKING_DEFAULT_AZIMUTH;
   cameraState.trackingElevation = cameraState.trackingElevation ?? constants.CAMERA_TRACKING_DEFAULT_ELEVATION;
   cameraState.trackingDistance = cameraState.trackingDistance ?? constants.CAMERA_TRACKING_DEFAULT_DISTANCE;
   cameraState.targetTrackingAzimuth = cameraState.targetTrackingAzimuth ?? constants.CAMERA_TRACKING_DEFAULT_AZIMUTH;
   cameraState.targetTrackingElevation = cameraState.targetTrackingElevation ?? constants.CAMERA_TRACKING_DEFAULT_ELEVATION;
   cameraState.targetTrackingDistance = cameraState.targetTrackingDistance ?? constants.CAMERA_TRACKING_DEFAULT_DISTANCE;
-  cameraState.trackingGroundLocked = cameraState.trackingGroundLocked ?? false;
-  cameraState.targetTrackingGroundLocked = cameraState.targetTrackingGroundLocked ?? false;
-  cameraState.trackingGroundHeight = cameraState.trackingGroundHeight ?? constants.WALKER_EYE_HEIGHT;
-  cameraState.targetTrackingGroundHeight = cameraState.targetTrackingGroundHeight ?? constants.WALKER_EYE_HEIGHT;
-  cameraState.trackingPositionLocked = cameraState.trackingPositionLocked ?? false;
-  cameraState.targetTrackingPositionLocked = cameraState.targetTrackingPositionLocked ?? false;
-  cameraState.trackingLockedPosition = cameraState.trackingLockedPosition ?? new THREE.Vector3();
-  cameraState.targetTrackingLockedPosition = cameraState.targetTrackingLockedPosition ?? new THREE.Vector3();
 
   function getResponsivePixelRatio() {
     const maxRatio = window.innerWidth <= 1080 ? 1.5 : 2;
@@ -75,10 +115,6 @@ export function createCameraController({
     cameraState.trackingAzimuth += (cameraState.targetTrackingAzimuth - cameraState.trackingAzimuth) * 0.08;
     cameraState.trackingElevation += (cameraState.targetTrackingElevation - cameraState.trackingElevation) * 0.08;
     cameraState.trackingDistance += (cameraState.targetTrackingDistance - cameraState.trackingDistance) * 0.08;
-    cameraState.trackingGroundLocked = Boolean(cameraState.targetTrackingGroundLocked);
-    cameraState.trackingGroundHeight += (cameraState.targetTrackingGroundHeight - cameraState.trackingGroundHeight) * 0.16;
-    cameraState.trackingPositionLocked = Boolean(cameraState.targetTrackingPositionLocked);
-    cameraState.trackingLockedPosition.lerp(cameraState.targetTrackingLockedPosition, 0.16);
     cameraState.lookTarget.lerp(cameraState.targetLookTarget, 0.16);
 
     tempTrackingRadial.copy(cameraState.lookTarget).sub(trackingDiscCenter);
@@ -106,14 +142,7 @@ export function createCameraController({
     );
     tempTrackingOffset.y += verticalDistance;
 
-    if (cameraState.trackingPositionLocked) {
-      camera.position.copy(cameraState.trackingLockedPosition);
-    } else {
-      camera.position.copy(cameraState.lookTarget).add(tempTrackingOffset);
-      if (cameraState.trackingGroundLocked) {
-        camera.position.y = cameraState.trackingGroundHeight;
-      }
-    }
+    camera.position.copy(cameraState.lookTarget).add(tempTrackingOffset);
     camera.lookAt(cameraState.lookTarget);
   }
 
@@ -135,18 +164,22 @@ export function createCameraController({
 
     if (walkerState.enabled) {
       const visualScale = renderState.visualScale;
-      camera.position.set(
-        walkerState.position.x * visualScale,
-        constants.WALKER_EYE_HEIGHT,
-        walkerState.position.z * visualScale
+      const eyeHeightOffset = Math.max(
+        walkerState.eyeHeightOffset ?? Math.max(constants.WALKER_EYE_HEIGHT - constants.SURFACE_Y, 0.001),
+        0.001
       );
+      getWalkerBasis();
+      camera.position
+        .copy(walkerState.position)
+        .addScaledVector(tempWalkerUp, eyeHeightOffset)
+        .multiplyScalar(visualScale);
 
       const horizontalDistance = Math.cos(walkerState.pitch) * constants.WALKER_LOOK_DISTANCE;
-      tempCameraLookTarget.set(
-        camera.position.x + (Math.sin(walkerState.heading) * horizontalDistance),
-        constants.WALKER_EYE_HEIGHT + (Math.sin(walkerState.pitch) * constants.WALKER_LOOK_DISTANCE),
-        camera.position.z + (Math.cos(walkerState.heading) * horizontalDistance)
-      );
+      tempCameraLookTarget.copy(camera.position)
+        .addScaledVector(tempWalkerNorth, Math.cos(walkerState.heading) * horizontalDistance)
+        .addScaledVector(tempWalkerEast, Math.sin(walkerState.heading) * horizontalDistance)
+        .addScaledVector(tempWalkerUp, Math.sin(walkerState.pitch) * constants.WALKER_LOOK_DISTANCE);
+      camera.up.copy(tempWalkerUp);
       camera.lookAt(tempCameraLookTarget);
       return;
     }
@@ -186,3 +219,4 @@ export function createCameraController({
     updateCamera
   };
 }
+

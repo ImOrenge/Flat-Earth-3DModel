@@ -1,4 +1,4 @@
-const STORAGE_KEY = "flat-earth-language";
+const STORAGE_KEY = "globe-earth-language";
 
 const LOCALES = {
   en: "en-US",
@@ -942,6 +942,47 @@ function getInitialLanguage(preferredLanguage) {
   return "en";
 }
 
+Object.assign(TRANSLATIONS.en, {
+  documentTitle: "Globe Earth 3D Model",
+  summaryTitle: "Globe Earth",
+  summaryCopy: "Bundled globe texture: <code>../assets/nasa-blue-marble-5400x2700.jpg</code>. Use <code>globe/modules/*</code> to iterate on the detached globe runtime.",
+  uploadMapButton: "Upload Texture",
+  statModelValue: "Sphere + Atmosphere",
+  statOutputValue: "Live WebGL",
+  stepGenerateMesh: "Boot the detached globe viewer from <code>globe/index.html</code>.",
+  stepOpenObj: "Implement globe scene and UI logic under <code>globe/modules/*</code>.",
+  stepSwapTexture: "Reuse shared textures from <code>../assets/*</code> without touching the flat runtime.",
+  helpOverviewCopy: "This viewer runs the separated globe-earth runtime with astronomy, route replay, constellation reference, and rocket simulation in one place. The flat app remains available at the root entry.",
+  statusLoadingBundledMap: "Loading bundled globe assets.",
+  statusDefaultTextureLoaded: "{label} bundled globe asset loaded into the detached globe runtime.",
+  statusFallbackTexture: "Fallback bundled globe asset is active until a custom texture is loaded.",
+  statusOnlyImageAllowed: "Only image texture uploads are allowed.",
+  statusUserTextureLoaded: "{fileName} texture loaded onto the globe surface.",
+  statusImageLoadFailed: "Could not load the selected image texture. Try another file.",
+  fallbackTextureTitle: "GLOBE TEXTURE PLACEHOLDER",
+  fallbackTextureSubtitle: "or place the bundled globe asset at ../assets/nasa-blue-marble-5400x2700.jpg"
+});
+
+Object.assign(TRANSLATIONS.ko, {
+  documentTitle: "\uAD6C\uD615 \uC9C0\uAD6C 3D \uBAA8\uB378",
+  summaryTitle: "\uAD6C\uD615 \uC9C0\uAD6C",
+  summaryCopy: "\uAE30\uBCF8 \uAD6C\uD615 \uD14D\uC2A4\uCC98\uB294 <code>../assets/nasa-blue-marble-5400x2700.jpg</code>\uC785\uB2C8\uB2E4. \uBD84\uB9AC\uB41C \uAD6C\uD615 \uB7F0\uD0C0\uC784\uC740 <code>globe/modules/*</code>\uC5D0\uC11C \uBC14\uB85C \uBC18\uBCF5 \uAC1C\uBC1C\uD558\uC138\uC694.",
+  uploadMapButton: "\uD14D\uC2A4\uCC98 \uC5C5\uB85C\uB4DC",
+  statModelValue: "\uAD6C\uCCB4 + \uB300\uAE30",
+  statOutputValue: "Live WebGL",
+  stepGenerateMesh: "<code>globe/index.html</code>\uC5D0\uC11C \uBD84\uB9AC\uB41C \uAD6C\uD615 \uBDF0\uC5B4\uB97C \uBC14\uB85C \uBD80\uD305\uD558\uC138\uC694.",
+  stepOpenObj: "\uAD6C\uD615 \uC7A5\uBA74\uACFC UI \uB85C\uC9C1\uC740 <code>globe/modules/*</code>\uC5D0\uC11C \uAC1C\uBC1C\uD558\uC138\uC694.",
+  stepSwapTexture: "\uD3C9\uBA74 \uB7F0\uD0C0\uC784\uC744 \uAC74\uB4DC\uB9AC\uC9C0 \uC54A\uACE0 <code>../assets/*</code> \uACF5\uC720 \uD14D\uC2A4\uCC98\uB97C \uC7AC\uC0AC\uC6A9\uD558\uC138\uC694.",
+  helpOverviewCopy: "\uC774 \uBDF0\uC5B4\uB294 \uCC9C\uBB38, \uD56D\uB85C \uC7AC\uC0DD, \uBCC4\uC790\uB9AC, \uB85C\uCF13 \uC2DC\uBBAC\uB808\uC774\uC158\uC744 \uD558\uB098\uC758 \uBD84\uB9AC\uB41C \uAD6C\uD615 \uB7F0\uD0C0\uC784\uC5D0\uC11C \uC2E4\uD589\uD569\uB2C8\uB2E4. \uD3C9\uBA74 \uC571\uC740 \uB8E8\uD2B8 \uC5D4\uD2B8\uB9AC\uC5D0 \uADF8\uB300\uB85C \uB0A8\uACA8 \uB461\uB2C8\uB2E4.",
+  statusLoadingBundledMap: "\uAE30\uBCF8 \uAD6C\uD615 \uC790\uC0B0\uC744 \uBD88\uB7EC\uC624\uB294 \uC911\uC785\uB2C8\uB2E4.",
+  statusDefaultTextureLoaded: "{label} \uAE30\uBCF8 \uAD6C\uD615 \uC790\uC0B0\uC744 \uBD84\uB9AC\uB41C \uAD6C\uD615 \uB7F0\uD0C0\uC784\uC5D0 \uBD88\uB7EC\uC654\uC2B5\uB2C8\uB2E4.",
+  statusFallbackTexture: "\uC0AC\uC6A9\uC790 \uD14D\uC2A4\uCC98\uAC00 \uC5C6\uC744 \uB54C\uB294 \uAE30\uBCF8 \uAD6C\uD615 \uC790\uC0B0\uC744 \uC0AC\uC6A9\uD569\uB2C8\uB2E4.",
+  statusOnlyImageAllowed: "\uC774\uBBF8\uC9C0 \uD14D\uC2A4\uCC98 \uC5C5\uB85C\uB4DC\uB9CC \uD5C8\uC6A9\uB429\uB2C8\uB2E4.",
+  statusUserTextureLoaded: "{fileName} \uD14D\uC2A4\uCC98\uB97C \uAD6C\uD615 \uD45C\uBA74\uC5D0 \uBD88\uB7EC\uC654\uC2B5\uB2C8\uB2E4.",
+  statusImageLoadFailed: "\uC120\uD0DD\uD55C \uC774\uBBF8\uC9C0 \uD14D\uC2A4\uCC98\uB97C \uBD88\uB7EC\uC624\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4. \uB2E4\uB978 \uD30C\uC77C\uC744 \uC2DC\uB3C4\uD558\uC138\uC694.",
+  fallbackTextureTitle: "\uAD6C\uD615 \uD14D\uC2A4\uCC98 \uD50C\uB808\uC774\uC2A4\uD640\uB354",
+  fallbackTextureSubtitle: "\uB610\uB294 ../assets/nasa-blue-marble-5400x2700.jpg \uC5D0 \uAE30\uBCF8 \uAD6C\uD615 \uC790\uC0B0\uC744 \uBC30\uCE58\uD558\uC138\uC694."
+});
 export function createI18n({ preferredLanguage } = {}) {
   let language = getInitialLanguage(preferredLanguage);
   const listeners = new Set();
@@ -1056,43 +1097,144 @@ Object.assign(TRANSLATIONS.ko, {
 });
 
 Object.assign(TRANSLATIONS.en, {
-  helpOverviewCopy: "This viewer combines astronomy, route replay, constellation reference, and rocket simulation across both flat-disc and spherical-globe scene modes. Use the layout switch to move between the new HUD and the preserved classic control panels.",
-  helpRoutesCopy: "Route Control replays offline aircraft legs, exposes playback speed controls, and summarizes route, aircraft, duration, and progress data. In spherical scene mode, routes are rendered as great-circle arcs with a smooth flight profile.",
-  onboardingRoutes: "Replay aircraft routes across flat and spherical scenes.",
-  onboardingComparison: "Compare flat-disc and spherical-globe model scores and evidence side by side.",
-  helpComparisonCopy: "Compare route, eclipse, orbit, and rotation metrics with fixed thresholds, and switch the 3D scene between flat and spherical views for context."
+  hudAstronomySectionSystem: "System",
+  hudAstronomySectionSun: "Sun",
+  hudAstronomySectionMoon: "Moon",
+  hudAstronomySectionObserver: "Observer",
+  astronomySystemTitle: "System State",
+  astronomySunTitle: "Sun Reference",
+  astronomyMoonTitle: "Moon Reference",
+  astronomyObserverTitle: "Observer Context",
+  helpAstronomyCopy: "Astronomy separates system time controls, solar reference, lunar reference, eclipse inspection, and observer context for the globe runtime.",
+  routeSummaryActiveText: "{origin} to {destination} on a great-circle surface path. Planned block {duration}, cruise {cruise}, distance {greatCircle}.",
+  routeGeoPathValue: "{originGeo} -> {destinationGeo} | cruise {cruise} | great-circle {greatCircle}",
+  trackCameraOff: "Free Camera",
+  trackCameraSun: "Track Sun",
+  trackCameraMoon: "Track Moon",
+  trackCameraSummaryOff: "Free camera mode. Drag to orbit around the globe and zoom independently.",
+  trackCameraSummarySun: "Tracking mode keeps the sun centered while the globe camera continues orbiting normally.",
+  trackCameraSummaryMoon: "Tracking mode keeps the moon centered while the globe camera continues orbiting normally."
 });
 
 Object.assign(TRANSLATIONS.ko, {
-  helpOverviewCopy: "\uC774 \uBDF0\uC5B4\uB294 \uD3C9\uBA74 \uC6D0\uD310 \uBAA8\uB4DC\uC640 \uAD6C\uD615 \uAE00\uB85C\uBE0C \uBAA8\uB4DC\uC5D0\uC11C \uCC9C\uBB38, \uD56D\uB85C \uC7AC\uC0DD, \uBCC4\uC790\uB9AC \uCC38\uC870, \uB85C\uCF13 \uC2DC\uBBAC\uB808\uC774\uC158\uC744 \uD568\uAED8 \uC81C\uACF5\uD569\uB2C8\uB2E4. \uB808\uC774\uC544\uC6C3 \uC2A4\uC704\uCE58\uB85C \uC0C8 HUD\uC640 \uAE30\uC874 \uCEE8\uD2B8\uB864 \uD328\uB110 \uC0AC\uC774\uB97C \uC624\uAC08 \uC218 \uC788\uC2B5\uB2C8\uB2E4.",
-  helpRoutesCopy: "\uD56D\uB85C \uCEE8\uD2B8\uB864\uC740 \uC624\uD504\uB77C\uC778 \uBE44\uD589 \uAD6C\uAC04\uC744 \uC7AC\uC0DD\uD558\uACE0, \uC18D\uB3C4 \uC870\uC808\uACFC \uD56D\uB85C\u00B7\uAE30\uCCB4\u00B7\uC18C\uC694 \uC2DC\uAC04\u00B7\uC9C4\uD589 \uB370\uC774\uD130\uB97C \uD568\uAED8 \uBCF4\uC5EC\uC90D\uB2C8\uB2E4. \uAD6C\uD615 \uC7A5\uBA74\uC5D0\uC11C\uB294 \uB300\uAD8C\uD56D\uB85C \uAE30\uBC18\uC758 \uC644\uB9CC\uD55C \uBE44\uD589 \uC544\uD06C\uB85C \uB80C\uB354\uB9C1\uB429\uB2C8\uB2E4.",
-  onboardingRoutes: "\uD3C9\uBA74/\uAD6C\uD615 \uC7A5\uBA74\uC5D0\uC11C \uD56D\uACF5 \uACBD\uB85C\uB97C \uC7AC\uC0DD\uD574 \uBCF4\uC138\uC694.",
-  onboardingComparison: "\uD3C9\uBA74 \uC6D0\uD310/\uAD6C\uD615 \uAE00\uB85C\uBE0C \uBAA8\uB378 \uC810\uC218\uC640 \uADFC\uAC70\uB97C \uB098\uB780\uD788 \uBE44\uAD50\uD558\uC138\uC694.",
-  helpComparisonCopy: "\uD56D\uACF5\uACBD\uB85C, \uC2DD, \uACF5\uC804, \uC790\uC804 \uC9C0\uD45C\uB97C \uACE0\uC815 \uC784\uACC4\uAC12\uC73C\uB85C \uBE44\uAD50\uD558\uACE0 3D \uC52C\uC744 \uD3C9\uBA74/\uAD6C\uD615\uC73C\uB85C \uC804\uD658\uD574 \uB9E5\uB77D\uC744 \uD655\uC778\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4."
+  hudAstronomySectionSystem: "\uC2DC\uC2A4\uD15C",
+  hudAstronomySectionSun: "\uD0DC\uC591",
+  hudAstronomySectionMoon: "\uB2EC",
+  hudAstronomySectionObserver: "\uAD00\uCE21\uC790",
+  astronomySystemTitle: "\uC2DC\uC2A4\uD15C \uC0C1\uD0DC",
+  astronomySunTitle: "\uD0DC\uC591 \uAE30\uC900",
+  astronomyMoonTitle: "\uB2EC \uAE30\uC900",
+  astronomyObserverTitle: "\uAD00\uCE21\uC790 \uB9E5\uB77D",
+  helpAstronomyCopy: "\uCC9C\uBB38 \uD328\uB110\uC740 \uAD6C\uD615 \uB7F0\uD0C0\uC784 \uAE30\uC900\uC73C\uB85C \uC2DC\uC2A4\uD15C \uC2DC\uAC04 \uC81C\uC5B4, \uD0DC\uC591 \uAE30\uC900, \uB2EC \uAE30\uC900, \uC2DD \uC810\uAC80, \uAD00\uCE21\uC790 \uB9E5\uB77D\uC744 \uBD84\uB9AC\uD574 \uC81C\uACF5\uD569\uB2C8\uB2E4.",
+  routeSummaryActiveText: "{origin}\uC5D0\uC11C {destination}\uAE4C\uC9C0 \uB300\uAD8C \uACBD\uB85C\uB85C \uBE44\uD589\uD569\uB2C8\uB2E4. \uACC4\uD68D \uBE14\uB85D {duration}, \uC21C\uD56D {cruise}, \uAC70\uB9AC {greatCircle}.",
+  routeGeoPathValue: "{originGeo} -> {destinationGeo} | \uC21C\uD56D {cruise} | \uB300\uAD8C {greatCircle}",
+  trackCameraOff: "\uC790\uC720 \uCE74\uBA54\uB77C",
+  trackCameraSun: "\uD0DC\uC591 \uCD94\uC801",
+  trackCameraMoon: "\uB2EC \uCD94\uC801",
+  trackCameraSummaryOff: "\uC790\uC720 \uCE74\uBA54\uB77C \uBAA8\uB4DC\uC785\uB2C8\uB2E4. \uAD6C\uCCB4 \uC8FC\uC704\uB97C \uB4DC\uB798\uADF8\uB85C \uD68C\uC804\uD558\uACE0 \uD720\uB85C \uB3C5\uB9BD\uC801\uC73C\uB85C \uC90C\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.",
+  trackCameraSummarySun: "\uCD94\uC801 \uBAA8\uB4DC\uC5D0\uC11C\uB294 \uAD6C\uCCB4 \uCE74\uBA54\uB77C \uADA4\uB3C4\uB97C \uC720\uC9C0\uD558\uBA74\uC11C \uD0DC\uC591\uC744 \uD654\uBA74 \uC911\uC559\uC5D0 \uACE0\uC815\uD569\uB2C8\uB2E4.",
+  trackCameraSummaryMoon: "\uCD94\uC801 \uBAA8\uB4DC\uC5D0\uC11C\uB294 \uAD6C\uCCB4 \uCE74\uBA54\uB77C \uADA4\uB3C4\uB97C \uC720\uC9C0\uD558\uBA74\uC11C \uB2EC\uC744 \uD654\uBA74 \uC911\uC559\uC5D0 \uACE0\uC815\uD569\uB2C8\uB2E4."
 });
 
 Object.assign(TRANSLATIONS.en, {
-  offlineRouteLibraryTitle: "Offline Route Planner",
-  activeRouteTitle: "Active Route",
-  routeDatasetLoading: "Loading offline route planner...",
-  routeDatasetNoRoutes: "Offline route planner loaded, but not enough airports were found.",
-  routeDatasetLoaded: "Loaded {countries} countries, {airports} airports, and {aircraftTypes} aircraft types.",
-  routeSummaryNone: "No route is selected.",
-  routeSelectPrompt: "Choose origin and destination airports",
+  sunReferenceSummary: "Subsolar point {geo}. Declination {declination}. Observer {observerGeo} sees the sun at {altitude} altitude and {azimuth} azimuth."
+});
+
+Object.assign(TRANSLATIONS.ko, {
+  sunReferenceSummary: "\uD0DC\uC591 \uD558\uC810 {geo}. \uC801\uC704 {declination}. \uAD00\uCE21\uC790 {observerGeo} \uAE30\uC900 \uD0DC\uC591\uC740 \uACE0\uB3C4 {altitude}, \uBC29\uC704\uAC01 {azimuth}\uC785\uB2C8\uB2E4."
+});
+
+Object.assign(TRANSLATIONS.en, {
+  helpRoutesCopy: "Choose an origin country and airport, choose a destination country and airport, and replay the generated great-circle route with live progress metadata.",
+  offlineRouteLibraryTitle: "Globe Route Builder",
+  routeOriginCountryLabel: "Origin Country",
+  routeOriginAirportLabel: "Origin Airport",
+  routeDestinationCountryLabel: "Destination Country",
+  routeDestinationAirportLabel: "Destination Airport",
+  activeRouteTitle: "Active Globe Route",
+  routeSummaryNone: "Choose origin and destination airports to build a globe route.",
+  routeSelectPrompt: "Choose airports",
+  routeGeoSummaryPlaceholder: "Selected airport coordinates and great-circle distance will appear here.",
+  routeSummaryActiveText: "{originCountry} / {originAirport} to {destinationCountry} / {destinationAirport}. Great-circle {greatCircle}, planned block {duration}, cruise {cruise}.",
+  routeGeoSelectionValue: "{originGeo} -> {destinationGeo}",
+  routeGeoPathValue: "{originGeo} -> {destinationGeo} | great-circle {greatCircle}",
+  routeDatasetLoading: "Loading globe route builder...",
+  routeDatasetNoRoutes: "Globe route builder loaded, but not enough airports were found to build a route.",
+  routeDatasetLoaded: "Loaded {countries} countries, {airports} airports, {centroids} country centroids, and {aircraftTypes} aircraft types.",
+  routeDatasetFailed: "Failed to load the globe route builder.",
+  routeSelectionConflict: "Choose different origin and destination airports."
+});
+
+Object.assign(TRANSLATIONS.ko, {
+  helpRoutesCopy: "\ucd9c\ubc1c \uad6d\uac00\uc640 \uacf5\ud56d, \ub3c4\ucc29 \uad6d\uac00\uc640 \uacf5\ud56d\uc744 \uc120\ud0dd\ud558\uba74 \ud574\ub2f9 \uacf5\ud56d \uc88c\ud45c\ub97c \uc787\ub294 \ub300\uad8c \uacbd\ub85c\uc640 \uc9c4\ud589 \uc815\ubcf4\ub97c \uc7ac\uc0dd\ud560 \uc218 \uc788\uc2b5\ub2c8\ub2e4.",
+  offlineRouteLibraryTitle: "\uad6c\ud615 \uacbd\ub85c \ube4c\ub354",
+  routeOriginCountryLabel: "\ucd9c\ubc1c \uad6d\uac00",
+  routeOriginAirportLabel: "\ucd9c\ubc1c \uacf5\ud56d",
+  routeDestinationCountryLabel: "\ub3c4\ucc29 \uad6d\uac00",
+  routeDestinationAirportLabel: "\ub3c4\ucc29 \uacf5\ud56d",
+  activeRouteTitle: "\ud65c\uc131 \uad6c\ud615 \uacbd\ub85c",
+  routeSummaryNone: "\ucd9c\ubc1c \uacf5\ud56d\uacfc \ub3c4\ucc29 \uacf5\ud56d\uc744 \uc120\ud0dd\ud574 \uad6c\ud615 \uacbd\ub85c\ub97c \ub9cc\ub4dc\uc138\uc694.",
+  routeSelectPrompt: "\uacf5\ud56d\uc744 \uc120\ud0dd\ud558\uc138\uc694",
+  routeGeoSummaryPlaceholder: "\uc120\ud0dd\ud55c \uacf5\ud56d \uc88c\ud45c\uc640 \ub300\uad8c \uac70\ub9ac\uac00 \uc5ec\uae30\uc5d0 \ud45c\uc2dc\ub429\ub2c8\ub2e4.",
+  routeSummaryActiveText: "{originCountry} / {originAirport}\uc5d0\uc11c {destinationCountry} / {destinationAirport}\uae4c\uc9c0 \uc5f0\uacb0\ud569\ub2c8\ub2e4. \ub300\uad8c {greatCircle}, \uacc4\ud68d \ube14\ub85d {duration}, \uc21c\ud56d {cruise}.",
+  routeGeoSelectionValue: "{originGeo} -> {destinationGeo}",
+  routeGeoPathValue: "{originGeo} -> {destinationGeo} | \ub300\uad8c {greatCircle}",
+  routeDatasetLoading: "\uad6c\ud615 \uacbd\ub85c \ube4c\ub354\ub97c \ubd88\ub7ec\uc624\ub294 \uc911...",
+  routeDatasetNoRoutes: "\uad6c\ud615 \uacbd\ub85c \ube4c\ub354\ub294 \ubd88\ub7ec\uc654\uc9c0\ub9cc \uacbd\ub85c\ub97c \ub9cc\ub4e4 \ub9cc\ud07c \uacf5\ud56d\uc774 \ucda9\ubd84\ud558\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4.",
+  routeDatasetLoaded: "\uad6d\uac00 {countries}\uac1c, \uacf5\ud56d {airports}\uac1c, \uad6d\uac00 \uc911\uc2ec\uc810 {centroids}\uac1c, \ud56d\uacf5\uae30 \ud615\uc2dd {aircraftTypes}\uac1c\ub97c \ubd88\ub7ec\uc654\uc2b5\ub2c8\ub2e4.",
+  routeDatasetFailed: "\uad6c\ud615 \uacbd\ub85c \ube4c\ub354\ub97c \ubd88\ub7ec\uc624\uc9c0 \ubabb\ud588\uc2b5\ub2c8\ub2e4.",
+  routeSelectionConflict: "\ucd9c\ubc1c \uacf5\ud56d\uacfc \ub3c4\ucc29 \uacf5\ud56d\uc740 \uc11c\ub85c \ub2ec\ub77c\uc57c \ud569\ub2c8\ub2e4."
+});
+
+Object.assign(TRANSLATIONS.en, {
+  routeRefreshButton: "Refresh Data",
+  routeDataSourceTitle: "Data Source",
+  routeDataSourceBundled: "Bundled",
+  routeDataSourceCached: "Cached",
+  routeDataSourceLiveApi: "Live API",
+  routeLastSyncTitle: "Last Sync",
+  routeLastSyncUnknown: "Not synced yet",
+  routeLastSyncValue: "{time}",
+  routeDatasetLoaded: "Loaded {countries} countries, {airports} airports, {centroids} country centroids, and {aircraftTypes} aircraft types from {source}.",
+  routeDatasetRefreshing: "Syncing latest route dataset from free APIs...",
+  routeDatasetRefreshSuccess: "{source} sync completed.",
+  routeDatasetRefreshPartial: "{source} sync completed, but GeoNames data is currently unavailable.",
+  routeDatasetRefreshFailed: "Remote sync failed. Continuing with {source} dataset."
+});
+
+Object.assign(TRANSLATIONS.ko, {
+  routeRefreshButton: "\ub370\uc774\ud130 \uac31\uc2e0",
+  routeDataSourceTitle: "\ub370\uc774\ud130 \uc18c\uc2a4",
+  routeDataSourceBundled: "\ubc88\ub4e4",
+  routeDataSourceCached: "\uce90\uc2dc",
+  routeDataSourceLiveApi: "\uc2e4\uc2dc\uac04 API",
+  routeLastSyncTitle: "\ub9c8\uc9c0\ub9c9 \ub3d9\uae30\ud654",
+  routeLastSyncUnknown: "\uc544\uc9c1 \ub3d9\uae30\ud654\ub418\uc9c0 \uc54a\uc74c",
+  routeLastSyncValue: "{time}",
+  routeDatasetLoaded: "{source} \ub370\uc774\ud130\ub85c \uad6d\uac00 {countries}\uac1c, \uacf5\ud56d {airports}\uac1c, \uad6d\uac00 \uc911\uc2ec\uc810 {centroids}\uac1c, \ud56d\uacf5\uae30 \ud615\uc2dd {aircraftTypes}\uac1c\ub97c \uc900\ube44\ud588\uc2b5\ub2c8\ub2e4.",
+  routeDatasetRefreshing: "\ubb34\ub8cc API\uc5d0\uc11c \ucd5c\uc2e0 \uacbd\ub85c \ub370\uc774\ud130\ub97c \ub3d9\uae30\ud654\ud558\ub294 \uc911...",
+  routeDatasetRefreshSuccess: "{source} \ub3d9\uae30\ud654\uac00 \uc644\ub8cc\ub418\uc5c8\uc2b5\ub2c8\ub2e4.",
+  routeDatasetRefreshPartial: "{source} \ub3d9\uae30\ud654\ub294 \uc644\ub8cc\ub418\uc5c8\uc9c0\ub9cc GeoNames \ub370\uc774\ud130\ub97c \uc0ac\uc6a9\ud560 \uc218 \uc5c6\uc2b5\ub2c8\ub2e4.",
+  routeDatasetRefreshFailed: "\uc6d0\uaca9 \ub3d9\uae30\ud654\uc5d0 \uc2e4\ud328\ud588\uc2b5\ub2c8\ub2e4. \ud604\uc7ac {source} \ub370\uc774\ud130\ub97c \uacc4\uc18d \uc0ac\uc6a9\ud569\ub2c8\ub2e4."
+});
+
+Object.assign(TRANSLATIONS.en, {
+  helpRoutesCopy: "Pick Recommended mode for intercontinental multi-leg routes, or switch to Advanced mode for direct country/airport selection.",
   routeModeLabel: "Route Mode",
   routeModeRecommended: "Recommended",
   routeModeAdvanced: "Advanced",
   routeOriginContinentLabel: "Origin Continent",
   routeDestinationContinentLabel: "Destination Continent",
   routeRecommendedListLabel: "Recommended Route",
-  routeOriginCountryLabel: "Origin Country",
-  routeOriginAirportLabel: "Origin Airport",
-  routeDestinationCountryLabel: "Destination Country",
-  routeDestinationAirportLabel: "Destination Airport",
+  routeContinentAmericas: "Americas",
+  routeContinentEurope: "Europe",
+  routeContinentAfrica: "Africa",
+  routeContinentAsia: "Asia",
+  routeContinentOceania: "Oceania",
+  routeContinentUnknown: "Unknown",
   routeRecommendedPrompt: "Choose an intercontinental layover route",
   routeRecommendedNone: "No recommended intercontinental layover routes are available for {originContinent} -> {destinationContinent}.",
   routeContinentConflict: "Origin and destination continents must be different in recommended mode.",
-  routeSelectionConflict: "Choose different origin and destination airports.",
   routeLayoversLabel: "Layovers",
   routeLayoversNone: "Non-stop",
   routeLayoversValue: "{count} stop(s): {layovers} ({seconds}s each)",
@@ -1102,31 +1244,26 @@ Object.assign(TRANSLATIONS.en, {
 });
 
 Object.assign(TRANSLATIONS.ko, {
-  offlineRouteLibraryTitle: "\uC624\uD504\uB77C\uC778 \uACBD\uB85C \uD50C\uB798\uB108",
-  activeRouteTitle: "\uD65C\uC131 \uACBD\uB85C",
-  routeDatasetLoading: "\uC624\uD504\uB77C\uC778 \uACBD\uB85C \uD50C\uB798\uB108\uB97C \uBD88\uB7EC\uC624\uB294 \uC911\uC785\uB2C8\uB2E4...",
-  routeDatasetNoRoutes: "\uC624\uD504\uB77C\uC778 \uACBD\uB85C \uD50C\uB798\uB108\uB97C \uBD88\uB7EC\uC654\uC9C0\uB9CC \uACBD\uB85C\uB97C \uB9CC\uB4E4 \uC218 \uC788\uB294 \uACF5\uD56D\uC774 \uBD80\uC871\uD569\uB2C8\uB2E4.",
-  routeDatasetLoaded: "\uAD6D\uAC00 {countries}\uAC1C, \uACF5\uD56D {airports}\uAC1C, \uD56D\uACF5\uAE30 \uD615\uC2DD {aircraftTypes}\uAC1C\uB97C \uBD88\uB7EC\uC654\uC2B5\uB2C8\uB2E4.",
-  routeSummaryNone: "\uC120\uD0DD\uB41C \uACBD\uB85C\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.",
-  routeSelectPrompt: "\uCD9C\uBC1C/\uB3C4\uCC29 \uACF5\uD56D\uC744 \uC120\uD0DD\uD558\uC138\uC694",
-  routeModeLabel: "\uACBD\uB85C \uBAA8\uB4DC",
-  routeModeRecommended: "\uCD94\uCC9C",
-  routeModeAdvanced: "\uACE0\uAE09",
-  routeOriginContinentLabel: "\uCD9C\uBC1C \uB300\uB959",
-  routeDestinationContinentLabel: "\uB3C4\uCC29 \uB300\uB959",
-  routeRecommendedListLabel: "\uCD94\uCC9C \uB178\uC120",
-  routeOriginCountryLabel: "\uCD9C\uBC1C \uAD6D\uAC00",
-  routeOriginAirportLabel: "\uCD9C\uBC1C \uACF5\uD56D",
-  routeDestinationCountryLabel: "\uB3C4\uCC29 \uAD6D\uAC00",
-  routeDestinationAirportLabel: "\uB3C4\uCC29 \uACF5\uD56D",
-  routeRecommendedPrompt: "\uB300\uB959\uAC04 \uACBD\uC720 \uB178\uC120\uC744 \uC120\uD0DD\uD558\uC138\uC694",
-  routeRecommendedNone: "{originContinent} -> {destinationContinent} \uAD6C\uAC04\uC5D0\uC11C \uC870\uAC74\uC744 \uB9CC\uC871\uD558\uB294 \uB300\uB959\uAC04 \uACBD\uC720 \uCD94\uCC9C \uB178\uC120\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.",
-  routeContinentConflict: "\uCD94\uCC9C \uBAA8\uB4DC\uC5D0\uC11C\uB294 \uCD9C\uBC1C/\uB3C4\uCC29 \uB300\uB959\uC774 \uC11C\uB85C \uB2EC\uB77C\uC57C \uD569\uB2C8\uB2E4.",
-  routeSelectionConflict: "\uCD9C\uBC1C \uACF5\uD56D\uACFC \uB3C4\uCC29 \uACF5\uD56D\uC740 \uC11C\uB85C \uB2EC\uB77C\uC57C \uD569\uB2C8\uB2E4.",
-  routeLayoversLabel: "\uACBD\uC720\uC9C0",
-  routeLayoversNone: "\uBB34\uACBD\uC720",
-  routeLayoversValue: "{count}\uD68C \uACBD\uC720: {layovers} (\uAC01 {seconds}\uCD08 \uC815\uC9C0)",
-  routeProgressLayover: "{airport}\uC5D0\uC11C \uC815\uCC28 \uC911 ({seconds}\uCD08)",
-  routeSummaryActiveText: "{originCountry} / {originAirport}\uC5D0\uC11C {destinationCountry} / {destinationAirport}\uAE4C\uC9C0 \uC5F0\uACB0\uD569\uB2C8\uB2E4. \uACBD\uC720: {layovers}. \uB300\uAD8C {greatCircle}, \uCD1D \uBE14\uB85D {duration}.",
-  routeGeoPathValue: "{waypointGeo} | \uB300\uAD8C {greatCircle}"
+  helpRoutesCopy: "\ucd94\ucc9c \ubaa8\ub4dc\uc5d0\uc11c \ub300\ub959\uac04 \ub2e4\uad6c\uac04 \uacbd\ub85c\ub97c \uc120\ud0dd\ud558\uace0, \uace0\uae09 \ubaa8\ub4dc\uc5d0\uc11c \uad6d\uac00/\uacf5\ud56d \uc9c1\uc811 \uc120\ud0dd\uc73c\ub85c \uc804\ud658\ud560 \uc218 \uc788\uc2b5\ub2c8\ub2e4.",
+  routeModeLabel: "\uacbd\ub85c \ubaa8\ub4dc",
+  routeModeRecommended: "\ucd94\ucc9c",
+  routeModeAdvanced: "\uace0\uae09",
+  routeOriginContinentLabel: "\ucd9c\ubc1c \ub300\ub959",
+  routeDestinationContinentLabel: "\ub3c4\ucc29 \ub300\ub959",
+  routeRecommendedListLabel: "\ucd94\ucc9c \ub178\uc120",
+  routeContinentAmericas: "\uc544\uba54\ub9ac\uce74",
+  routeContinentEurope: "\uc720\ub7fd",
+  routeContinentAfrica: "\uc544\ud504\ub9ac\uce74",
+  routeContinentAsia: "\uc544\uc2dc\uc544",
+  routeContinentOceania: "\uc624\uc138\uc544\ub2c8\uc544",
+  routeContinentUnknown: "\ubbf8\uc0c1",
+  routeRecommendedPrompt: "\ub300\ub959\uac04 \uacbd\uc720 \ub178\uc120\uc744 \uc120\ud0dd\ud558\uc138\uc694",
+  routeRecommendedNone: "{originContinent} -> {destinationContinent} \uad6c\uac04\uc5d0\uc11c \uc870\uac74\uc744 \ub9cc\uc871\ud558\ub294 \ub300\ub959\uac04 \uacbd\uc720 \ucd94\ucc9c \ub178\uc120\uc774 \uc5c6\uc2b5\ub2c8\ub2e4.",
+  routeContinentConflict: "\ucd94\ucc9c \ubaa8\ub4dc\uc5d0\uc11c\ub294 \ucd9c\ubc1c/\ub3c4\ucc29 \ub300\ub959\uc774 \uc11c\ub85c \ub2ec\ub77c\uc57c \ud569\ub2c8\ub2e4.",
+  routeLayoversLabel: "\uacbd\uc720\uc9c0",
+  routeLayoversNone: "\ubb34\ucc29\ub959",
+  routeLayoversValue: "{count}\ud68c \uacbd\uc720: {layovers} (\uac01 {seconds}\ucd08 \uc815\uc9c0)",
+  routeProgressLayover: "{airport}\uc5d0\uc11c \uc815\ucc28 \uc911 ({seconds}\ucd08)",
+  routeSummaryActiveText: "{originCountry} / {originAirport}\uc5d0\uc11c {destinationCountry} / {destinationAirport}\uae4c\uc9c0 \uc5f0\uacb0\ud569\ub2c8\ub2e4. \uacbd\uc720: {layovers}. \ub300\uad8c {greatCircle}, \ucd1d \ube14\ub85d {duration}.",
+  routeGeoPathValue: "{waypointGeo} | \ub300\uad8c {greatCircle}"
 });

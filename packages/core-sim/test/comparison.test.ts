@@ -153,6 +153,70 @@ describe("computeModelComparison", () => {
     expect(looseRotation.sphericalFlag.contradiction).toBe(false);
   });
 
+  it("handles seasonal-boundary and extreme-latitude benchmarks without numeric instability", () => {
+    const snapshot = computeModelComparison("2026-03-20T00:00:00.000Z", {
+      routes: [],
+      airportsByIcao: {},
+      solarEvents: [],
+      lunarEvents: [],
+      benchmarks: {
+        declination: [
+          { iso: "2026-03-19T23:59:00.000Z", expectedDeclinationDegrees: -0.1 },
+          { iso: "2026-03-20T00:01:00.000Z", expectedDeclinationDegrees: 0.1 },
+          { iso: "2026-12-31T23:59:00.000Z", expectedDeclinationDegrees: -23.2 },
+          { iso: "2027-01-01T00:01:00.000Z", expectedDeclinationDegrees: -23.1 },
+        ],
+        dayLength: [
+          { iso: "2026-06-21T12:00:00.000Z", latitudeDegrees: 89.9, expectedHours: 24 },
+          { iso: "2026-12-21T12:00:00.000Z", latitudeDegrees: 89.9, expectedHours: 0 },
+          { iso: "2026-06-21T12:00:00.000Z", latitudeDegrees: -89.9, expectedHours: 0 },
+          { iso: "2026-12-21T12:00:00.000Z", latitudeDegrees: -89.9, expectedHours: 24 },
+        ],
+        rotation: [
+          { latitudeDegrees: 0, expectedSpeedKph: 1670 },
+          { latitudeDegrees: 89.9, expectedSpeedKph: 3 },
+          { latitudeDegrees: -89.9, expectedSpeedKph: 3 },
+        ],
+      },
+      thresholds: {
+        routeRelativeError: 9999,
+        eclipsePeakMinutes: 9999,
+        orbitDeclinationRmseDeg: 9999,
+        orbitDayLengthRmseMinutes: 9999,
+        rotationSpeedMpe: 9999,
+      },
+    });
+
+    const orbitMetric = getMetric(snapshot, "orbit");
+    const rotationMetric = getMetric(snapshot, "rotation");
+    expect(Number.isFinite(orbitMetric.flatScore)).toBe(true);
+    expect(Number.isFinite(orbitMetric.sphericalScore)).toBe(true);
+    expect(Number.isFinite(rotationMetric.flatScore)).toBe(true);
+    expect(Number.isFinite(rotationMetric.sphericalScore)).toBe(true);
+    expect(orbitMetric.flatFlag.contradiction).toBe(false);
+    expect(orbitMetric.sphericalFlag.contradiction).toBe(false);
+  });
+
+  it("keeps default thresholds for keys that are not overridden", () => {
+    const snapshot = computeModelComparison("2026-06-21T12:00:00.000Z", {
+      routes: [],
+      airportsByIcao: {},
+      solarEvents: [],
+      lunarEvents: [],
+      thresholds: {
+        rotationSpeedMpe: 0.02,
+      },
+    });
+
+    expect(snapshot.thresholds.rotationSpeedMpe).toBe(0.02);
+    expect(snapshot.thresholds.routeRelativeError).toBe(DEFAULT_COMPARISON_THRESHOLDS.routeRelativeError);
+    expect(snapshot.thresholds.eclipsePeakMinutes).toBe(DEFAULT_COMPARISON_THRESHOLDS.eclipsePeakMinutes);
+    expect(snapshot.thresholds.orbitDeclinationRmseDeg).toBe(DEFAULT_COMPARISON_THRESHOLDS.orbitDeclinationRmseDeg);
+    expect(snapshot.thresholds.orbitDayLengthRmseMinutes).toBe(
+      DEFAULT_COMPARISON_THRESHOLDS.orbitDayLengthRmseMinutes,
+    );
+  });
+
   it("returns stable schema and category ordering for identical observations", () => {
     const airports: Record<string, RouteAirport> = {
       RKSI: {
