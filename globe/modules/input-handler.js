@@ -34,6 +34,8 @@ export function setupInputHandlers(deps) {
     exitFirstPersonMode, enterFirstPersonMode, walkerModeEl, resetWalkerButton,
     routeModeSelectEl, routeOriginContinentEl, routeDestinationContinentEl, routeRecommendedRouteEl,
     routeOriginCountryEl, routeOriginAirportEl, routeDestinationCountryEl, routeDestinationAirportEl,
+    routeDirectOriginCodeEl, routeDirectDestinationCodeEl, routeDirectLayoverRowEls = [],
+    routeDirectLayoverInputEls = [], routeDirectRemoveLayoverButtons = [], routeDirectAddLayoverButtonEl,
     routeRefreshButton, routeSpeedEl, celestialTrailLengthEl, celestialSpeedEl, celestialSpeedPresetButtons = [],
     celestialFullTrailEl, routePlaybackButton, routeResetButton, realitySyncEl,
     realityLiveEl, observationTimeEl, observationMinusHourButton, observationPlusHourButton,
@@ -62,6 +64,7 @@ export function setupInputHandlers(deps) {
     FOG_DEFAULT_FAR,
     DISC_RADIUS
   } = constants;
+  const DIRECT_LAYOVER_LIMIT = 3;
 
   let isDragging = false;
   let dragPointerId = null;
@@ -199,6 +202,17 @@ export function setupInputHandlers(deps) {
     }
 
     cameraApi.clampCamera();
+  }
+
+  function isKeyboardEditableTarget(target) {
+    if (!(target instanceof Element)) {
+      return false;
+    }
+    return Boolean(
+      target.closest(
+        "input,textarea,select,[contenteditable='true'],[contenteditable=''],[contenteditable]:not([contenteditable='false'])"
+      )
+    );
   }
 
   function stopDraggingPointer(pointerId = null) {
@@ -656,6 +670,130 @@ export function setupInputHandlers(deps) {
 
     routeSimulationApi.setDestinationAirport(routeDestinationAirportEl.value);
 
+  });
+
+  const normalizedDirectLayoverRows = Array.isArray(routeDirectLayoverRowEls)
+    ? routeDirectLayoverRowEls
+    : [];
+  const normalizedDirectLayoverInputs = Array.isArray(routeDirectLayoverInputEls)
+    ? routeDirectLayoverInputEls
+    : [];
+  const normalizedDirectRemoveLayoverButtons = Array.isArray(routeDirectRemoveLayoverButtons)
+    ? routeDirectRemoveLayoverButtons
+    : [];
+
+  function collectDirectLayoverCodes() {
+    const rows = normalizedDirectLayoverRows.slice(0, DIRECT_LAYOVER_LIMIT);
+    return rows
+      .filter((row) => !row.hidden)
+      .map((row) => {
+        const input = row.querySelector("[data-route-direct-layover-input]");
+        return input?.value ?? "";
+      });
+  }
+
+  function setDirectLayoverRows(codes = []) {
+    const safeCodes = (Array.isArray(codes) ? codes : []).slice(0, DIRECT_LAYOVER_LIMIT);
+    for (let index = 0; index < normalizedDirectLayoverRows.length; index += 1) {
+      const row = normalizedDirectLayoverRows[index];
+      const input = normalizedDirectLayoverInputs[index]
+        ?? row.querySelector("[data-route-direct-layover-input]");
+      const hasValue = index < safeCodes.length;
+      row.hidden = !hasValue;
+      if (input) {
+        input.value = hasValue ? safeCodes[index] : "";
+      }
+    }
+  }
+
+  function applyDirectRouteInputs() {
+    if (!routeSimulationApi?.setDirectRouteInputs) {
+      return;
+    }
+    routeSimulationApi.setDirectRouteInputs({
+      originCode: routeDirectOriginCodeEl?.value ?? "",
+      destinationCode: routeDirectDestinationCodeEl?.value ?? "",
+      layoverCodes: collectDirectLayoverCodes()
+    });
+  }
+
+  function addDirectLayoverRow() {
+    const nextCodes = collectDirectLayoverCodes();
+    if (nextCodes.length >= DIRECT_LAYOVER_LIMIT) {
+      return;
+    }
+    nextCodes.push("");
+    setDirectLayoverRows(nextCodes);
+    applyDirectRouteInputs();
+    const focusInput = normalizedDirectLayoverInputs[nextCodes.length - 1];
+    focusInput?.focus?.();
+  }
+
+  function removeDirectLayoverRow(index) {
+    const nextCodes = collectDirectLayoverCodes();
+    if (!Number.isInteger(index) || index < 0 || index >= nextCodes.length) {
+      return;
+    }
+    nextCodes.splice(index, 1);
+    setDirectLayoverRows(nextCodes);
+    applyDirectRouteInputs();
+  }
+
+  routeDirectOriginCodeEl?.addEventListener("change", () => {
+    applyDirectRouteInputs();
+  });
+
+  routeDirectOriginCodeEl?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") {
+      return;
+    }
+    event.preventDefault();
+    routeDirectOriginCodeEl.blur();
+    applyDirectRouteInputs();
+  });
+
+  routeDirectDestinationCodeEl?.addEventListener("change", () => {
+    applyDirectRouteInputs();
+  });
+
+  routeDirectDestinationCodeEl?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") {
+      return;
+    }
+    event.preventDefault();
+    routeDirectDestinationCodeEl.blur();
+    applyDirectRouteInputs();
+  });
+
+  for (const inputEl of normalizedDirectLayoverInputs) {
+    if (!inputEl) {
+      continue;
+    }
+    inputEl.addEventListener("change", () => {
+      applyDirectRouteInputs();
+    });
+    inputEl.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") {
+        return;
+      }
+      event.preventDefault();
+      inputEl.blur();
+      applyDirectRouteInputs();
+    });
+  }
+
+  for (const buttonEl of normalizedDirectRemoveLayoverButtons) {
+    if (!buttonEl) {
+      continue;
+    }
+    buttonEl.addEventListener("click", () => {
+      const rawIndex = Number.parseInt(buttonEl.dataset.routeDirectRemoveLayover ?? "", 10);
+      removeDirectLayoverRow(rawIndex);
+    });
+  }
+
+  routeDirectAddLayoverButtonEl?.addEventListener("click", () => {
+    addDirectLayoverRow();
   });
 
 
@@ -1147,6 +1285,10 @@ export function setupInputHandlers(deps) {
   
       return;
   
+    }
+
+    if (isKeyboardEditableTarget(event.target)) {
+      return;
     }
   
   

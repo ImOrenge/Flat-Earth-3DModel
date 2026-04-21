@@ -1600,6 +1600,56 @@ h1 {
   cursor: not-allowed;
 }
 
+.route-code-input {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: rgba(3, 7, 13, 0.42);
+  color: var(--text-main);
+  font: inherit;
+  text-transform: uppercase;
+}
+
+.route-code-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.route-direct-input {
+  margin: 0 0 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.route-direct-title {
+  margin-top: 0;
+}
+
+.route-direct-layover-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.route-direct-layover-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.route-direct-layover-row[hidden] {
+  display: none !important;
+}
+
+.route-direct-remove-layover {
+  white-space: nowrap;
+}
+
+.route-direct-actions {
+  margin-top: 10px;
+}
+
 .file-input {
   width: 100%;
   border: 1px solid rgba(255, 255, 255, 0.12);

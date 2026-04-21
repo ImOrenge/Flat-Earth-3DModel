@@ -580,6 +580,11 @@ export function createRouteSimulationController({
     selectedOriginAirportIcao: "",
     selectedDestinationCountryCode: "",
     selectedDestinationAirportIcao: "",
+    advancedSelectionSource: "dropdown",
+    directOriginCode: "",
+    directDestinationCode: "",
+    directLayoverCodes: [],
+    directLayoverOverflow: false,
     selectedRoute: null,
     recommendedRoutes: [],
     recommendedRouteById: new Map(),
@@ -591,6 +596,9 @@ export function createRouteSimulationController({
     datasetSource: DATA_SOURCE_BUNDLED,
     lastSyncedAt: null
   };
+
+  const ADVANCED_SELECTION_SOURCE_DROPDOWN = "dropdown";
+  const ADVANCED_SELECTION_SOURCE_DIRECT = "direct";
 
   const tempPoint = new THREE.Vector3();
   const tempTangent = new THREE.Vector3();
@@ -652,6 +660,7 @@ export function createRouteSimulationController({
     const datasetDisabled = !routeState.libraryReady;
     const recommendedMode = routeState.routeMode === ROUTE_MODE_RECOMMENDED;
     const hasRecommendedMode = routeLibrary.continentsWithAirports.length >= 2;
+    const advancedDisabled = datasetDisabled || recommendedMode;
 
     if (ui.routeModeSelectEl) {
       ui.routeModeSelectEl.disabled = datasetDisabled || !hasRecommendedMode;
@@ -670,16 +679,55 @@ export function createRouteSimulationController({
     }
 
     if (ui.routeOriginCountryEl) {
-      ui.routeOriginCountryEl.disabled = datasetDisabled || recommendedMode;
+      ui.routeOriginCountryEl.disabled = advancedDisabled;
     }
     if (ui.routeOriginAirportEl) {
-      ui.routeOriginAirportEl.disabled = datasetDisabled || recommendedMode;
+      ui.routeOriginAirportEl.disabled = advancedDisabled;
     }
     if (ui.routeDestinationCountryEl) {
-      ui.routeDestinationCountryEl.disabled = datasetDisabled || recommendedMode;
+      ui.routeDestinationCountryEl.disabled = advancedDisabled;
     }
     if (ui.routeDestinationAirportEl) {
-      ui.routeDestinationAirportEl.disabled = datasetDisabled || recommendedMode;
+      ui.routeDestinationAirportEl.disabled = advancedDisabled;
+    }
+    if (ui.routeDirectOriginCodeEl) {
+      ui.routeDirectOriginCodeEl.disabled = advancedDisabled;
+    }
+    if (ui.routeDirectDestinationCodeEl) {
+      ui.routeDirectDestinationCodeEl.disabled = advancedDisabled;
+    }
+
+    const directLayoverRows = Array.isArray(ui.routeDirectLayoverRowEls)
+      ? ui.routeDirectLayoverRowEls
+      : [];
+    const directLayoverInputs = Array.isArray(ui.routeDirectLayoverInputEls)
+      ? ui.routeDirectLayoverInputEls
+      : [];
+    const directLayoverRemoveButtons = Array.isArray(ui.routeDirectRemoveLayoverButtons)
+      ? ui.routeDirectRemoveLayoverButtons
+      : [];
+    const visibleDirectLayoverCount = directLayoverRows.filter((row) => !row.hidden).length;
+
+    if (ui.routeDirectAddLayoverButtonEl) {
+      ui.routeDirectAddLayoverButtonEl.disabled = advancedDisabled || visibleDirectLayoverCount >= MAX_LAYOVERS;
+    }
+
+    for (let index = 0; index < directLayoverInputs.length; index += 1) {
+      const inputEl = directLayoverInputs[index];
+      const rowEl = directLayoverRows[index];
+      if (!inputEl) {
+        continue;
+      }
+      inputEl.disabled = advancedDisabled || Boolean(rowEl?.hidden);
+    }
+
+    for (let index = 0; index < directLayoverRemoveButtons.length; index += 1) {
+      const buttonEl = directLayoverRemoveButtons[index];
+      const rowEl = directLayoverRows[index];
+      if (!buttonEl) {
+        continue;
+      }
+      buttonEl.disabled = advancedDisabled || Boolean(rowEl?.hidden);
     }
 
     const routeDisabled = datasetDisabled || !routeState.selectedRoute;
@@ -733,6 +781,80 @@ export function createRouteSimulationController({
       origin: routeLibrary.airportByCode.get(routeState.selectedOriginAirportIcao) ?? null,
       destination: routeLibrary.airportByCode.get(routeState.selectedDestinationAirportIcao) ?? null
     };
+  }
+
+  function normalizeAirportCode(value) {
+    return String(value ?? "").trim().toUpperCase();
+  }
+
+  function resolveAirportByFlexibleCode(code) {
+    const normalizedCode = normalizeAirportCode(code);
+    if (!normalizedCode) {
+      return {
+        airport: null,
+        errorKey: "",
+        errorParams: {}
+      };
+    }
+
+    if (normalizedCode.length === 3) {
+      const airport = routeLibrary.airportByIata.get(normalizedCode) ?? null;
+      return airport
+        ? { airport, errorKey: "", errorParams: {} }
+        : {
+          airport: null,
+          errorKey: "routeDirectCodeNotFound",
+          errorParams: { code: normalizedCode }
+        };
+    }
+
+    if (normalizedCode.length === 4) {
+      const airport = routeLibrary.airportByCode.get(normalizedCode) ?? null;
+      return airport
+        ? { airport, errorKey: "", errorParams: {} }
+        : {
+          airport: null,
+          errorKey: "routeDirectCodeNotFound",
+          errorParams: { code: normalizedCode }
+        };
+    }
+
+    return {
+      airport: null,
+      errorKey: "routeDirectInvalidCodeFormat",
+      errorParams: { code: normalizedCode }
+    };
+  }
+
+  function sanitizeDirectLayoverCodes(layoverCodes) {
+    return (Array.isArray(layoverCodes) ? layoverCodes : [])
+      .slice(0, MAX_LAYOVERS)
+      .map((code) => normalizeAirportCode(code));
+  }
+
+  function syncDirectInputControls() {
+    if (ui.routeDirectOriginCodeEl) {
+      ui.routeDirectOriginCodeEl.value = routeState.directOriginCode;
+    }
+    if (ui.routeDirectDestinationCodeEl) {
+      ui.routeDirectDestinationCodeEl.value = routeState.directDestinationCode;
+    }
+
+    const directLayoverRows = Array.isArray(ui.routeDirectLayoverRowEls)
+      ? ui.routeDirectLayoverRowEls
+      : [];
+    const directLayoverInputs = Array.isArray(ui.routeDirectLayoverInputEls)
+      ? ui.routeDirectLayoverInputEls
+      : [];
+    for (let index = 0; index < directLayoverRows.length; index += 1) {
+      const rowEl = directLayoverRows[index];
+      const inputEl = directLayoverInputs[index] ?? rowEl.querySelector("[data-route-direct-layover-input]");
+      const hasSlot = index < routeState.directLayoverCodes.length;
+      rowEl.hidden = !hasSlot;
+      if (inputEl) {
+        inputEl.value = hasSlot ? routeState.directLayoverCodes[index] : "";
+      }
+    }
   }
 
   function getAirportContinentCode(airport) {
@@ -950,8 +1072,8 @@ export function createRouteSimulationController({
     };
   }
 
-  function buildDynamicRoute(originAirport, destinationAirport) {
-    return buildRouteFromWaypoints([originAirport, destinationAirport], {
+  function buildDynamicRoute(waypoints) {
+    return buildRouteFromWaypoints(waypoints, {
       idPrefix: "advanced",
       routeMode: ROUTE_MODE_ADVANCED
     });
@@ -1515,6 +1637,8 @@ export function createRouteSimulationController({
       createAirportLabel,
       routeState.selectedDestinationAirportIcao
     );
+
+    syncDirectInputControls();
   }
 
   function syncRouteUi() {
@@ -1716,7 +1840,7 @@ export function createRouteSimulationController({
     return { route, errorKey: "", errorParams: {} };
   }
 
-  function resolveAdvancedSelection() {
+  function resolveAdvancedDropdownSelection() {
     const { origin, destination } = getSelectedAirports();
     if (!origin || !destination) {
       return { route: null, errorKey: "", errorParams: {} };
@@ -1731,10 +1855,75 @@ export function createRouteSimulationController({
     }
 
     return {
-      route: buildDynamicRoute(origin, destination),
+      route: buildDynamicRoute([origin, destination]),
       errorKey: "",
       errorParams: {}
     };
+  }
+
+  function resolveAdvancedDirectSelection() {
+    if (routeState.directLayoverOverflow) {
+      return {
+        route: null,
+        errorKey: "routeDirectLayoverLimit",
+        errorParams: { max: MAX_LAYOVERS }
+      };
+    }
+
+    const originCode = normalizeAirportCode(routeState.directOriginCode);
+    const destinationCode = normalizeAirportCode(routeState.directDestinationCode);
+    if (!originCode || !destinationCode) {
+      return { route: null, errorKey: "routeDirectMissingEndpoints", errorParams: {} };
+    }
+
+    const layoverCodes = routeState.directLayoverCodes
+      .map((code) => normalizeAirportCode(code))
+      .filter((code) => code.length > 0);
+    const waypointCodes = [originCode, ...layoverCodes, destinationCode];
+    const waypoints = [];
+
+    for (const code of waypointCodes) {
+      const resolved = resolveAirportByFlexibleCode(code);
+      if (resolved.errorKey || !resolved.airport) {
+        return {
+          route: null,
+          errorKey: resolved.errorKey || "routeDirectCodeNotFound",
+          errorParams: resolved.errorParams ?? { code }
+        };
+      }
+      waypoints.push(resolved.airport);
+    }
+
+    if (waypoints[0]?.icao === waypoints[waypoints.length - 1]?.icao) {
+      return {
+        route: null,
+        errorKey: "routeSelectionConflict",
+        errorParams: {}
+      };
+    }
+
+    for (let index = 1; index < waypoints.length; index += 1) {
+      if (waypoints[index - 1]?.icao === waypoints[index]?.icao) {
+        return {
+          route: null,
+          errorKey: "routeSelectionConflict",
+          errorParams: {}
+        };
+      }
+    }
+
+    return {
+      route: buildDynamicRoute(waypoints),
+      errorKey: "",
+      errorParams: {}
+    };
+  }
+
+  function resolveAdvancedSelection() {
+    if (routeState.advancedSelectionSource === ADVANCED_SELECTION_SOURCE_DIRECT) {
+      return resolveAdvancedDirectSelection();
+    }
+    return resolveAdvancedDropdownSelection();
   }
 
   function applySelectionChange(resetProgress = true) {
@@ -1819,6 +2008,7 @@ export function createRouteSimulationController({
       return;
     }
 
+    routeState.advancedSelectionSource = ADVANCED_SELECTION_SOURCE_DROPDOWN;
     routeState.selectedOriginCountryCode = countryCode;
     const excludedIcao = routeState.selectedOriginCountryCode === routeState.selectedDestinationCountryCode
       ? routeState.selectedDestinationAirportIcao
@@ -1832,6 +2022,7 @@ export function createRouteSimulationController({
       return;
     }
 
+    routeState.advancedSelectionSource = ADVANCED_SELECTION_SOURCE_DROPDOWN;
     routeState.selectedOriginAirportIcao = airportIcao;
     applySelectionChange(true);
   }
@@ -1841,6 +2032,7 @@ export function createRouteSimulationController({
       return;
     }
 
+    routeState.advancedSelectionSource = ADVANCED_SELECTION_SOURCE_DROPDOWN;
     routeState.selectedDestinationCountryCode = countryCode;
     const excludedIcao = routeState.selectedDestinationCountryCode === routeState.selectedOriginCountryCode
       ? routeState.selectedOriginAirportIcao
@@ -1854,7 +2046,22 @@ export function createRouteSimulationController({
       return;
     }
 
+    routeState.advancedSelectionSource = ADVANCED_SELECTION_SOURCE_DROPDOWN;
     routeState.selectedDestinationAirportIcao = airportIcao;
+    applySelectionChange(true);
+  }
+
+  function setDirectRouteInputs({ originCode = "", destinationCode = "", layoverCodes = [] } = {}) {
+    if (!routeState.libraryReady) {
+      return;
+    }
+
+    const safeLayoverCodes = Array.isArray(layoverCodes) ? layoverCodes : [];
+    routeState.advancedSelectionSource = ADVANCED_SELECTION_SOURCE_DIRECT;
+    routeState.directOriginCode = normalizeAirportCode(originCode);
+    routeState.directDestinationCode = normalizeAirportCode(destinationCode);
+    routeState.directLayoverOverflow = safeLayoverCodes.length > MAX_LAYOVERS;
+    routeState.directLayoverCodes = sanitizeDirectLayoverCodes(safeLayoverCodes);
     applySelectionChange(true);
   }
 
@@ -1867,7 +2074,11 @@ export function createRouteSimulationController({
       originCountryCode: routeState.selectedOriginCountryCode,
       destinationCountryCode: routeState.selectedDestinationCountryCode,
       originAirportIcao: routeState.selectedOriginAirportIcao,
-      destinationAirportIcao: routeState.selectedDestinationAirportIcao
+      destinationAirportIcao: routeState.selectedDestinationAirportIcao,
+      advancedSelectionSource: routeState.advancedSelectionSource,
+      directOriginCode: routeState.directOriginCode,
+      directDestinationCode: routeState.directDestinationCode,
+      directLayoverCodes: [...routeState.directLayoverCodes]
     };
 
     routeLibrary.countries = [];
@@ -2055,8 +2266,19 @@ export function createRouteSimulationController({
           : ""
       );
 
-    const previousFingerprint = `${previousState.routeMode}|${previousState.originContinentCode}|${previousState.destinationContinentCode}|${previousState.recommendedRouteId}|${previousState.originAirportIcao}|${previousState.destinationAirportIcao}`;
-    const nextFingerprint = `${routeState.routeMode}|${routeState.selectedOriginContinentCode}|${routeState.selectedDestinationContinentCode}|${routeState.selectedRecommendedRouteId}|${routeState.selectedOriginAirportIcao}|${routeState.selectedDestinationAirportIcao}`;
+    routeState.advancedSelectionSource = preserveSelection
+      && previousState.advancedSelectionSource === ADVANCED_SELECTION_SOURCE_DIRECT
+      ? ADVANCED_SELECTION_SOURCE_DIRECT
+      : ADVANCED_SELECTION_SOURCE_DROPDOWN;
+    routeState.directOriginCode = preserveSelection ? normalizeAirportCode(previousState.directOriginCode) : "";
+    routeState.directDestinationCode = preserveSelection ? normalizeAirportCode(previousState.directDestinationCode) : "";
+    routeState.directLayoverCodes = preserveSelection
+      ? sanitizeDirectLayoverCodes(previousState.directLayoverCodes)
+      : [];
+    routeState.directLayoverOverflow = false;
+
+    const previousFingerprint = `${previousState.routeMode}|${previousState.originContinentCode}|${previousState.destinationContinentCode}|${previousState.recommendedRouteId}|${previousState.originAirportIcao}|${previousState.destinationAirportIcao}|${previousState.advancedSelectionSource}|${previousState.directOriginCode}|${previousState.directDestinationCode}|${(previousState.directLayoverCodes ?? []).join(",")}`;
+    const nextFingerprint = `${routeState.routeMode}|${routeState.selectedOriginContinentCode}|${routeState.selectedDestinationContinentCode}|${routeState.selectedRecommendedRouteId}|${routeState.selectedOriginAirportIcao}|${routeState.selectedDestinationAirportIcao}|${routeState.advancedSelectionSource}|${routeState.directOriginCode}|${routeState.directDestinationCode}|${routeState.directLayoverCodes.join(",")}`;
     applySelectionChange(!preserveSelection || previousFingerprint !== nextFingerprint);
     return true;
   }
@@ -2242,6 +2464,7 @@ export function createRouteSimulationController({
     setRecommendedRoute,
     setDestinationAirport,
     setDestinationCountry,
+    setDirectRouteInputs,
     setOriginAirport,
     setOriginCountry,
     setSpeedMultiplier,
